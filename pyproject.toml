@@ -1,35 +1,34 @@
 [project]
-name = "LoveACE"
-version = "0.0.1"
-description = "NOOOOOOOOOOO"
-authors = [
-    {name = "Sibuxiangx", email = "sibuxiang@proton.me"},
-]
-dependencies = [
-    "fastapi>=0.115.12",
-    "uvicorn>=0.34.2",
-    "httpx>=0.28.1",
-    "cryptography>=45.0.3",
-    "rich>=14.0.0",
-    "richuru>=0.1.1",
-    "aiomysql>=0.2.0",
-    "sqlalchemy[asyncio]>=2.0.41",
-    "aiosqlite>=0.21.0",
-    "bs4>=0.0.2",
-    "aiofiles>=24.1.0",
-    "textual>=5.2.0",
-    "aioboto3>=15.0.0",
-    "granian[pname,uvloop]>=2.5.2",
-]
-requires-python = "==3.12.*"
+name = "loveace-v2"
+version = "0.1.0"
+description = "Add your description here"
 readme = "README.md"
-license = {text = "MIT"}
-
-
-[project.optional-dependencies]
-dev = [
-    "black>=25.1.0",
-    "ruff>=0.12.11",
+requires-python = ">=3.12"
+dependencies = [
+    "aioboto3>=15.2.0",
+    "aiofiles>=25.1.0",
+    "aiomysql>=0.2.0",
+    "bs4>=0.0.2",
+    "cryptography>=46.0.1",
+    "fastapi>=0.117.1",
+    "granian[pname,uvloop,winloop]>=2.5.5",
+    "httpx>=0.28.1",
+    "lxml>=6.0.2",
+    "mkdocs-material>=9.6.20",
+    "multidict>=6.7.0",
+    "python-multipart>=0.0.20",
+    "redis>=6.4.0",
+    "richuru>=0.1.1",
+    "sqlalchemy[aiomysql]>=2.0.43",
+    "types-aiobotocore-s3>=2.25.0",
+    "ujson>=5.11.0",
+    "uvicorn>=0.37.0",
 ]
-[tool.pdm]
-distribution = false
+
+[dependency-groups]
+dev = [
+    "black>=25.9.0",
+    "isort>=6.0.1",
+    "ruff>=0.13.2",
+    "textual>=6.3.0",
+]

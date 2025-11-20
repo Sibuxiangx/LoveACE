@@ -1,13 +1,13 @@
 # =====================================================
-# LoveAC Project .gitignore
+# LoveACE Project .gitignore
 # =====================================================
 
 # ===== 敏感信息和配置文件 =====
 # 配置文件（包含数据库密码等敏感信息）
-config.json
 config_local.json
 config_prod.json
 config_dev.json
+config.json
 .env
 .env.*
 !.env.example
@@ -60,11 +60,15 @@ user_data/
 *.mov
 
 # ===== Python 相关 =====
+# RUFF
+.ruff-cache/
+
 # 字节码文件
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyc
 
 # 分发/打包
 .Python
