@@ -1,6 +1,6 @@
 # 彩带小工具 (LoveACE)
 
-一款为安徽财经大学学生打造的多功能校园助手 App，基于 Flutter 开发，支持 Android、iOS、macOS、Windows、Linux 和 Web 平台。
+一款为安徽财经大学学生打造的多功能校园助手 App，基于 Flutter 开发，支持 Android，将逐步支持 iOS、macOS、Windows、Linux 和 Web 平台。
 
 ## 功能特性
 
