@@ -1,0 +1,5 @@
+# Dart/Flutter 国内源配置
+# 使用阿里云镜像加速 pub 包下载
+
+[repositories]
+default = https://pub.flutter-io.cn

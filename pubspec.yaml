@@ -1,0 +1,135 @@
+name: loveace
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.7+8
+
+environment:
+  sdk: ^3.9.2
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+
+  # State management
+  provider: ^6.1.1
+
+  # HTML parsing
+  html: ^0.15.4
+  
+  # Secure storage
+  flutter_secure_storage: ^9.0.0
+
+  # Local storage
+  shared_preferences: ^2.2.2
+  
+  # Encryption
+  crypto: ^3.0.3
+  pointycastle: ^3.7.3
+  
+  # Logger
+  logger: ^2.5.0
+
+  # Network
+  dio: ^5.4.0
+  
+  # Path provider for app data directory
+  path_provider: ^2.1.5
+  
+  # Path utilities
+  path: ^1.9.0
+  
+  # Universal IO for cross-platform file operations
+  universal_io: ^2.2.2
+  json_annotation: ^4.9.0
+  
+  # Image picker for selecting background images
+  image_picker: ^1.0.7
+  
+  # Palette generator for extracting colors from images
+  palette_generator: ^0.3.3+3
+  
+  # Image processing
+  image: ^4.1.7
+  
+  # QR code scanning
+  mobile_scanner: ^5.2.3  # 暂时注释以在模拟器上运行
+  
+  # Permission handling
+  permission_handler: ^11.3.1
+  
+  # Internationalization
+  intl: ^0.19.0
+  
+  # CSV export
+  csv: ^6.0.0
+  
+  # File operations
+  open_filex: ^4.7.0
+  file_picker: ^8.1.4
+  
+  # URL launcher
+  url_launcher: ^6.2.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^5.0.0
+  
+  # Code generation
+  build_runner: ^2.4.6
+  json_serializable: ^6.7.1
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # Assets
+  assets:
+    - assets/images/logo.png
+    - assets/images/easyconnect.png
+    - assets/images/uaap.png
+
+  # Custom fonts
+  fonts:
+    - family: MiSans
+      fonts:
+        - asset: assets/fonts/MiSans-Medium.otf
+          weight: 500

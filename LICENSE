@@ -1,0 +1,132 @@
+GNU AFFERO 通用公共许可证
+版本 3，2007年11月19日
+
+版权所有 (C) 2025 彩带小工具
+本项目是安徽财经大学教育服务的衍生项目
+
+本程序是自由软件：你可以根据自由软件基金会发布的 GNU Affero 通用公共许可证
+（版本3或更高版本）的条款重新分发和/或修改它。
+
+发布本程序是希望它有用，但不提供任何保证；甚至不提供适销性或特定用途适用性
+的默示保证。详情请参阅 GNU Affero 通用公共许可证。
+
+你应该已经收到了 GNU Affero 通用公共许可证的副本。如果没有，请访问
+<https://www.gnu.org/licenses/>。
+
+================================================================================
+
+附加条款：严格禁止商业使用
+
+根据 GNU AGPL-3.0 第7条的规定，版权持有人在此添加以下附加条款：
+
+1. 项目性质声明
+   本软件是安徽财经大学教育服务的衍生项目，专为教育和学习目的开发。
+
+2. 严格禁止商业使用
+   本软件及其衍生作品在任何情况下均不得用于商业目的。
+   禁止将本软件或其衍生作品用于任何商业用途，包括但不限于：
+   
+   a) 销售本软件或其衍生作品
+   b) 将本软件作为商业服务的一部分提供
+   c) 在商业产品中集成或捆绑本软件
+   d) 通过本软件直接或间接获取商业利益
+   e) 为商业实体提供基于本软件的服务
+   f) 任何形式的商业化运营
+
+3. 商业使用定义
+   "商业使用"是指任何涉及金钱交易、商业利益、营利目的或商业运营的使用。
+
+4. 无商业许可例外
+   本软件不提供任何形式的商业使用许可，无论是付费还是免费。
+   任何商业使用请求均将被拒绝。
+
+5. 适用范围
+   本软件仅可用于：
+   - 个人学习和研究
+   - 教育机构的教学活动
+   - 非营利组织的非商业用途
+   - 开源社区的协作开发
+
+6. 条款优先级
+   本附加条款与 GNU AGPL-3.0 的其他条款一起适用。如有冲突，
+   本附加条款中的禁止商业使用条款优先且不可豁免。
+
+7. 违规责任
+   任何违反本条款的商业使用行为将承担相应的法律责任。
+
+================================================================================
+
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+Copyright (C) 2025 LoveACE
+This project is a derivative of educational services at Anhui University of Finance and Economics
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+================================================================================
+
+ADDITIONAL TERMS: Strict Prohibition of Commercial Use
+
+Pursuant to Section 7 of the GNU AGPL-3.0, the copyright holder adds the 
+following additional terms:
+
+1. Project Nature Statement
+   This software is a derivative project of educational services at Anhui 
+   University of Finance and Economics, developed for educational and 
+   learning purposes.
+
+2. Strict Prohibition of Commercial Use
+   This software and its derivatives may NOT be used for commercial purposes 
+   under any circumstances. It is prohibited to use this software or its 
+   derivatives for any commercial purposes, including but not limited to:
+   
+   a) Selling this software or its derivatives
+   b) Providing this software as part of a commercial service
+   c) Integrating or bundling this software in commercial products
+   d) Obtaining commercial benefits directly or indirectly through this software
+   e) Providing services based on this software to commercial entities
+   f) Any form of commercial operation
+
+3. Definition of Commercial Use
+   "Commercial use" means any use involving monetary transactions, commercial 
+   interests, profit-making purposes, or commercial operations.
+
+4. No Commercial License Exception
+   This software does not provide any form of commercial use license, whether 
+   paid or free. Any commercial use request will be rejected.
+
+5. Permitted Use
+   This software may only be used for:
+   - Personal learning and research
+   - Educational activities in educational institutions
+   - Non-commercial purposes of non-profit organizations
+   - Collaborative development in open source communities
+
+6. Term Priority
+   These additional terms apply together with the other terms of GNU AGPL-3.0.
+   In case of conflict, the prohibition of commercial use in these additional 
+   terms takes precedence and cannot be waived.
+
+7. Liability for Violations
+   Any commercial use in violation of these terms will be subject to legal 
+   liability.
+
+================================================================================
+
+完整的 GNU AGPL-3.0 许可证文本请访问：
+https://www.gnu.org/licenses/agpl-3.0.html
+
+Full text of GNU AGPL-3.0 License:
+https://www.gnu.org/licenses/agpl-3.0.html

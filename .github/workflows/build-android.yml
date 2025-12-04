@@ -1,0 +1,212 @@
+name: Build Android APK
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      upload_manifest:
+        description: '是否上传到 manifest'
+        required: false
+        default: 'true'
+        type: boolean
+      force_update:
+        description: '是否强制更新'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  build:
+    runs-on: "cirun-azure-runner--${{ github.run_id }}"
+    environment: Android Sign
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact_name: ${{ steps.version.outputs.artifact_name }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      - name: Install apts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq unzip
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager --licenses
+
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.2'
+          channel: 'stable'
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Cache Flutter build
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/
+            .dart_tool/
+            android/.gradle/
+          key: flutter-build-${{ runner.os }}-${{ hashFiles('pubspec.lock', 'lib/**/*.dart') }}
+          restore-keys: |
+            flutter-build-${{ runner.os }}-
+
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          BUILD_NUMBER=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "artifact_name=loveace-android-$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION+$BUILD_NUMBER"
+
+      - name: Setup signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          echo "Keystore size: $(wc -c < android/app/upload-keystore.jks) bytes"
+          cat > android/key.properties << EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/loveace-${{ steps.version.outputs.version }}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: build/app/outputs/flutter-apk/loveace-${{ steps.version.outputs.version }}.apk
+
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/app/outputs/flutter-apk/loveace-${{ steps.version.outputs.version }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-manifest:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release' || github.event.inputs.upload_manifest == 'true'
+    environment: S3
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: ./apk
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install CLI dependencies
+        run: |
+          pip install uv
+          cd utils && uv sync
+
+      - name: Read changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          CHANGELOG=""
+          
+          if [[ -f "CHANGELOG.txt" ]]; then
+            # 读取对应版本的 changelog
+            # 格式: 版本号在一行，下一行是更新内容
+            FOUND=false
+            while IFS= read -r line || [[ -n "$line" ]]; do
+              if [[ "$FOUND" == "true" ]]; then
+                # 如果遇到空行或下一个版本号，停止
+                if [[ -z "$line" ]] || [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  break
+                fi
+                CHANGELOG="$line"
+                break
+              fi
+              if [[ "$line" == "$VERSION" ]]; then
+                FOUND=true
+              fi
+            done < CHANGELOG.txt
+          fi
+          
+          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "📝 Changelog for $VERSION: $CHANGELOG"
+
+      - name: Upload to manifest
+        env:
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          CDN_BASE_URL: ${{ secrets.CDN_BASE_URL }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          FORCE_FLAG=""
+          if [[ "${{ github.event.inputs.force_update }}" == "true" ]]; then
+            FORCE_FLAG="--force"
+          fi
+          
+          cd utils
+          
+          if [[ -n "$CHANGELOG" ]]; then
+            uv run python cli.py release \
+              --version "${{ needs.build.outputs.version }}" \
+              --platform android \
+              --file "../apk/loveace-${{ needs.build.outputs.version }}.apk" \
+              --changelog "$CHANGELOG" \
+              $FORCE_FLAG
+          else
+            uv run python cli.py release \
+              --version "${{ needs.build.outputs.version }}" \
+              --platform android \
+              --file "../apk/loveace-${{ needs.build.outputs.version }}.apk" \
+              $FORCE_FLAG
+          fi

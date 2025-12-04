@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoveACE 下载</title>
+    <link rel="icon" type="image/png" href="./favicon.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+            min-height: 100vh;
+            color: #1a1a2e;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+        }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .logo-wrapper {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 16px;
+            position: relative;
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+            object-fit: cover;
+            display: block;
+        }
+        
+        .logo-fallback {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            border-radius: 20px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+        }
+        
+        .logo-fallback svg {
+            width: 44px;
+            height: 44px;
+            fill: white;
+        }
+        
+        .app-name {
+            font-size: 26px;
+            font-weight: 600;
+            color: #1e3a5f;
+            margin-bottom: 10px;
+        }
+        
+        .version {
+            display: inline-block;
+            background: #e0edff;
+            color: #2563eb;
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        /* Card */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e8f1fc;
+        }
+        
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e3a5f;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-title svg {
+            width: 22px;
+            height: 22px;
+            fill: #2563eb;
+        }
+        
+        /* Platform List */
+        .platform-item {
+            display: flex;
+            align-items: center;
+            padding: 14px;
+            background: #f8fafc;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        
+        .platform-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .platform-icon {
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .platform-icon svg {
+            width: 26px;
+            height: 26px;
+            fill: #64748b;
+        }
+        
+        .platform-info {
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        .platform-name {
+            font-weight: 600;
+            color: #1e3a5f;
+            margin-bottom: 6px;
+            font-size: 15px;
+            line-height: 1.3;
+        }
+        
+        .platform-version {
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: normal;
+        }
+        
+        .platform-md5 {
+            font-size: 10px;
+            color: #94a3b8;
+            font-family: monospace;
+            word-break: break-all;
+            line-height: 1.4;
+        }
+        
+        .download-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+        
+        .download-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .download-btn:active {
+            transform: scale(0.98);
+        }
+        
+        /* Changelog */
+        .changelog-item {
+            padding: 14px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        
+        .changelog-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        
+        .changelog-version {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2563eb;
+            margin-bottom: 6px;
+        }
+        
+        .changelog-text {
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.6;
+        }
+        
+        /* States */
+        .loading, .error {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e0edff;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-icon {
+            width: 48px;
+            height: 48px;
+            fill: #ef4444;
+            margin-bottom: 16px;
+        }
+        
+        .error-text {
+            color: #64748b;
+            margin-bottom: 16px;
+            font-size: 15px;
+        }
+        
+        .retry-btn {
+            background: none;
+            border: 1px solid #2563eb;
+            color: #2563eb;
+            padding: 12px 28px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: background 0.2s;
+        }
+        
+        .retry-btn:active {
+            background: #e0edff;
+        }
+        
+        .empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #94a3b8;
+            font-size: 15px;
+        }
+        
+        #content { display: none; }
+        
+        /* Mobile Responsive */
+        @media (max-width: 480px) {
+            .container {
+                padding: 24px 16px;
+                padding-top: max(24px, env(safe-area-inset-top));
+                padding-bottom: max(24px, env(safe-area-inset-bottom));
+            }
+            
+            .header {
+                margin-bottom: 24px;
+            }
+            
+            .logo-wrapper {
+                width: 72px;
+                height: 72px;
+            }
+            
+            .logo, .logo-fallback {
+                width: 72px;
+                height: 72px;
+                border-radius: 18px;
+            }
+            
+            .logo-fallback svg {
+                width: 40px;
+                height: 40px;
+            }
+            
+            .app-name {
+                font-size: 24px;
+            }
+            
+            .card {
+                padding: 16px;
+                border-radius: 14px;
+            }
+            
+            .platform-item {
+                padding: 12px;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 14px;
+            }
+            
+            .platform-header {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .platform-icon {
+                width: 44px;
+                height: 44px;
+                min-width: 44px;
+                border-radius: 10px;
+            }
+            
+            .platform-icon svg {
+                width: 24px;
+                height: 24px;
+            }
+            
+            .platform-info {
+                min-width: auto;
+            }
+            
+            .platform-name {
+                font-size: 16px;
+                margin-bottom: 4px;
+            }
+            
+            .platform-md5 {
+                font-size: 9px;
+            }
+            
+            .download-btn {
+                width: 100%;
+                text-align: center;
+                padding: 14px 24px;
+                font-size: 16px;
+            }
+            
+            .changelog-item {
+                padding: 12px 0;
+            }
+            
+            .changelog-text {
+                font-size: 13px;
+            }
+        }
+        
+        /* Small mobile */
+        @media (max-width: 360px) {
+            .container {
+                padding: 20px 12px;
+            }
+            
+            .app-name {
+                font-size: 22px;
+            }
+            
+            .version {
+                padding: 6px 14px;
+                font-size: 13px;
+            }
+            
+            .card {
+                padding: 14px;
+            }
+            
+            .card-title {
+                font-size: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Loading -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p style="color: #64748b;">加载中...</p>
+        </div>
+
+        <!-- Error -->
+        <div id="error" class="error" style="display: none;">
+            <svg class="error-icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            <p id="error-msg" class="error-text">加载失败</p>
+            <button class="retry-btn" onclick="loadManifest()">重试</button>
+        </div>
+
+        <!-- Content -->
+        <div id="content">
+            <div class="header">
+                <div class="logo-wrapper">
+                    <img id="logo-img" class="logo" src="./favicon.png" alt="LoveACE">
+                    <div id="logo-fallback" class="logo-fallback">
+                        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    </div>
+                </div>
+                <h1 class="app-name">LoveACE</h1>
+                <span id="version" class="version">v1.0.0</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                    下载
+                </div>
+                <div id="platforms"></div>
+            </div>
+
+            <div id="changelog-card" class="card" style="display: none;">
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+                    更新日志
+                </div>
+                <div id="changelog"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MANIFEST_URL = './manifest.json';
+
+        const PLATFORMS = {
+            android: { name: 'Android', icon: '<path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/>' },
+            ios: { name: 'iOS', icon: '<path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>' },
+            windows: { name: 'Windows', icon: '<path d="M3 12V6.75l6-1.32v6.48L3 12zm17-9v8.75l-10 .15V5.21L20 3zM3 13l6 .09v6.81l-6-1.15V13zm17 .25V22l-10-1.91V13.1l10 .15z"/>' },
+            macos: { name: 'macOS', icon: '<path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>' },
+            linux: { name: 'Linux', icon: '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>' }
+        };
+
+        async function loadManifest() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const content = document.getElementById('content');
+
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            content.style.display = 'none';
+
+            try {
+                // 添加时间戳防止缓存
+                const cacheBuster = `?t=${Date.now()}`;
+                const res = await fetch(MANIFEST_URL + cacheBuster, {
+                    cache: 'no-store',
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                });
+                if (!res.ok) throw new Error('网络请求失败');
+                
+                const data = await res.json();
+                if (!data.ota) throw new Error('暂无可用版本');
+
+                render(data.ota);
+                loading.style.display = 'none';
+                content.style.display = 'block';
+            } catch (e) {
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                document.getElementById('error-msg').textContent = e.message;
+            }
+        }
+
+        function render(ota) {
+            // 获取最新版本号（从各平台中取最新的）
+            const available = Object.keys(PLATFORMS).filter(p => ota[p]);
+            let latestVersion = '1.0.0';
+            available.forEach(p => {
+                const release = ota[p];
+                if (release && release.version) {
+                    // 简单比较版本号
+                    if (release.version > latestVersion) {
+                        latestVersion = release.version;
+                    }
+                }
+            });
+            document.getElementById('version').textContent = `v${latestVersion}`;
+
+            const container = document.getElementById('platforms');
+
+            if (available.length === 0) {
+                container.innerHTML = '<div class="empty">暂无可用下载</div>';
+                return;
+            }
+
+            container.innerHTML = available.map(p => {
+                const info = PLATFORMS[p];
+                const release = ota[p];
+                // 检测是否为移动端
+                const isMobile = window.innerWidth <= 480;
+                
+                if (isMobile) {
+                    return `
+                        <div class="platform-item">
+                            <div class="platform-header">
+                                <div class="platform-icon">
+                                    <svg viewBox="0 0 24 24">${info.icon}</svg>
+                                </div>
+                                <div class="platform-info">
+                                    <div class="platform-name">${info.name} <span class="platform-version">v${release.version}</span></div>
+                                    <div class="platform-md5">${release.md5}</div>
+                                </div>
+                            </div>
+                            <a href="${release.url}" class="download-btn">下载 ${info.name}</a>
+                        </div>
+                    `;
+                }
+                
+                return `
+                    <div class="platform-item">
+                        <div class="platform-icon">
+                            <svg viewBox="0 0 24 24">${info.icon}</svg>
+                        </div>
+                        <div class="platform-info">
+                            <div class="platform-name">${info.name} <span class="platform-version">v${release.version}</span></div>
+                            <div class="platform-md5">${release.md5}</div>
+                        </div>
+                        <a href="${release.url}" class="download-btn">下载</a>
+                    </div>
+                `;
+            }).join('');
+
+            // Changelog
+            if (ota.changelog && ota.changelog.length > 0) {
+                document.getElementById('changelog-card').style.display = 'block';
+                document.getElementById('changelog').innerHTML = ota.changelog.slice(0, 5).map(e => `
+                    <div class="changelog-item">
+                        <div class="changelog-version">v${e.version}</div>
+                        <div class="changelog-text">${e.changes}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Logo 加载处理
+        const logoImg = document.getElementById('logo-img');
+        const logoFallback = document.getElementById('logo-fallback');
+        
+        logoImg.onerror = function() {
+            this.style.display = 'none';
+            logoFallback.style.display = 'flex';
+        };
+        
+        logoImg.onload = function() {
+            this.style.display = 'block';
+            logoFallback.style.display = 'none';
+        };
+
+        loadManifest();
+    </script>
+</body>
+</html>
