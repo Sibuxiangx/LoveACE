@@ -83,7 +83,7 @@ dependencies:
   permission_handler: ^11.3.1
   
   # Internationalization
-  intl: ^0.19.0
+  intl: ^0.20.2
   
   # CSV export
   csv: ^6.0.0
@@ -94,6 +94,10 @@ dependencies:
   
   # URL launcher
   url_launcher: ^6.2.5
+  
+  # Fluent UI for desktop WinUI experience
+  fluent_ui: ^4.13.0
+
 
 dev_dependencies:
   flutter_test:

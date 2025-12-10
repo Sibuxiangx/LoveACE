@@ -48,4 +48,10 @@ class PlatformUtil {
     if (kIsWeb) return false;
     return isIOSPlatform();
   }
+
+  /// 是否为桌面平台 (Windows, macOS, Linux)
+  static bool get isDesktop => isWindows || isMacOS || isLinux;
+
+  /// 是否为移动平台 (Android, iOS)
+  static bool get isMobile => isAndroid || isIOS;
 }

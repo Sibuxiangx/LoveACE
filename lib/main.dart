@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'constants/app_constants.dart';
@@ -30,6 +31,8 @@ import 'services/labor_club/ldjlb_config.dart';
 import 'services/cache_manager.dart';
 import 'services/logger_service.dart';
 import 'services/manifest_service.dart';
+import 'utils/platform/platform_util.dart';
+// Mobile screens
 import 'screens/home_screen.dart';
 import 'screens/more_page.dart';
 import 'screens/exam_info_page.dart';
@@ -38,6 +41,8 @@ import 'screens/competition_page.dart';
 import 'screens/electricity_page.dart';
 import 'screens/labor_club_page.dart';
 import 'screens/scan_sign_in_page.dart';
+// Desktop (WinUI) screens
+import 'winui/screens/winui_home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -253,25 +258,76 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
-          return MaterialApp(
-            title: AppConstants.appName,
-            debugShowCheckedModeBanner: false,
-            theme: themeProvider.lightTheme,
-            darkTheme: themeProvider.darkTheme,
-            themeMode: themeProvider.themeMode,
-            home: const HomeScreen(),
-            routes: {
-              '/more': (context) => const MorePage(),
-              '/exam-info': (context) => const ExamInfoPage(),
-              '/training-plan': (context) => const TrainingPlanPage(),
-              '/competition-info': (context) => const CompetitionPage(),
-              '/electricity': (context) => const ElectricityPage(),
-              '/labor-club': (context) => const LaborClubPage(),
-              '/labor-club/scan': (context) => const ScanSignInPage(),
-            },
-          );
+          // 根据平台选择不同的 App
+          if (PlatformUtil.isDesktop) {
+            // 桌面端使用 FluentApp (WinUI 风格)
+            return fluent.FluentApp(
+              title: AppConstants.appName,
+              debugShowCheckedModeBanner: false,
+              theme: _buildFluentTheme(themeProvider, fluent.Brightness.light),
+              darkTheme: _buildFluentTheme(themeProvider, fluent.Brightness.dark),
+              themeMode: _convertThemeMode(themeProvider.themeMode),
+              home: const WinUIHomeScreen(),
+            );
+          } else {
+            // 移动端使用 MaterialApp
+            return MaterialApp(
+              title: AppConstants.appName,
+              debugShowCheckedModeBanner: false,
+              theme: themeProvider.lightTheme,
+              darkTheme: themeProvider.darkTheme,
+              themeMode: themeProvider.themeMode,
+              home: const HomeScreen(),
+              routes: {
+                '/more': (context) => const MorePage(),
+                '/exam-info': (context) => const ExamInfoPage(),
+                '/training-plan': (context) => const TrainingPlanPage(),
+                '/competition-info': (context) => const CompetitionPage(),
+                '/electricity': (context) => const ElectricityPage(),
+                '/labor-club': (context) => const LaborClubPage(),
+                '/labor-club/scan': (context) => const ScanSignInPage(),
+              },
+            );
+          }
         },
       ),
     );
+  }
+
+  /// 构建 FluentTheme 数据
+  fluent.FluentThemeData _buildFluentTheme(
+    ThemeProvider themeProvider,
+    fluent.Brightness brightness,
+  ) {
+    // 获取主题颜色
+    final colorScheme = brightness == fluent.Brightness.light
+        ? themeProvider.lightTheme.colorScheme
+        : themeProvider.darkTheme.colorScheme;
+
+    return fluent.FluentThemeData(
+      brightness: brightness,
+      accentColor: fluent.AccentColor.swatch({
+        'darkest': colorScheme.primary,
+        'darker': colorScheme.primary,
+        'dark': colorScheme.primary,
+        'normal': colorScheme.primary,
+        'light': colorScheme.primaryContainer,
+        'lighter': colorScheme.primaryContainer,
+        'lightest': colorScheme.primaryContainer,
+      }),
+      fontFamily: PlatformUtil.isWindows ? 'MiSans' : null,
+    );
+  }
+
+  /// 转换 ThemeMode 到 fluent.ThemeMode
+  fluent.ThemeMode _convertThemeMode(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return fluent.ThemeMode.light;
+      case ThemeMode.dark:
+        return fluent.ThemeMode.dark;
+      case ThemeMode.system:
+        return fluent.ThemeMode.system;
+    }
   }
 }
