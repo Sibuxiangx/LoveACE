@@ -41,7 +41,7 @@ async def fetch_school_exam_schedule(
         timestamp = int(time.time() * 1000)
 
         headers = {
-            **conn.client.headers,
+            # **conn.client.headers,
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "X-Requested-With": "XMLHttpRequest",
         }
@@ -103,7 +103,7 @@ async def fetch_exam_seat_info(conn: AUFEConnection) -> List[SeatInfo]:
     """
     try:
         headers = {
-            **conn.client.headers,
+            # **conn.client.headers,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         }
 
@@ -229,7 +229,7 @@ async def fetch_other_exam_records(
     """
     try:
         headers = {
-            **conn.client.headers,
+            # **conn.client.headers,
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             "X-Requested-With": "XMLHttpRequest",
