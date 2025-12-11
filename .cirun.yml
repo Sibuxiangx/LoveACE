@@ -10,10 +10,6 @@ runners:
   - name: "azure-windows-runner"
     cloud: "azure"
     instance_type: "Standard_D4s_v3"
-    machine_image:
-      publisher: microsoftwindowsdesktop
-      offer: windows-11
-      sku: win11-22h2-pro
-      version: latest
+    machine_image: "microsoftwindowsdesktop:windows-11:win11-24h2-pro:latest"
     labels:
       - "cirun-azure-windows-runner"

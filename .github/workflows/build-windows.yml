@@ -8,18 +8,17 @@ on:
       upload_manifest:
         description: '是否上传到 manifest'
         required: false
-        default: 'true'
+        default: true
         type: boolean
       force_update:
         description: '是否强制更新'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:
   build:
-    runs-on: "cirun-azure-windows-runner--${{ github.run_id }}"
-    environment: Windows Build
+    runs-on: windows-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       artifact_name: ${{ steps.version.outputs.artifact_name }}
