@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:html/parser.dart' as html_parser;
 import '../../models/backend/uni_response.dart';
 import '../../models/jwc/exam_info.dart';
@@ -60,7 +61,17 @@ class ExamService {
 
       LoggerService.info('📝 正在获取校统考信息: $fullUrl');
 
-      final response = await connection.client.get(fullUrl);
+      // 添加 Accept 头确保服务器返回正确编码的数据
+      final response = await connection.client.get(
+        fullUrl,
+        options: Options(
+          headers: {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Charset': 'utf-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+        ),
+      );
 
       // 解析响应数据
       var data = response.data;
@@ -119,7 +130,16 @@ class ExamService {
       final url = config.toFullUrl(endpoints['seatInfo']!);
       LoggerService.info('🪑 正在获取座位信息: $url');
 
-      final response = await connection.client.get(url);
+      // 添加 Accept 头确保服务器返回正确编码的数据
+      final response = await connection.client.get(
+        url,
+        options: Options(
+          headers: {
+            'Accept': 'text/html, application/xhtml+xml, */*; q=0.01',
+            'Accept-Charset': 'utf-8',
+          },
+        ),
+      );
 
       // 获取 HTML 内容
       var htmlContent = response.data;
@@ -204,7 +224,18 @@ class ExamService {
         'pageSize': '30',
       };
 
-      final response = await connection.client.post(url, data: formData);
+      // 添加 Accept 头确保服务器返回正确编码的数据
+      final response = await connection.client.post(
+        url,
+        data: formData,
+        options: Options(
+          headers: {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Charset': 'utf-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+        ),
+      );
 
       // 解析响应数据
       var data = response.data;
