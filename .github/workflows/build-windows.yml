@@ -1,0 +1,184 @@
+name: Build Windows Installer
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      upload_manifest:
+        description: '是否上传到 manifest'
+        required: false
+        default: 'true'
+        type: boolean
+      force_update:
+        description: '是否强制更新'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  build:
+    runs-on: "cirun-azure-windows-runner--${{ github.run_id }}"
+    environment: Windows Build
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact_name: ${{ steps.version.outputs.artifact_name }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.2'
+          channel: 'stable'
+          cache: true
+
+      - name: Get version from pubspec.yaml
+        id: version
+        shell: pwsh
+        run: |
+          $content = Get-Content pubspec.yaml -Raw
+          if ($content -match 'version:\s*(\d+\.\d+\.\d+)') {
+            $version = $Matches[1]
+            echo "version=$version" >> $env:GITHUB_OUTPUT
+            echo "artifact_name=loveace-windows-$version" >> $env:GITHUB_OUTPUT
+            echo "📦 Version: $version"
+          }
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          # Download Inno Setup
+          $innoUrl = "https://jrsoftware.org/download.php/is.exe"
+          $innoInstaller = "$env:TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri $innoUrl -OutFile $innoInstaller
+          
+          # Install silently
+          Start-Process -FilePath $innoInstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          
+          # Add to PATH
+          $innoPath = "C:\Program Files (x86)\Inno Setup 6"
+          echo "$innoPath" >> $env:GITHUB_PATH
+
+      - name: Create installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $buildDir = "${{ github.workspace }}\build\windows\x64\runner\Release"
+          $outputDir = "${{ github.workspace }}\installer"
+          
+          # Create output directory
+          New-Item -ItemType Directory -Force -Path $outputDir
+          
+          # Set environment variables for Inno Setup
+          $env:BUILD_DIR = $buildDir
+          $env:OUTPUT_DIR = $outputDir
+          
+          # Run Inno Setup
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAPP_VERSION="$env:APP_VERSION" /DBUILD_DIR="$buildDir" /DOUTPUT_DIR="$outputDir" "windows\inno-ci.iss"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: installer/loveace-${{ steps.version.outputs.version }}-setup.exe
+
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: installer/loveace-${{ steps.version.outputs.version }}-setup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-manifest:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release' || github.event.inputs.upload_manifest == 'true'
+    environment: S3
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: ./installer
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install CLI dependencies
+        run: |
+          pip install uv
+          cd utils && uv sync
+
+      - name: Read changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          CHANGELOG=""
+          
+          if [[ -f "CHANGELOG.txt" ]]; then
+            FOUND=false
+            while IFS= read -r line || [[ -n "$line" ]]; do
+              if [[ "$FOUND" == "true" ]]; then
+                if [[ -z "$line" ]] || [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  break
+                fi
+                CHANGELOG="$line"
+                break
+              fi
+              if [[ "$line" == "$VERSION" ]]; then
+                FOUND=true
+              fi
+            done < CHANGELOG.txt
+          fi
+          
+          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "📝 Changelog for $VERSION: $CHANGELOG"
+
+      - name: Upload to manifest
+        env:
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          CDN_BASE_URL: ${{ secrets.CDN_BASE_URL }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          FORCE_FLAG=""
+          if [[ "${{ github.event.inputs.force_update }}" == "true" ]]; then
+            FORCE_FLAG="--force"
+          fi
+          
+          cd utils
+          
+          if [[ -n "$CHANGELOG" ]]; then
+            uv run python cli.py release \
+              --version "${{ needs.build.outputs.version }}" \
+              --platform windows \
+              --file "../installer/loveace-${{ needs.build.outputs.version }}-setup.exe" \
+              --changelog "$CHANGELOG" \
+              $FORCE_FLAG
+          else
+            uv run python cli.py release \
+              --version "${{ needs.build.outputs.version }}" \
+              --platform windows \
+              --file "../installer/loveace-${{ needs.build.outputs.version }}-setup.exe" \
+              $FORCE_FLAG
+          fi
