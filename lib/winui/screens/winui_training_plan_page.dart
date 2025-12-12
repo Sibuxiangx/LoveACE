@@ -1,9 +1,12 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Material;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../models/jwc/course_schedule_record.dart';
 import '../../models/jwc/plan_category.dart';
 import '../../models/jwc/plan_completion_info.dart';
 import '../../models/jwc/plan_course.dart';
+import '../../providers/course_schedule_provider.dart';
 import '../../providers/training_plan_provider.dart';
 import '../../services/logger_service.dart';
 import '../widgets/winui_card.dart';
@@ -20,6 +23,27 @@ enum _SortOption {
   creditDesc,
   creditAsc,
   nameAsc,
+}
+
+/// 搜索建议类型
+enum _SuggestionType {
+  category,
+  course,
+}
+
+/// 搜索建议项
+class _SearchSuggestion {
+  final _SuggestionType type;
+  final PlanCategory? category;
+  final PlanCourse? course;
+  final String displayName;
+
+  _SearchSuggestion({
+    required this.type,
+    this.category,
+    this.course,
+    required this.displayName,
+  });
 }
 
 extension _SortOptionExtension on _SortOption {
@@ -85,9 +109,35 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
   /// 可用的修读状态
   static const List<String> _allStatuses = ['已通过', '未通过', '未修读'];
 
+  /// 是否显示开课查询面板
+  bool _showCourseSchedulePanel = true;
+
+  /// 开课查询教师筛选控制器
+  final TextEditingController _scheduleTeacherController = TextEditingController();
+
+  /// 搜索建议的FocusNode
+  final FocusNode _searchFocusNode = FocusNode();
+
+  /// 搜索建议的OverlayEntry
+  OverlayEntry? _searchOverlayEntry;
+
+  /// 搜索框的GlobalKey
+  final GlobalKey _searchBoxKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
+    // 监听搜索框焦点变化
+    _searchFocusNode.addListener(() {
+      if (!_searchFocusNode.hasFocus) {
+        // 延迟关闭，以便点击建议项时能够触发
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (!_searchFocusNode.hasFocus) {
+            _removeSearchOverlay();
+          }
+        });
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
@@ -96,7 +146,241 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scheduleTeacherController.dispose();
+    _searchFocusNode.dispose();
+    _removeSearchOverlay();
     super.dispose();
+  }
+
+  /// 移除搜索建议overlay
+  void _removeSearchOverlay() {
+    _searchOverlayEntry?.remove();
+    _searchOverlayEntry = null;
+  }
+
+  /// 选择课程（统一处理，包括重置开课查询状态）
+  void _selectCourse(PlanCourse? course, {PlanCategory? category}) {
+    // 如果切换到不同的课程，重置开课查询状态（但保持面板展开）
+    if (_selectedCourse?.courseCode != course?.courseCode) {
+      Provider.of<CourseScheduleProvider>(context, listen: false).reset();
+    }
+    _selectedCourse = course;
+    if (category != null) {
+      _selectedCategory = category;
+    }
+  }
+
+  /// 显示搜索建议overlay
+  void _showSearchOverlay(BuildContext context) {
+    _removeSearchOverlay();
+    
+    final renderBox = _searchBoxKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+
+    _searchOverlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        left: offset.dx,
+        top: offset.dy + size.height + 4,
+        width: 300,
+        child: _buildSearchSuggestions(context),
+      ),
+    );
+
+    Overlay.of(context).insert(_searchOverlayEntry!);
+  }
+
+  /// 获取搜索建议（分类和课程）
+  List<_SearchSuggestion> _getSearchSuggestions(PlanCompletionInfo? planInfo) {
+    if (planInfo == null || _searchQuery.isEmpty) return [];
+
+    final suggestions = <_SearchSuggestion>[];
+    final query = _searchQuery.toLowerCase();
+
+    // 递归搜索分类和课程
+    void searchCategory(PlanCategory category) {
+      // 搜索分类名称
+      if (category.categoryName.toLowerCase().contains(query)) {
+        suggestions.add(_SearchSuggestion(
+          type: _SuggestionType.category,
+          category: category,
+          displayName: category.categoryName,
+        ));
+      }
+
+      // 搜索课程
+      for (final course in category.courses) {
+        if (course.courseName.toLowerCase().contains(query) ||
+            course.courseCode.toLowerCase().contains(query)) {
+          suggestions.add(_SearchSuggestion(
+            type: _SuggestionType.course,
+            course: course,
+            category: category,
+            displayName: course.courseName.isNotEmpty ? course.courseName : course.courseCode,
+          ));
+        }
+      }
+
+      // 递归搜索子分类
+      for (final sub in category.subcategories) {
+        searchCategory(sub);
+      }
+    }
+
+    for (final category in planInfo.categories) {
+      searchCategory(category);
+    }
+
+    return suggestions;
+  }
+
+  /// 构建搜索建议下拉框
+  Widget _buildSearchSuggestions(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+    final suggestions = _getSearchSuggestions(provider.planInfo);
+
+    if (suggestions.isEmpty) {
+      return Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.menuColor,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: theme.resources.controlStrokeColorDefault),
+          ),
+          child: Text(
+            '未找到匹配结果',
+            style: theme.typography.body?.copyWith(color: theme.inactiveColor),
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 300),
+        decoration: BoxDecoration(
+          color: theme.menuColor,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: theme.resources.controlStrokeColorDefault),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 可滚动的建议列表（不限制数量）
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: suggestions
+                      .map((suggestion) =>
+                          _buildSuggestionItem(context, suggestion))
+                      .toList(),
+                ),
+              ),
+            ),
+            // 底部显示总数
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: theme.resources.controlStrokeColorDefault),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(FluentIcons.search, size: 12, color: theme.inactiveColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    '共 ${suggestions.length} 个结果',
+                    style: theme.typography.caption?.copyWith(color: theme.inactiveColor),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建单个搜索建议项
+  Widget _buildSuggestionItem(BuildContext context, _SearchSuggestion suggestion) {
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final isCategory = suggestion.type == _SuggestionType.category;
+    final icon = isCategory ? FluentIcons.folder : FluentIcons.education;
+    final iconColor = isCategory
+        ? (isDark ? Colors.orange.light : Colors.orange)
+        : (isDark ? Colors.blue.light : Colors.blue);
+
+    return HoverButton(
+      onPressed: () {
+        _removeSearchOverlay();
+        setState(() {
+          // 展开到目标节点的路径（在setState内部调用以触发UI更新）
+          _expandPathToNode(suggestion.category, suggestion.course);
+          if (isCategory) {
+            _selectedCategory = suggestion.category;
+            _selectCourse(null);
+          } else {
+            _selectCourse(suggestion.course, category: suggestion.category);
+          }
+          // 清空搜索
+          _searchQuery = '';
+          _searchController.clear();
+        });
+      },
+      builder: (context, states) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        decoration: BoxDecoration(
+          color: states.isHovered ? theme.resources.subtleFillColorSecondary : null,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: iconColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    suggestion.displayName,
+                    style: theme.typography.body,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (!isCategory && suggestion.course != null)
+                    Text(
+                      suggestion.course!.courseCode,
+                      style: theme.typography.caption?.copyWith(color: theme.inactiveColor),
+                    ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                isCategory ? '分类' : '课程',
+                style: TextStyle(fontSize: 10, color: iconColor),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 筛选课程
@@ -154,6 +438,7 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
       _searchController.clear();
       _selectedStatuses = {};
       _sortOption = _SortOption.defaultOrder;
+      _rebuildTree(); // 重建树以清除筛选
     });
   }
 
@@ -279,12 +564,14 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
             commandBar: CommandBar(
               mainAxisAlignment: MainAxisAlignment.end,
               primaryItems: [
-                // 常驻搜索框
+                // 常驻搜索框（带搜索建议）
                 CommandBarBuilderItem(
                   builder: (context, mode, child) => SizedBox(
+                    key: _searchBoxKey,
                     width: 200,
                     child: TextBox(
                       controller: _searchController,
+                      focusNode: _searchFocusNode,
                       placeholder: '搜索课程名或课程号',
                       prefix: const Padding(
                         padding: EdgeInsets.only(left: 8),
@@ -298,6 +585,7 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
                                   _searchQuery = '';
                                   _searchController.clear();
                                 });
+                                _removeSearchOverlay();
                               },
                             )
                           : null,
@@ -305,6 +593,18 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
                         setState(() {
                           _searchQuery = value;
                         });
+                        // 显示搜索建议
+                        if (value.isNotEmpty && provider.state == TrainingPlanState.loaded) {
+                          _showSearchOverlay(context);
+                        } else {
+                          _removeSearchOverlay();
+                        }
+                      },
+                      onTap: () {
+                        // 点击时如果有内容也显示建议
+                        if (_searchQuery.isNotEmpty && provider.state == TrainingPlanState.loaded) {
+                          _showSearchOverlay(context);
+                        }
                       },
                     ),
                   ),
@@ -344,6 +644,7 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
                       if (value != null) {
                         setState(() {
                           _sortOption = value;
+                          _rebuildTree(); // 重建树以应用排序
                         });
                       }
                     },
@@ -483,6 +784,7 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
                     } else {
                       _selectedStatuses.remove(status);
                     }
+                    _rebuildTree(); // 重建树以应用筛选
                   });
                 },
                 child: Row(
@@ -720,6 +1022,9 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     );
   }
 
+  /// 需要展开的分类ID集合
+  final Set<String> _expandedCategoryIds = {};
+
   /// 构建或获取缓存的 TreeView 项目列表
   List<TreeViewItem> _getOrBuildTreeItems(PlanCompletionInfo info) {
     // 如果数据没变且已有缓存，直接返回
@@ -732,7 +1037,75 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     return _treeItems!;
   }
 
-  /// 构建分类树形导航（只显示分类，不显示课程叶节点）
+  /// 强制重建树
+  void _rebuildTree() {
+    _treeItems = null;
+    _lastPlanInfo = null;
+  }
+
+  /// 展开到指定节点的最短路径
+  void _expandPathToNode(PlanCategory? targetCategory, PlanCourse? targetCourse) {
+    final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+    final planInfo = provider.planInfo;
+    if (planInfo == null) {
+      LoggerService.warning('⚠️ planInfo is null, cannot expand path');
+      return;
+    }
+
+    LoggerService.info('🔍 展开路径: category=${targetCategory?.categoryName}, course=${targetCourse?.courseName}');
+
+    // 在原始数据结构中查找路径
+    bool findPath(List<PlanCategory> categories, List<String> path) {
+      for (final category in categories) {
+        // 检查是否是目标分类（仅当没有指定课程时）
+        if (targetCategory != null && 
+            targetCourse == null && 
+            category.categoryId == targetCategory.categoryId) {
+          path.add(category.categoryId);
+          LoggerService.info('✅ 找到目标分类: ${category.categoryName}');
+          return true;
+        }
+        
+        // 如果目标是课程，检查当前分类是否包含该课程
+        if (targetCourse != null) {
+          for (final course in category.courses) {
+            if (course.courseCode == targetCourse.courseCode) {
+              path.add(category.categoryId);
+              LoggerService.info('✅ 找到包含目标课程的分类: ${category.categoryName}');
+              return true;
+            }
+          }
+        }
+        
+        // 递归搜索子分类
+        if (category.subcategories.isNotEmpty) {
+          path.add(category.categoryId);
+          if (findPath(category.subcategories, path)) {
+            LoggerService.info('📂 路径包含: ${category.categoryName}');
+            return true;
+          }
+          path.removeLast();
+        }
+      }
+      return false;
+    }
+
+    // 查找路径
+    final path = <String>[];
+    final found = findPath(planInfo.categories, path);
+    
+    if (found) {
+      // 将路径上的所有分类ID添加到展开集合
+      _expandedCategoryIds.addAll(path);
+      LoggerService.info('🔍 展开路径: $path');
+      // 强制重建树
+      _rebuildTree();
+    } else {
+      LoggerService.warning('⚠️ 未找到目标节点');
+    }
+  }
+
+  /// 构建分类树形导航（显示分类和课程叶节点）
   Widget _buildCategoryTree(BuildContext context, PlanCompletionInfo info) {
     final theme = FluentTheme.of(context);
     final treeItems = _getOrBuildTreeItems(info);
@@ -758,10 +1131,24 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
             selectionMode: TreeViewSelectionMode.single,
             items: treeItems,
             onItemInvoked: (item, reason) async {
+              // 双击时切换展开/折叠状态
+              if (item.children.isNotEmpty) {
+                setState(() {
+                  item.expanded = !item.expanded;
+                });
+              }
+              // 同时更新选中状态
               if (item.value is PlanCategory) {
                 setState(() {
                   _selectedCategory = item.value as PlanCategory;
-                  _selectedCourse = null;
+                  _selectCourse(null);
+                });
+              } else if (item.value is PlanCourse) {
+                // 点击课程节点，找到其所属分类
+                final course = item.value as PlanCourse;
+                final category = _findCategoryForCourse(info, course);
+                setState(() {
+                  _selectCourse(course, category: category);
                 });
               }
             },
@@ -771,7 +1158,13 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
               if (item.value is PlanCategory) {
                 setState(() {
                   _selectedCategory = item.value as PlanCategory;
-                  _selectedCourse = null;
+                  _selectCourse(null);
+                });
+              } else if (item.value is PlanCourse) {
+                final course = item.value as PlanCourse;
+                final category = _findCategoryForCourse(info, course);
+                setState(() {
+                  _selectCourse(course, category: category);
                 });
               }
             },
@@ -781,23 +1174,88 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     );
   }
 
-  /// 构建分类树节点（递归，只包含子分类，不包含课程）
+  /// 查找课程所属的分类
+  PlanCategory? _findCategoryForCourse(PlanCompletionInfo info, PlanCourse course) {
+    PlanCategory? findInCategory(PlanCategory category) {
+      // 检查当前分类的课程
+      for (final c in category.courses) {
+        if (c.courseCode == course.courseCode) {
+          return category;
+        }
+      }
+      // 递归检查子分类
+      for (final sub in category.subcategories) {
+        final found = findInCategory(sub);
+        if (found != null) return found;
+      }
+      return null;
+    }
+
+    for (final category in info.categories) {
+      final found = findInCategory(category);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  /// 构建分类树节点（递归，包含子分类和课程叶节点，应用筛选和排序）
   TreeViewItem _buildCategoryTreeItem(PlanCategory category) {
-    final hasSubcategories = category.subcategories.isNotEmpty;
+    final childItems = <TreeViewItem>[];
     
-    // 递归构建子分类
-    final childItems = hasSubcategories
-        ? category.subcategories.map((sub) => _buildCategoryTreeItem(sub)).toList()
-        : <TreeViewItem>[];
+    // 先添加子分类（递归构建，可能因筛选而为空）
+    for (final sub in category.subcategories) {
+      final subItem = _buildCategoryTreeItem(sub);
+      // 如果子分类有内容（子分类或课程），才添加
+      if (subItem.children.isNotEmpty || _hasFilteredCourses(sub)) {
+        childItems.add(subItem);
+      }
+    }
+    
+    // 再添加课程叶节点（应用筛选和排序）
+    final filteredCourses = _filterCourses(category.courses);
+    for (final course in filteredCourses) {
+      childItems.add(_buildCourseTreeItem(course));
+    }
+
+    // 检查是否需要展开（在 _expandedCategoryIds 中）
+    final shouldExpand = _expandedCategoryIds.contains(category.categoryId);
 
     return TreeViewItem(
       value: category,
       lazy: false,
+      expanded: shouldExpand, // 根据 _expandedCategoryIds 决定是否展开
       content: _TreeItemContent(
         category: category,
         getProgressColor: _getProgressColor,
+        filteredCount: filteredCourses.length,
+        totalCount: category.courses.length,
       ),
       children: childItems,
+    );
+  }
+
+  /// 检查分类是否有符合筛选条件的课程（递归检查子分类）
+  bool _hasFilteredCourses(PlanCategory category) {
+    // 检查当前分类的课程
+    if (_filterCourses(category.courses).isNotEmpty) {
+      return true;
+    }
+    // 递归检查子分类
+    for (final sub in category.subcategories) {
+      if (_hasFilteredCourses(sub)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// 构建课程树节点（叶节点）
+  TreeViewItem _buildCourseTreeItem(PlanCourse course) {
+    return TreeViewItem(
+      value: course,
+      lazy: false,
+      content: _CourseTreeItemContent(course: course),
+      children: const [],
     );
   }
 
@@ -1025,7 +1483,7 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: HoverButton(
-        onPressed: () => setState(() => _selectedCourse = course),
+        onPressed: () => setState(() => _selectCourse(course)),
         builder: (context, states) {
           return Container(
             width: double.infinity,
@@ -1133,18 +1591,6 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Button(
-            onPressed: () => setState(() => _selectedCourse = null),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(FluentIcons.back, size: 14),
-                SizedBox(width: 8),
-                Text('返回分类'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
           WinUICard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1218,6 +1664,547 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          // 开课查询面板
+          _buildCourseSchedulePanel(context, course),
+        ],
+      ),
+    );
+  }
+
+  /// 构建开课查询面板
+  Widget _buildCourseSchedulePanel(BuildContext context, PlanCourse course) {
+    final theme = FluentTheme.of(context);
+    final scheduleProvider = Provider.of<CourseScheduleProvider>(context);
+
+    // 默认展开时自动加载学期列表
+    if (_showCourseSchedulePanel && scheduleProvider.termState == ScheduleTermState.initial) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        scheduleProvider.loadTermList();
+      });
+    }
+
+    return WinUICard(
+      padding: const EdgeInsets.all(0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 标题栏
+          HoverButton(
+            onPressed: () {
+              setState(() => _showCourseSchedulePanel = !_showCourseSchedulePanel);
+              // 展开时加载学期列表
+              if (_showCourseSchedulePanel && scheduleProvider.termState == ScheduleTermState.initial) {
+                scheduleProvider.loadTermList();
+              }
+            },
+            builder: (context, states) => Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(
+                    _showCourseSchedulePanel ? FluentIcons.chevron_down : FluentIcons.chevron_right,
+                    size: 12,
+                    color: theme.accentColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(FluentIcons.calendar, size: 16, color: theme.accentColor),
+                  const SizedBox(width: 8),
+                  Text('开课查询', style: theme.typography.bodyStrong),
+                  const Spacer(),
+                  if (scheduleProvider.state == CourseScheduleState.loaded)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: theme.accentColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${scheduleProvider.filteredCount}/${scheduleProvider.totalCount}',
+                        style: theme.typography.caption?.copyWith(
+                          color: theme.accentColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          // 展开内容
+          if (_showCourseSchedulePanel) ...[
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 学期选择和查询按钮
+                  _buildScheduleQueryBar(context, course, scheduleProvider),
+                  const SizedBox(height: 16),
+                  // 筛选条件
+                  if (scheduleProvider.state == CourseScheduleState.loaded)
+                    _buildScheduleFilters(context, scheduleProvider),
+                  // 查询结果
+                  _buildScheduleResults(context, scheduleProvider),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 构建查询栏
+  Widget _buildScheduleQueryBar(
+    BuildContext context,
+    PlanCourse course,
+    CourseScheduleProvider scheduleProvider,
+  ) {
+    // 获取学期列表
+    final termList = scheduleProvider.termList ?? [];
+    final selectedTermCode = scheduleProvider.selectedTermCode ??
+        (termList.isNotEmpty ? termList.first.termCode : null);
+
+    return Row(
+      children: [
+        // 学期选择
+        Expanded(
+          child: scheduleProvider.termState == ScheduleTermState.loading
+              ? const Row(
+                  children: [
+                    ProgressRing(strokeWidth: 2),
+                    SizedBox(width: 8),
+                    Text('加载学期...'),
+                  ],
+                )
+              : scheduleProvider.termState == ScheduleTermState.error
+                  ? Row(
+                      children: [
+                        Icon(FluentIcons.error_badge, size: 14, color: Colors.red),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            scheduleProvider.termErrorMessage ?? '加载失败',
+                            style: TextStyle(color: Colors.red, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Button(
+                          onPressed: () => scheduleProvider.loadTermList(),
+                          child: const Text('重试'),
+                        ),
+                      ],
+                    )
+                  : ComboBox<String>(
+                      value: selectedTermCode,
+                      placeholder: const Text('选择学期'),
+                      items: termList
+                          .map((term) => ComboBoxItem<String>(
+                                value: term.termCode,
+                                child: Text(term.termName),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          scheduleProvider.setSelectedTermCode(value);
+                        }
+                      },
+                    ),
+        ),
+        const SizedBox(width: 12),
+        // 查询按钮
+        FilledButton(
+          onPressed: scheduleProvider.state == CourseScheduleState.loading ||
+                  selectedTermCode == null ||
+                  course.courseCode.isEmpty
+              ? null
+              : () {
+                  scheduleProvider.queryCourseSchedule(
+                    courseCode: course.courseCode,
+                    termCode: selectedTermCode,
+                  );
+                },
+          child: scheduleProvider.state == CourseScheduleState.loading
+              ? const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: ProgressRing(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 8),
+                    Text('查询中'),
+                  ],
+                )
+              : const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(FluentIcons.search, size: 14),
+                    SizedBox(width: 8),
+                    Text('查询开课'),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// 构建筛选条件
+  Widget _buildScheduleFilters(BuildContext context, CourseScheduleProvider provider) {
+    final theme = FluentTheme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: theme.resources.cardBackgroundFillColorSecondary,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.resources.controlStrokeColorDefault),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(FluentIcons.filter, size: 14, color: theme.inactiveColor),
+              const SizedBox(width: 8),
+              Text('筛选条件', style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
+              const Spacer(),
+              if (provider.hasActiveFilters)
+                Button(
+                  onPressed: () {
+                    provider.clearFilters();
+                    _scheduleTeacherController.clear();
+                  },
+                  child: const Text('清除筛选'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              // 校区筛选
+              SizedBox(
+                width: 140,
+                child: ComboBox<String?>(
+                  value: provider.filterCampus,
+                  placeholder: const Text('全部校区'),
+                  items: [
+                    const ComboBoxItem<String?>(value: null, child: Text('全部校区')),
+                    ...provider.availableCampuses.map((campus) => ComboBoxItem<String?>(
+                          value: campus,
+                          child: Text(campus),
+                        )),
+                  ],
+                  onChanged: (value) => provider.setFilterCampus(value),
+                ),
+              ),
+              // 星期筛选
+              SizedBox(
+                width: 120,
+                child: ComboBox<int?>(
+                  value: provider.filterWeekday,
+                  placeholder: const Text('全部星期'),
+                  items: [
+                    const ComboBoxItem<int?>(value: null, child: Text('全部星期')),
+                    ...List.generate(7, (i) => ComboBoxItem<int?>(
+                          value: i + 1,
+                          child: Text(['周一', '周二', '周三', '周四', '周五', '周六', '周日'][i]),
+                        )),
+                  ],
+                  onChanged: (value) => provider.setFilterWeekday(value),
+                ),
+              ),
+              // 教师搜索
+              SizedBox(
+                width: 160,
+                child: TextBox(
+                  controller: _scheduleTeacherController,
+                  placeholder: '搜索教师',
+                  prefix: const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(FluentIcons.search, size: 12),
+                  ),
+                  onChanged: (value) => provider.setFilterTeacher(value),
+                ),
+              ),
+              // 只显示有余量
+              ToggleButton(
+                checked: provider.filterHasCapacity,
+                onChanged: (checked) => provider.setFilterHasCapacity(checked),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(FluentIcons.check_mark, size: 12),
+                    SizedBox(width: 4),
+                    Text('有余量'),
+                  ],
+                ),
+              ),
+              // 排序
+              SizedBox(
+                width: 140,
+                child: ComboBox<CourseScheduleSortOption>(
+                  value: provider.sortOption,
+                  items: CourseScheduleSortOption.values
+                      .map((opt) => ComboBoxItem<CourseScheduleSortOption>(
+                            value: opt,
+                            child: Text(opt.label),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) provider.setSortOption(value);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建查询结果
+  Widget _buildScheduleResults(BuildContext context, CourseScheduleProvider provider) {
+    final theme = FluentTheme.of(context);
+
+    switch (provider.state) {
+      case CourseScheduleState.initial:
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                Icon(FluentIcons.calendar, size: 48, color: theme.inactiveColor),
+                const SizedBox(height: 12),
+                Text(
+                  '选择学期后点击查询',
+                  style: theme.typography.body?.copyWith(color: theme.inactiveColor),
+                ),
+              ],
+            ),
+          ),
+        );
+
+      case CourseScheduleState.loading:
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: Column(
+              children: [
+                ProgressRing(),
+                SizedBox(height: 12),
+                Text('正在查询开课情况...'),
+              ],
+            ),
+          ),
+        );
+
+      case CourseScheduleState.error:
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                Icon(FluentIcons.error_badge, size: 48, color: Colors.red),
+                const SizedBox(height: 12),
+                Text(
+                  provider.errorMessage ?? '查询失败',
+                  style: theme.typography.body?.copyWith(color: Colors.red),
+                ),
+                const SizedBox(height: 12),
+                if (provider.isRetryable)
+                  Button(
+                    onPressed: () {
+                      if (provider.currentCourseCode != null &&
+                          provider.currentTermCode != null) {
+                        provider.queryCourseSchedule(
+                          courseCode: provider.currentCourseCode!,
+                          termCode: provider.currentTermCode!,
+                        );
+                      }
+                    },
+                    child: const Text('重试'),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+      case CourseScheduleState.loaded:
+        final records = provider.filteredRecords;
+        if (records.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  Icon(FluentIcons.calendar, size: 48, color: theme.inactiveColor),
+                  const SizedBox(height: 12),
+                  Text(
+                    provider.totalCount == 0 ? '该学期暂无开课' : '没有符合筛选条件的课程',
+                    style: theme.typography.body?.copyWith(color: theme.inactiveColor),
+                  ),
+                  if (provider.hasActiveFilters) ...[
+                    const SizedBox(height: 12),
+                    Button(
+                      onPressed: () {
+                        provider.clearFilters();
+                        _scheduleTeacherController.clear();
+                      },
+                      child: const Text('清除筛选'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '共 ${records.length} 个开课班级',
+              style: theme.typography.caption?.copyWith(color: theme.inactiveColor),
+            ),
+            const SizedBox(height: 12),
+            ...records.map((record) => _buildScheduleRecordCard(context, record)),
+          ],
+        );
+    }
+  }
+
+  /// 构建单个开课记录卡片
+  Widget _buildScheduleRecordCard(BuildContext context, CourseScheduleRecord record) {
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // 计算余量状态
+    final hasCapacity = record.bkskyl != null && record.bkskyl! > 0;
+    final capacityColor = hasCapacity
+        ? (isDark ? Colors.green.light : Colors.green)
+        : (isDark ? Colors.red.light : Colors.red);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.resources.controlStrokeColorDefault),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 第一行：课序号、教师、余量
+          Row(
+            children: [
+              // 课序号
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.accentColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${record.kxh ?? '-'}班',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: theme.accentColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 教师
+              if (record.teacherName != null && record.teacherName!.isNotEmpty)
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(FluentIcons.contact, size: 12, color: theme.inactiveColor),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          record.teacherName!,
+                          style: theme.typography.body,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                const Spacer(),
+              // 余量
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: capacityColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hasCapacity ? FluentIcons.check_mark : FluentIcons.cancel,
+                      size: 10,
+                      color: capacityColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '余${record.bkskyl ?? 0}/${record.bkskrl ?? 0}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: capacityColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // 第二行：时间地点
+          Row(
+            children: [
+              Icon(FluentIcons.clock, size: 12, color: theme.inactiveColor),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  record.scheduleDescription,
+                  style: theme.typography.caption,
+                ),
+              ),
+            ],
+          ),
+          // 第三行：校区、选课限制
+          if (record.xkxzsm != null && record.xkxzsm!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(FluentIcons.info, size: 12, color: theme.inactiveColor),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    record.xkxzsm!.replaceAll('\r\n', ' ').trim(),
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.inactiveColor,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1248,19 +2235,34 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
   }
 }
 
-/// TreeView 项目内容组件
+/// TreeView 项目内容组件（分类）
 class _TreeItemContent extends StatelessWidget {
   final PlanCategory category;
   final Color Function(double) getProgressColor;
+  final int? filteredCount;
+  final int? totalCount;
 
   const _TreeItemContent({
     required this.category,
     required this.getProgressColor,
+    this.filteredCount,
+    this.totalCount,
   });
+
+  /// 递归计算分类及其所有子分类中的课程总数
+  int _getTotalCourseCount(PlanCategory cat) {
+    int count = cat.courses.length;
+    for (final sub in cat.subcategories) {
+      count += _getTotalCourseCount(sub);
+    }
+    return count;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final totalCourses = _getTotalCourseCount(category);
+    final hasFilter = filteredCount != null && totalCount != null && filteredCount != totalCount;
     
     return Row(
       children: [
@@ -1278,12 +2280,13 @@ class _TreeItemContent extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        // 课程数量
+        // 课程数量（如果有筛选显示筛选后/总数，否则显示总数）
         Text(
-          '${category.courses.length}门',
+          hasFilter ? '$filteredCount/$totalCount门' : '$totalCourses门',
           style: TextStyle(
             fontSize: 10,
-            color: theme.inactiveColor,
+            color: hasFilter ? theme.accentColor : theme.inactiveColor,
+            fontWeight: hasFilter ? FontWeight.bold : FontWeight.normal,
           ),
         ),
         const SizedBox(width: 6),
@@ -1305,5 +2308,62 @@ class _TreeItemContent extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// TreeView 项目内容组件（课程叶节点）
+class _CourseTreeItemContent extends StatelessWidget {
+  final PlanCourse course;
+
+  const _CourseTreeItemContent({
+    required this.course,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // 获取状态颜色和图标
+    final (IconData icon, Color color) = _getCourseStatusStyle(isDark);
+    
+    return Row(
+      children: [
+        // 状态图标
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 6),
+        // 课程名称
+        Expanded(
+          child: Text(
+            course.courseName.isNotEmpty ? course.courseName : course.courseCode,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+        // 学分
+        if (course.credits != null) ...[
+          const SizedBox(width: 6),
+          Text(
+            '${course.credits}分',
+            style: TextStyle(
+              fontSize: 10,
+              color: theme.inactiveColor,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 获取课程状态的图标和颜色
+  (IconData, Color) _getCourseStatusStyle(bool isDark) {
+    if (course.isPassed) {
+      return (FluentIcons.check_mark, isDark ? Colors.green.light : Colors.green);
+    } else if (course.statusDescription == '未通过') {
+      return (FluentIcons.cancel, isDark ? Colors.red.light : Colors.red);
+    } else {
+      // 未修
+      return (FluentIcons.clock, isDark ? Colors.orange.light : Colors.orange);
+    }
   }
 }

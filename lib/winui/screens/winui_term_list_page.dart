@@ -579,7 +579,10 @@ class _WinUITermListPageState extends State<WinUITermListPage> {
               ),
               Expanded(
                 flex: 1,
-                child: _buildScoreBadge(context, record.score),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildScoreBadge(context, record.score),
+                ),
               ),
               Expanded(
                 flex: 2,

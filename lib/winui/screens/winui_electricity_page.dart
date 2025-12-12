@@ -633,13 +633,13 @@ class _WinUIRoomSelectionDialogState extends State<_WinUIRoomSelectionDialog> {
                 ? const Center(child: ProgressRing())
                 : ComboBox<String>(
                     isExpanded: true,
-                    placeholder: const Text('请选择楼层'),
+                    placeholder: Text(_selectedBuilding == null ? '请先选择楼栋' : '请选择楼层'),
                     value: _selectedFloor,
                     items: _floors.map((f) => ComboBoxItem<String>(
                       value: f['code'],
                       child: Text(f['name'] ?? ''),
                     )).toList(),
-                    onChanged: _selectedBuilding == null ? null : (value) {
+                    onChanged: (_selectedBuilding == null || _floors.isEmpty) ? null : (value) {
                       setState(() => _selectedFloor = value);
                       if (value != null) _loadRooms(value);
                     },
@@ -652,13 +652,13 @@ class _WinUIRoomSelectionDialogState extends State<_WinUIRoomSelectionDialog> {
                 ? const Center(child: ProgressRing())
                 : ComboBox<String>(
                     isExpanded: true,
-                    placeholder: const Text('请选择房间'),
+                    placeholder: Text(_selectedFloor == null ? '请先选择楼层' : '请选择房间'),
                     value: _selectedRoom,
                     items: _rooms.map((r) => ComboBoxItem<String>(
                       value: r['code'],
                       child: Text(r['name'] ?? ''),
                     )).toList(),
-                    onChanged: _selectedFloor == null ? null : (value) {
+                    onChanged: (_selectedFloor == null || _rooms.isEmpty) ? null : (value) {
                       setState(() => _selectedRoom = value);
                     },
                   ),

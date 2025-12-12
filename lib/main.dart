@@ -18,6 +18,7 @@ import 'providers/competition_provider.dart';
 import 'providers/electricity_provider.dart';
 import 'providers/labor_club_provider.dart';
 import 'providers/manifest_provider.dart';
+import 'providers/course_schedule_provider.dart';
 import 'services/session_manager.dart';
 import 'services/jwc/jwc_service.dart';
 import 'services/aac/aac_service.dart';
@@ -179,6 +180,20 @@ class MyApp extends StatelessWidget {
                 authProvider.connection != null) {
               final jwcService = JWCService(authProvider.connection!);
               return TrainingPlanProvider(jwcService);
+            }
+            return previous;
+          },
+        ),
+
+        // Course Schedule Provider - depends on AuthProvider for JWCService
+        ChangeNotifierProxyProvider<AuthProvider, CourseScheduleProvider?>(
+          create: (_) => null,
+          update: (context, authProvider, previous) {
+            // Only create CourseScheduleProvider when user is authenticated
+            if (authProvider.isAuthenticated &&
+                authProvider.connection != null) {
+              final jwcService = JWCService(authProvider.connection!);
+              return CourseScheduleProvider(jwcService);
             }
             return previous;
           },

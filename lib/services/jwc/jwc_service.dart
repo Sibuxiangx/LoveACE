@@ -1,5 +1,6 @@
 import '../aufe/connector.dart';
 import 'academic_service.dart';
+import 'course_schedule_service.dart';
 import 'exam_service.dart';
 import 'jwc_config.dart';
 import 'plan_service.dart';
@@ -29,8 +30,8 @@ class JWCService {
   /// 培养方案服务
   late final PlanService plan;
 
-  // 预留其他模块扩展点
-  // late final ScheduleService schedule;
+  /// 课程开课查询服务
+  late final CourseScheduleService courseSchedule;
 
   /// 创建教务系统服务实例
   ///
@@ -51,7 +52,7 @@ class JWCService {
     // 初始化培养方案服务
     plan = PlanService(connection, config);
 
-    // 未来可以在这里初始化其他服务模块
-    // schedule = ScheduleService(connection, config);
+    // 初始化课程开课查询服务
+    courseSchedule = CourseScheduleService(connection, config);
   }
 }

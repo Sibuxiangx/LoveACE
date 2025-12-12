@@ -369,18 +369,7 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
                   Center(
                     child: HyperlinkButton(
                       onPressed: _showPasswordHelpDialog,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            FluentIcons.help,
-                            size: 14,
-                            color: theme.accentColor,
-                          ),
-                          const SizedBox(width: 4),
-                          const Text('不知道密码是什么？'),
-                        ],
-                      ),
+                      child: const Text('登录时遇到问题，不知道密码？'),
                     ),
                   ),
                   const SizedBox(height: 32),
