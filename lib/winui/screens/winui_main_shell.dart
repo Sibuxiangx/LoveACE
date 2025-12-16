@@ -14,6 +14,7 @@ import 'winui_training_plan_page.dart';
 import 'winui_competition_page.dart';
 import 'winui_electricity_page.dart';
 import 'winui_labor_club_page.dart';
+import 'winui_ykt_page.dart';
 import 'winui_settings_page.dart';
 import 'winui_login_screen.dart';
 
@@ -42,6 +43,7 @@ class _WinUIMainShellState extends State<WinUIMainShell> {
     const WinUIExamPage(), // 考试安排
     const WinUITrainingPlanPage(), // 培养方案
     const WinUICompetitionPage(), // 竞赛获奖
+    const WinUIYKTPage(), // 一卡通
     const WinUIElectricityPage(), // 电费查询
     const WinUILaborClubPage(), // 劳动俱乐部
     const WinUISettingsPage(), // 设置
@@ -297,14 +299,19 @@ class _WinUIMainShellState extends State<WinUIMainShell> {
         body: _pages[5],
       ),
       PaneItem(
+        icon: const Icon(FluentIcons.payment_card),
+        title: const Text('一卡通'),
+        body: _pages[6],
+      ),
+      PaneItem(
         icon: const Icon(FluentIcons.lightning_bolt),
         title: const Text('电费查询'),
-        body: _pages[6],
+        body: _pages[7],
       ),
       PaneItem(
         icon: const Icon(FluentIcons.people),
         title: const Text('劳动俱乐部'),
-        body: _pages[7],
+        body: _pages[8],
       ),
     ];
   }
@@ -334,7 +341,7 @@ class _WinUIMainShellState extends State<WinUIMainShell> {
       PaneItem(
         icon: const Icon(FluentIcons.settings),
         title: const Text('设置'),
-        body: _pages[8],
+        body: _pages[9],
       ),
     ];
   }

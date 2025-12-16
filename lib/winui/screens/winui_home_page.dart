@@ -29,7 +29,9 @@ class _WinUIHomePageState extends State<WinUIHomePage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<AcademicProvider>(context, listen: false);
+    final provider = Provider.of<AcademicProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await provider.loadData(forceRefresh: forceRefresh);
 
     if (mounted && provider.state == AcademicState.error) {
@@ -52,8 +54,16 @@ class _WinUIHomePageState extends State<WinUIHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AcademicProvider>(
+    return Consumer<AcademicProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('首页')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('首页'),
@@ -146,22 +156,90 @@ class _WinUIHomePageState extends State<WinUIHomePage> {
           color: theme.accentColor,
         ),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                greeting,
+                style: theme.typography.title,
+              ),
+              Text(
+                '欢迎使用 LoveACE',
+                style: theme.typography.body?.copyWith(
+                  color: theme.inactiveColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+        HyperlinkButton(
+          onPressed: () => _showRewardDialog(context),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(FluentIcons.heart, size: 14, color: theme.accentColor),
+              const SizedBox(width: 4),
+              Text(
+                '支持作者',
+                style: theme.typography.caption?.copyWith(
+                  color: theme.accentColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 显示赞赏码对话框
+  void _showRewardDialog(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: Row(
+          children: [
+            Icon(FluentIcons.heart_fill, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            const Text('支持作者'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              greeting,
-              style: theme.typography.title,
+              '如果觉得 LoveACE 对你有帮助，可以请作者喝杯咖啡 ☕',
+              style: theme.typography.body,
             ),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/images/reward_qrcode.png',
+                width: 200,
+                height: 200,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 12),
             Text(
-              '欢迎使用 LoveACE',
-              style: theme.typography.body?.copyWith(
+              '微信扫一扫',
+              style: theme.typography.caption?.copyWith(
                 color: theme.inactiveColor,
               ),
             ),
           ],
         ),
-      ],
+        actions: [
+          FilledButton(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
     );
   }
 

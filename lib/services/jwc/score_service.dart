@@ -232,4 +232,186 @@ class ScoreService {
       rethrow;
     }
   }
+
+  /// 批量获取多个学期的成绩
+  ///
+  /// 先获取一次动态路径，然后串行获取所有学期的成绩
+  /// 避免并发请求时动态路径冲突
+  ///
+  /// [termCodes] 学期代码列表
+  ///
+  /// 返回所有学期的成绩记录列表
+  Future<UniResponse<List<ScoreRecord>>> getAllTermsScores(
+    List<String> termCodes,
+  ) async {
+    try {
+      return await RetryHandler.retry(
+        operation: () async => await _performGetAllTermsScores(termCodes),
+        retryIf: RetryHandler.shouldRetryOnError,
+        maxAttempts: 3,
+        onRetry: (attempt, error) {
+          LoggerService.warning('📊 批量获取学期成绩失败，正在重试 (尝试 $attempt/3): $error');
+        },
+      );
+    } catch (e) {
+      LoggerService.error('📊 批量获取学期成绩失败', error: e);
+      return ErrorHandler.handleError(e, '批量获取学期成绩失败');
+    }
+  }
+
+  /// 执行批量获取学期成绩的实际操作
+  Future<UniResponse<List<ScoreRecord>>> _performGetAllTermsScores(
+    List<String> termCodes,
+  ) async {
+    try {
+      LoggerService.info('📊 正在批量获取 ${termCodes.length} 个学期的成绩...');
+
+      // 步骤1: 获取动态路径（只需要一次）
+      final preUrl = config.toFullUrl(endpoints['termScorePre']!);
+      LoggerService.info('📊 正在访问成绩查询页面获取动态路径: $preUrl');
+
+      final preResponse = await connection.client.get(preUrl);
+
+      var htmlContent = preResponse.data;
+      if (htmlContent == null) {
+        throw Exception('成绩查询页面响应数据为空');
+      }
+
+      if (htmlContent is! String) {
+        htmlContent = htmlContent.toString();
+      }
+
+      final pathPattern = RegExp(r'/([A-Za-z0-9]+)/allTermScores/data');
+      final pathMatch = pathPattern.firstMatch(htmlContent);
+
+      if (pathMatch == null) {
+        throw Exception('未能从页面中提取动态路径参数');
+      }
+
+      final dynamicPath = pathMatch.group(1)!;
+      LoggerService.info('📊 获取到动态路径: $dynamicPath');
+
+      // 步骤2: 串行获取每个学期的成绩（复用动态路径）
+      final allRecords = <ScoreRecord>[];
+
+      for (final termCode in termCodes) {
+        try {
+          final records = await _fetchTermScoreWithPath(
+            termCode,
+            dynamicPath,
+            preUrl,
+          );
+          allRecords.addAll(records);
+          LoggerService.info('📊 学期 $termCode 获取到 ${records.length} 条成绩');
+        } catch (e) {
+          LoggerService.warning('⚠️ 获取学期 $termCode 成绩失败: $e');
+          // 继续获取其他学期
+        }
+      }
+
+      LoggerService.info('📊 批量获取完成，共 ${allRecords.length} 条成绩记录');
+      return UniResponse.success(allRecords, message: '批量获取学期成绩成功');
+    } catch (e) {
+      LoggerService.error('📊 批量获取学期成绩失败', error: e);
+      rethrow;
+    }
+  }
+
+  /// 使用指定的动态路径获取单个学期成绩
+  Future<List<ScoreRecord>> _fetchTermScoreWithPath(
+    String termCode,
+    String dynamicPath,
+    String refererUrl,
+  ) async {
+    final scoreUrl = config.toFullUrl(
+      endpoints['termScore']!.replaceAll('{dynamicPath}', dynamicPath),
+    );
+
+    final requestData = {
+      'zxjxjhh': termCode,
+      'kch': '',
+      'kcm': '',
+      'pageNum': '1',
+      'pageSize': '100', // 增大 pageSize 确保获取所有
+      'sf_request_type': 'ajax',
+    };
+
+    final scoreResponse = await connection.client.post(
+      scoreUrl,
+      data: requestData,
+      options: Options(
+        headers: {
+          'Referer': refererUrl,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      ),
+    );
+
+    var data = scoreResponse.data;
+    if (data == null) {
+      return [];
+    }
+
+    if (data is String) {
+      try {
+        data = jsonDecode(data);
+      } catch (e) {
+        return [];
+      }
+    }
+
+    if (data is! Map<String, dynamic>) {
+      return [];
+    }
+
+    if (data['result'] == 'error') {
+      return [];
+    }
+
+    final listData = data['list'] as Map<String, dynamic>?;
+    if (listData == null) {
+      return [];
+    }
+
+    final recordsList = listData['records'] as List?;
+    if (recordsList == null || recordsList.isEmpty) {
+      return [];
+    }
+
+    final records = <ScoreRecord>[];
+    for (final recordData in recordsList) {
+      if (recordData is! List || recordData.length < 11) {
+        continue;
+      }
+
+      try {
+        final mappedData = {
+          'sequence': recordData[0] as int? ?? 0,
+          'term_id': recordData[1]?.toString() ?? '',
+          'course_code': recordData[2]?.toString() ?? '',
+          'course_class': recordData[3]?.toString() ?? '',
+          'course_name_cn': recordData[4]?.toString() ?? '',
+          'course_name_en': recordData[5]?.toString() ?? '',
+          'credits': recordData[6]?.toString() ?? '0',
+          'hours': int.tryParse(recordData[7]?.toString() ?? '0') ?? 0,
+          'course_type': recordData[8]?.toString(),
+          'exam_type': recordData[9]?.toString(),
+          'score': recordData[10]?.toString() ?? '',
+          'retake_score': recordData.length > 11
+              ? recordData[11]?.toString()
+              : null,
+          'makeup_score': recordData.length > 12
+              ? recordData[12]?.toString()
+              : null,
+        };
+
+        final record = ScoreRecord.fromJson(mappedData);
+        records.add(record);
+      } catch (e) {
+        continue;
+      }
+    }
+
+    return records;
+  }
 }

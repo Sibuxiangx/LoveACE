@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../constants/app_constants.dart';
+import '../../models/aufe/user_credentials.dart';
 import '../../services/session_manager.dart';
 import '../widgets/winui_background.dart';
 import 'winui_main_shell.dart';
@@ -25,6 +26,30 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
   bool _obscureEcPassword = true;
   bool _obscurePassword = true;
   bool _agreedToTerms = false;
+  bool _rememberPassword = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedCredentials();
+  }
+
+  /// 加载记住的密码
+  Future<void> _loadRememberedCredentials() async {
+    try {
+      final remembered = await UserCredentials.loadRemembered();
+      if (remembered != null && mounted) {
+        setState(() {
+          _userIdController.text = remembered.userId;
+          _ecPasswordController.text = remembered.ecPassword;
+          _passwordController.text = remembered.password;
+          _rememberPassword = true;
+        });
+      }
+    } catch (e) {
+      // 加载失败时忽略，用户可以手动输入
+    }
+  }
 
   @override
   void dispose() {
@@ -130,9 +155,24 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
     if (!mounted) return;
 
     if (success) {
+      // 处理记住密码
+      if (_rememberPassword) {
+        final credentials = UserCredentials(
+          userId: _userIdController.text.trim(),
+          ecPassword: _ecPasswordController.text,
+          password: _passwordController.text,
+        );
+        await credentials.saveRemembered();
+      } else {
+        // 如果取消勾选，清除记住的密码
+        await UserCredentials.clearRemembered();
+      }
+
       // 登录成功，创建并启动 SessionManager
       final sessionManager = SessionManager(authProvider);
       sessionManager.startSessionCheck();
+
+      if (!mounted) return;
 
       // 导航到主页面
       Navigator.of(context).pushReplacement(
@@ -330,6 +370,34 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
                                     ),
                                   ],
                                 ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // 记住密码
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _rememberPassword = !_rememberPassword;
+                            });
+                          },
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Checkbox(
+                                checked: _rememberPassword,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _rememberPassword = value ?? false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '记住密码',
+                                style: theme.typography.caption,
                               ),
                             ],
                           ),

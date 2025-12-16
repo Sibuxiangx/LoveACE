@@ -19,6 +19,7 @@ import 'providers/electricity_provider.dart';
 import 'providers/labor_club_provider.dart';
 import 'providers/manifest_provider.dart';
 import 'providers/course_schedule_provider.dart';
+import 'providers/ykt_provider.dart';
 import 'services/session_manager.dart';
 import 'services/jwc/jwc_service.dart';
 import 'services/aac/aac_service.dart';
@@ -29,6 +30,7 @@ import 'services/isim/isim_service.dart';
 import 'services/isim/isim_config.dart';
 import 'services/labor_club/labor_club_service.dart';
 import 'services/labor_club/ldjlb_config.dart';
+import 'services/ykt/ykt_service.dart';
 import 'services/cache_manager.dart';
 import 'services/logger_service.dart';
 import 'services/manifest_service.dart';
@@ -256,6 +258,26 @@ class MyApp extends StatelessWidget {
                 LDJLBConfig(),
               );
               return LaborClubProvider(laborClubService);
+            }
+            return previous;
+          },
+        ),
+
+        // YKT Provider - depends on AuthProvider for YKTService
+        ChangeNotifierProxyProvider<AuthProvider, YKTProvider?>(
+          create: (_) => null,
+          update: (context, authProvider, previous) {
+            // Only create YKTProvider when user is authenticated
+            if (authProvider.isAuthenticated &&
+                authProvider.connection != null) {
+              // 如果已经有 provider 实例，直接返回
+              if (previous != null) {
+                return previous;
+              }
+
+              // 创建新的 provider 实例
+              final yktService = YKTService(authProvider.connection!);
+              return YKTProvider(yktService);
             }
             return previous;
           },

@@ -29,7 +29,9 @@ class _WinUIExamPageState extends State<WinUIExamPage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<ExamProvider>(context, listen: false);
+    final provider = Provider.of<ExamProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await provider.loadData(forceRefresh: forceRefresh);
 
     if (mounted && provider.state == ExamState.error) {
@@ -52,8 +54,16 @@ class _WinUIExamPageState extends State<WinUIExamPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ExamProvider>(
+    return Consumer<ExamProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('考试安排')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('考试安排'),

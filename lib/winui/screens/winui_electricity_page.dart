@@ -36,7 +36,9 @@ class _WinUIElectricityPageState extends State<WinUIElectricityPage> {
   }
 
   Future<void> _initializeData() async {
-    final provider = Provider.of<ElectricityProvider>(context, listen: false);
+    final provider = Provider.of<ElectricityProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await Future.delayed(const Duration(milliseconds: 100));
     if (provider.boundRoomCode != null) {
       await _loadData();
@@ -44,8 +46,8 @@ class _WinUIElectricityPageState extends State<WinUIElectricityPage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<ElectricityProvider>(context, listen: false);
-    if (provider.boundRoomCode == null) return;
+    final provider = Provider.of<ElectricityProvider?>(context, listen: false);
+    if (provider == null || provider.boundRoomCode == null) return;
 
     await provider.loadData(forceRefresh: forceRefresh);
 
@@ -69,7 +71,9 @@ class _WinUIElectricityPageState extends State<WinUIElectricityPage> {
 
   Future<void> _showRoomSelectionDialog() async {
     // 在显示 dialog 之前获取所需的 providers
-    final electricityProvider = Provider.of<ElectricityProvider>(context, listen: false);
+    final electricityProvider = Provider.of<ElectricityProvider?>(context, listen: false);
+    if (electricityProvider == null) return;
+    
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     // ISIMService 从 ElectricityProvider 获取
     final isimService = electricityProvider.isimService;
@@ -90,8 +94,16 @@ class _WinUIElectricityPageState extends State<WinUIElectricityPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ElectricityProvider>(
+    return Consumer<ElectricityProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('电费查询')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('电费查询'),

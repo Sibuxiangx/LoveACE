@@ -33,7 +33,9 @@ class _WinUICompetitionPageState extends State<WinUICompetitionPage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<CompetitionProvider>(context, listen: false);
+    final provider = Provider.of<CompetitionProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await provider.loadData(forceRefresh: forceRefresh);
 
     if (mounted && provider.state == CompetitionState.error) {
@@ -57,8 +59,16 @@ class _WinUICompetitionPageState extends State<WinUICompetitionPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CompetitionProvider>(
+    return Consumer<CompetitionProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('学科竞赛')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('学科竞赛'),

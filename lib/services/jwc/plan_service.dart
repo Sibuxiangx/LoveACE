@@ -6,25 +6,38 @@ import '../../models/backend/uni_response.dart';
 import '../../models/jwc/plan_completion_info.dart';
 import '../../models/jwc/plan_category.dart';
 import '../../models/jwc/plan_course.dart';
+import '../../models/jwc/score_record.dart';
 import '../../utils/error_handler.dart';
 import '../../utils/retry_handler.dart';
 import '../aufe/connector.dart';
 import '../logger_service.dart';
 import 'jwc_config.dart';
+import 'score_service.dart';
+import 'term_service.dart';
 
 /// 培养方案完成情况服务
 ///
 /// 提供培养方案完成情况的查询功能
+/// 当检测到所有课程未通过时，会自动拉取学期成绩进行匹配
 class PlanService {
   final AUFEConnection connection;
   final JWCConfig config;
+
+  /// 学期服务（用于获取学期列表）
+  late final TermService _termService;
+
+  /// 成绩服务（用于获取学期成绩）
+  late final ScoreService _scoreService;
 
   /// API端点常量
   static const Map<String, String> endpoints = {
     'plan': '/student/integratedQuery/planCompletion/index',
   };
 
-  PlanService(this.connection, this.config);
+  PlanService(this.connection, this.config) {
+    _termService = TermService(connection, config);
+    _scoreService = ScoreService(connection, config);
+  }
 
   /// 获取培养方案完成信息
   ///
@@ -74,7 +87,13 @@ class PlanService {
       LoggerService.info('📚 开始解析HTML数据...');
 
       // 在 compute 隔离中解析 HTML
-      final planInfo = await compute(_parseHtmlInIsolate, htmlContent);
+      var planInfo = await compute(_parseHtmlInIsolate, htmlContent);
+
+      // 检查是否所有课程都未通过（可能是数据解析问题）
+      if (planInfo.passedCourses == 0 && planInfo.totalCourses > 0) {
+        LoggerService.warning('⚠️ 检测到所有课程未通过，尝试从学期成绩中匹配...');
+        planInfo = await _enrichWithTermScores(planInfo);
+      }
 
       LoggerService.info('📚 培养方案获取成功');
       return UniResponse.success(planInfo, message: '培养方案获取成功');
@@ -82,6 +101,207 @@ class PlanService {
       LoggerService.error('📚 网络请求失败', error: e);
       rethrow;
     }
+  }
+
+  /// 从学期成绩中补充课程通过状态
+  ///
+  /// 当培养方案中所有课程都显示未通过时，
+  /// 通过拉取所有学期成绩来匹配并更新课程状态
+  Future<PlanCompletionInfo> _enrichWithTermScores(
+    PlanCompletionInfo planInfo,
+  ) async {
+    try {
+      // 1. 获取学期列表
+      LoggerService.info('📅 正在获取学期列表...');
+      final termResponse = await _termService.getAllTerms();
+      if (!termResponse.success || termResponse.data == null) {
+        LoggerService.warning('⚠️ 获取学期列表失败，使用原始数据');
+        return planInfo;
+      }
+
+      final terms = termResponse.data!;
+      LoggerService.info('📅 获取到 ${terms.length} 个学期');
+
+      // 2. 批量获取所有学期的成绩（串行，复用动态路径）
+      final termCodes = terms.map((t) => t.termCode).toList();
+      LoggerService.info('📊 正在批量获取所有学期成绩...');
+
+      final scoresResponse = await _scoreService.getAllTermsScores(termCodes);
+      if (!scoresResponse.success || scoresResponse.data == null) {
+        LoggerService.warning('⚠️ 批量获取学期成绩失败，使用原始数据');
+        return planInfo;
+      }
+
+      final allScores = scoresResponse.data!;
+      LoggerService.info('📊 共获取到 ${allScores.length} 条成绩记录');
+
+      if (allScores.isEmpty) {
+        LoggerService.warning('⚠️ 未获取到任何成绩记录，使用原始数据');
+        return planInfo;
+      }
+
+      // 3. 构建课程代码到成绩的映射（取最高成绩）
+      final scoreMap = <String, ScoreRecord>{};
+      for (final score in allScores) {
+        final code = score.courseCode;
+        if (!scoreMap.containsKey(code)) {
+          scoreMap[code] = score;
+        } else {
+          // 如果已存在，比较成绩取较高的
+          final existing = scoreMap[code]!;
+          if (_compareScores(score, existing) > 0) {
+            scoreMap[code] = score;
+          }
+        }
+      }
+
+      LoggerService.info('📊 构建课程成绩映射，共 ${scoreMap.length} 门课程');
+
+      // 4. 更新培养方案中的课程状态
+      final updatedCategories = _updateCategoriesWithScores(
+        planInfo.categories,
+        scoreMap,
+      );
+
+      // 5. 重新计算统计信息
+      final updatedPlanInfo = PlanCompletionInfo(
+        planName: planInfo.planName,
+        major: planInfo.major,
+        grade: planInfo.grade,
+        categories: updatedCategories,
+      ).calculateStatistics();
+
+      LoggerService.info(
+        '✅ 成绩匹配完成: 总课程 ${updatedPlanInfo.totalCourses}, '
+        '已通过 ${updatedPlanInfo.passedCourses}, '
+        '未通过 ${updatedPlanInfo.failedCourses}, '
+        '未修读 ${updatedPlanInfo.unreadCourses}',
+      );
+
+      return updatedPlanInfo;
+    } catch (e) {
+      LoggerService.error('❌ 从学期成绩补充数据失败', error: e);
+      return planInfo;
+    }
+  }
+
+  /// 比较两个成绩记录，返回正数表示 a 更好
+  int _compareScores(ScoreRecord a, ScoreRecord b) {
+    // 获取有效成绩（优先使用重修成绩、补考成绩）
+    final scoreA = _getEffectiveScore(a);
+    final scoreB = _getEffectiveScore(b);
+
+    // 如果都是数字成绩，比较数值
+    final numA = double.tryParse(scoreA);
+    final numB = double.tryParse(scoreB);
+
+    if (numA != null && numB != null) {
+      return numA.compareTo(numB);
+    }
+
+    // 如果有一个是及格/通过，优先选择
+    if (_isPassingGrade(scoreA) && !_isPassingGrade(scoreB)) return 1;
+    if (!_isPassingGrade(scoreA) && _isPassingGrade(scoreB)) return -1;
+
+    return 0;
+  }
+
+  /// 获取有效成绩（优先使用重修成绩、补考成绩）
+  String _getEffectiveScore(ScoreRecord record) {
+    // 优先使用重修成绩
+    if (record.retakeScore != null && record.retakeScore!.isNotEmpty) {
+      return record.retakeScore!;
+    }
+    // 其次使用补考成绩
+    if (record.makeupScore != null && record.makeupScore!.isNotEmpty) {
+      return record.makeupScore!;
+    }
+    // 最后使用原始成绩
+    return record.score;
+  }
+
+  /// 判断成绩是否及格
+  bool _isPassingGrade(String score) {
+    // 数字成绩 >= 60 及格
+    final num = double.tryParse(score);
+    if (num != null) {
+      return num >= 60;
+    }
+
+    // 等级成绩
+    final passingGrades = ['优秀', '良好', '中等', '及格', '合格', '通过', 'A', 'B', 'C', 'D'];
+    return passingGrades.any(
+      (g) => score.toUpperCase().contains(g.toUpperCase()),
+    );
+  }
+
+  /// 递归更新分类中的课程状态
+  List<PlanCategory> _updateCategoriesWithScores(
+    List<PlanCategory> categories,
+    Map<String, ScoreRecord> scoreMap,
+  ) {
+    return categories.map((category) {
+      // 更新课程
+      final updatedCourses = category.courses.map((course) {
+        final scoreRecord = scoreMap[course.courseCode];
+        if (scoreRecord != null) {
+          final effectiveScore = _getEffectiveScore(scoreRecord);
+          final isPassed = _isPassingGrade(effectiveScore);
+
+          return PlanCourse(
+            courseCode: course.courseCode,
+            courseName: course.courseName,
+            credits: course.credits ?? double.tryParse(scoreRecord.credits),
+            score: effectiveScore,
+            examDate: course.examDate,
+            courseType: course.courseType,
+            isPassed: isPassed,
+            statusDescription: isPassed ? '已通过' : '未通过',
+          );
+        }
+        return course;
+      }).toList();
+
+      // 递归更新子分类
+      final updatedSubcategories = _updateCategoriesWithScores(
+        category.subcategories,
+        scoreMap,
+      );
+
+      // 重新计算分类统计
+      int passedCourses = 0;
+      int failedCourses = 0;
+      double completedCredits = 0.0;
+
+      for (final course in updatedCourses) {
+        if (course.isPassed) {
+          passedCourses++;
+          completedCredits += course.credits ?? 0;
+        } else if (course.statusDescription == '未通过') {
+          failedCourses++;
+        }
+      }
+
+      // 加上子分类的统计
+      for (final sub in updatedSubcategories) {
+        passedCourses += sub.passedCourses;
+        failedCourses += sub.failedCourses;
+        completedCredits += sub.completedCredits;
+      }
+
+      return PlanCategory(
+        categoryId: category.categoryId,
+        categoryName: category.categoryName,
+        minCredits: category.minCredits,
+        completedCredits: completedCredits,
+        totalCourses: updatedCourses.length,
+        passedCourses: passedCourses,
+        failedCourses: failedCourses,
+        missingRequiredCourses: category.missingRequiredCourses,
+        subcategories: updatedSubcategories,
+        courses: updatedCourses,
+      );
+    }).toList();
   }
 
   /// 在 compute 中执行的 HTML 解析函数

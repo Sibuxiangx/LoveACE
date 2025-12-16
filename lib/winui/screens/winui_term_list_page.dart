@@ -43,7 +43,9 @@ class _WinUITermListPageState extends State<WinUITermListPage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<TermProvider>(context, listen: false);
+    final provider = Provider.of<TermProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await provider.loadData(forceRefresh: forceRefresh);
 
     if (mounted && provider.state == TermState.error) {
@@ -102,8 +104,16 @@ class _WinUITermListPageState extends State<WinUITermListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<TermProvider>(
+    return Consumer<TermProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('学期成绩')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('学期成绩'),
@@ -289,8 +299,9 @@ class _WinUITermListPageState extends State<WinUITermListPage> {
 
     return Consumer<TermScoreProvider?>(
       builder: (context, scoreProvider, child) {
+        // Provider 为 null 时显示加载状态（正在初始化）
         if (scoreProvider == null) {
-          return WinUIEmptyState.noData(title: '暂无数据', description: '请先登录');
+          return const WinUILoading(message: '正在初始化...');
         }
 
         if (scoreProvider.state == TermScoreState.loading) {
@@ -309,10 +320,8 @@ class _WinUITermListPageState extends State<WinUITermListPage> {
           );
         }
 
-        return WinUIEmptyState.noData(
-          title: '暂无成绩',
-          description: '该学期暂无成绩数据',
-        );
+        // 初始状态 - 点击学期后会自动加载
+        return const WinUILoading(message: '正在加载成绩');
       },
     );
   }

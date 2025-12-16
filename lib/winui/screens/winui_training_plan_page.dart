@@ -239,7 +239,9 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
   /// 构建搜索建议下拉框
   Widget _buildSearchSuggestions(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+    final provider = Provider.of<TrainingPlanProvider?>(context, listen: false);
+    if (provider == null) return const SizedBox.shrink();
+    
     final suggestions = _getSearchSuggestions(provider.planInfo);
 
     if (suggestions.isEmpty) {
@@ -464,7 +466,9 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+    final provider = Provider.of<TrainingPlanProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await provider.loadData(forceRefresh: forceRefresh);
 
     if (mounted && provider.state == TrainingPlanState.error) {
@@ -530,7 +534,9 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     );
 
     try {
-      final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+      final provider = Provider.of<TrainingPlanProvider?>(context, listen: false);
+      if (provider == null) return;
+      
       await provider.exportToCSV();
 
       if (mounted) {
@@ -556,8 +562,16 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<TrainingPlanProvider>(
+    return Consumer<TrainingPlanProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('培养方案')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('培养方案'),
@@ -854,7 +868,9 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
   /// 构建筛选结果统计
   Widget _buildFilterStats(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+    final provider = Provider.of<TrainingPlanProvider?>(context, listen: false);
+    if (provider == null) return const SizedBox.shrink();
+    
     final planInfo = provider.planInfo;
     if (planInfo == null) return const SizedBox.shrink();
 
@@ -1045,7 +1061,9 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
 
   /// 展开到指定节点的最短路径
   void _expandPathToNode(PlanCategory? targetCategory, PlanCourse? targetCourse) {
-    final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+    final provider = Provider.of<TrainingPlanProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     final planInfo = provider.planInfo;
     if (planInfo == null) {
       LoggerService.warning('⚠️ planInfo is null, cannot expand path');

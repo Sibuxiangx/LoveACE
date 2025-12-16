@@ -141,7 +141,9 @@ class _WinUIAACPageState extends State<WinUIAACPage> {
       _searchQuery.isNotEmpty || _hasActiveFilters;
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<AACProvider>(context, listen: false);
+    final provider = Provider.of<AACProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await provider.loadData(forceRefresh: forceRefresh);
 
     if (mounted && provider.state == AACState.error) {
@@ -207,7 +209,9 @@ class _WinUIAACPageState extends State<WinUIAACPage> {
     );
 
     try {
-      final provider = Provider.of<AACProvider>(context, listen: false);
+      final provider = Provider.of<AACProvider?>(context, listen: false);
+      if (provider == null) return;
+      
       await provider.exportToCSV();
 
       // 关闭加载对话框
@@ -240,8 +244,16 @@ class _WinUIAACPageState extends State<WinUIAACPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AACProvider>(
+    return Consumer<AACProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('爱安财')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('爱安财'),

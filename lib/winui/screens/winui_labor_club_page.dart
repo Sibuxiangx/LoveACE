@@ -41,7 +41,9 @@ class _WinUILaborClubPageState extends State<WinUILaborClubPage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    final provider = Provider.of<LaborClubProvider>(context, listen: false);
+    final provider = Provider.of<LaborClubProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     await provider.loadData(forceRefresh: forceRefresh);
 
     if (mounted && provider.state == LaborClubState.error) {
@@ -73,7 +75,9 @@ class _WinUILaborClubPageState extends State<WinUILaborClubPage> {
       _activityDetail = null;
     });
 
-    final provider = Provider.of<LaborClubProvider>(context, listen: false);
+    final provider = Provider.of<LaborClubProvider?>(context, listen: false);
+    if (provider == null) return;
+    
     final detail = await provider.getActivityDetail(activity.id);
 
     if (mounted) {
@@ -86,8 +90,16 @@ class _WinUILaborClubPageState extends State<WinUILaborClubPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<LaborClubProvider>(
+    return Consumer<LaborClubProvider?>(
       builder: (context, provider, child) {
+        // Provider 为 null 时显示加载状态
+        if (provider == null) {
+          return const ScaffoldPage(
+            header: PageHeader(title: Text('劳动俱乐部')),
+            content: WinUILoading(message: '正在初始化...'),
+          );
+        }
+
         return ScaffoldPage(
           header: PageHeader(
             title: const Text('劳动俱乐部'),

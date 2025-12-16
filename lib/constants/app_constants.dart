@@ -4,7 +4,7 @@
 class AppConstants {
   // 应用信息
   static const String appName = '彩带小工具';
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.1.1';
   static const String appDescription = '快速查看个人信息中...';
 
   // Manifest 服务
