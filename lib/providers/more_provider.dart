@@ -68,6 +68,13 @@ class MoreProvider extends ChangeNotifier {
         icon: Icons.group_work,
         route: '/labor-club',
       ),
+      const MoreFeatureItem(
+        id: 'ykt',
+        title: '一卡通',
+        description: '查看校园卡余额、消费记录和电费充值',
+        icon: Icons.credit_card,
+        route: '/ykt',
+      ),
     ];
 
     _state = MoreState.loaded;

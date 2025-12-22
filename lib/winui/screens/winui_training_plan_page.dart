@@ -6,6 +6,7 @@ import '../../models/jwc/course_schedule_record.dart';
 import '../../models/jwc/plan_category.dart';
 import '../../models/jwc/plan_completion_info.dart';
 import '../../models/jwc/plan_course.dart';
+import '../../models/jwc/plan_option.dart';
 import '../../providers/course_schedule_provider.dart';
 import '../../providers/training_plan_provider.dart';
 import '../../services/logger_service.dart';
@@ -495,8 +496,267 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     );
   }
 
+  /// 构建搜索框组件（独立于 CommandBar 以避免布局问题）
+  Widget _buildSearchBox(BuildContext context, TrainingPlanProvider provider) {
+    return SizedBox(
+      key: _searchBoxKey,
+      width: 200,
+      child: TextBox(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        placeholder: '搜索课程名或课程号',
+        prefix: const Padding(
+          padding: EdgeInsets.only(left: 8),
+          child: Icon(FluentIcons.search, size: 14),
+        ),
+        suffix: _searchQuery.isNotEmpty
+            ? IconButton(
+                icon: const Icon(FluentIcons.clear, size: 12),
+                onPressed: () {
+                  setState(() {
+                    _searchQuery = '';
+                    _searchController.clear();
+                  });
+                  _removeSearchOverlay();
+                },
+              )
+            : null,
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+          // 显示搜索建议
+          if (value.isNotEmpty && provider.state == TrainingPlanState.loaded) {
+            _showSearchOverlay(context);
+          } else {
+            _removeSearchOverlay();
+          }
+        },
+        onTap: () {
+          // 点击时如果有内容也显示建议
+          if (_searchQuery.isNotEmpty &&
+              provider.state == TrainingPlanState.loaded) {
+            _showSearchOverlay(context);
+          }
+        },
+      ),
+    );
+  }
+
+  /// 构建排序下拉框组件（独立于 CommandBar 以避免布局问题）
+  Widget _buildSortComboBox(BuildContext context) {
+    return ComboBox<_SortOption>(
+      value: _sortOption,
+      items: _SortOption.values
+          .map((opt) => ComboBoxItem<_SortOption>(
+                value: opt,
+                child: Text(opt.label),
+              ))
+          .toList(),
+      onChanged: (value) {
+        if (value != null) {
+          setState(() {
+            _sortOption = value;
+            _rebuildTree(); // 重建树以应用排序
+          });
+        }
+      },
+    );
+  }
+
+  /// 构建 CommandBar 按钮列表
+  List<CommandBarItem> _buildCommandBarItems(
+      BuildContext context, TrainingPlanProvider provider) {
+    final items = <CommandBarItem>[];
+
+    // 筛选按钮
+    items.add(CommandBarButton(
+      icon: Icon(
+        FluentIcons.filter,
+        color:
+            _hasActiveFilters ? FluentTheme.of(context).accentColor : null,
+      ),
+      label: Text(
+          _hasActiveFilters ? '筛选 (${_selectedStatuses.length})' : '筛选'),
+      onPressed: provider.state == TrainingPlanState.loaded
+          ? () => setState(() => _showFilters = !_showFilters)
+          : null,
+    ));
+
+    // 清除筛选按钮
+    items.add(CommandBarButton(
+      icon: const Icon(FluentIcons.clear_filter),
+      label: const Text('清除'),
+      onPressed: _hasAnyFilters ? _clearFilters : null,
+    ));
+
+    items.add(const CommandBarSeparator());
+
+    // 如果是多培养方案用户，显示切换按钮
+    if (provider.hasMultiplePlans &&
+        provider.state == TrainingPlanState.loaded) {
+      items.add(CommandBarButton(
+        icon: const Icon(FluentIcons.switch_widget),
+        label: const Text('切换方案'),
+        onPressed: () => provider.backToSelection(),
+      ));
+    }
+
+    items.add(CommandBarButton(
+      icon: const Icon(FluentIcons.download),
+      label: const Text('导出CSV'),
+      onPressed:
+          provider.state == TrainingPlanState.loaded ? _exportCSV : null,
+    ));
+
+    items.add(CommandBarButton(
+      icon: const Icon(FluentIcons.refresh),
+      label: const Text('刷新'),
+      onPressed: _refreshData,
+    ));
+
+    return items;
+  }
+
   /// 导出 CSV
   Future<void> _exportCSV() async {
+    final provider = Provider.of<TrainingPlanProvider?>(context, listen: false);
+    if (provider == null) return;
+
+    // 如果是多培养方案用户，显示选择对话框
+    if (provider.hasMultiplePlans && provider.planOptions.isNotEmpty) {
+      await _showExportPlanSelectionDialog(provider);
+      return;
+    }
+
+    // 单培养方案用户，直接导出
+    await _performExport(null);
+  }
+
+  /// 显示导出培养方案选择对话框
+  Future<void> _showExportPlanSelectionDialog(TrainingPlanProvider provider) async {
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final selectedPlanId = await showDialog<String>(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('选择要导出的培养方案'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: provider.planOptions.map((option) {
+            final isCurrent = option.planId == provider.selectedPlanId;
+            final typeColor = option.planType == '主修'
+                ? (isDark ? Colors.green.light : Colors.green)
+                : (isDark ? Colors.blue.light : Colors.blue);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: HoverButton(
+                onPressed: () => Navigator.of(context).pop(option.planId),
+                builder: (context, states) => Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: states.isHovered
+                        ? theme.resources.subtleFillColorSecondary
+                        : null,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: states.isHovered
+                          ? theme.accentColor
+                          : theme.resources.controlStrokeColorDefault,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        option.planType == '主修'
+                            ? FluentIcons.education
+                            : FluentIcons.library,
+                        color: typeColor,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(option.planName, style: theme.typography.body),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: typeColor.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    option.planType,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: typeColor,
+                                    ),
+                                  ),
+                                ),
+                                if (isCurrent) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '当前查看',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: isDark
+                                            ? Colors.orange.light
+                                            : Colors.orange,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        FluentIcons.chevron_right,
+                        size: 12,
+                        color: theme.inactiveColor,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        actions: [
+          Button(
+            child: const Text('取消'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedPlanId != null) {
+      await _performExport(selectedPlanId);
+    }
+  }
+
+  /// 执行导出操作
+  Future<void> _performExport(String? planId) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => ContentDialog(
@@ -536,8 +796,12 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     try {
       final provider = Provider.of<TrainingPlanProvider?>(context, listen: false);
       if (provider == null) return;
-      
-      await provider.exportToCSV();
+
+      if (planId != null) {
+        await provider.exportPlanToCSV(planId);
+      } else {
+        await provider.exportToCSV();
+      }
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -574,120 +838,22 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
 
         return ScaffoldPage(
           header: PageHeader(
-            title: const Text('培养方案'),
+            title: Row(
+              children: [
+                const Text('培养方案'),
+                const SizedBox(width: 16),
+                // 搜索框
+                if (provider.state == TrainingPlanState.loaded)
+                  _buildSearchBox(context, provider),
+                const SizedBox(width: 12),
+                // 排序下拉框
+                if (provider.state == TrainingPlanState.loaded)
+                  _buildSortComboBox(context),
+              ],
+            ),
             commandBar: CommandBar(
               mainAxisAlignment: MainAxisAlignment.end,
-              primaryItems: [
-                // 常驻搜索框（带搜索建议）
-                CommandBarBuilderItem(
-                  builder: (context, mode, child) => SizedBox(
-                    key: _searchBoxKey,
-                    width: 200,
-                    child: TextBox(
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      placeholder: '搜索课程名或课程号',
-                      prefix: const Padding(
-                        padding: EdgeInsets.only(left: 8),
-                        child: Icon(FluentIcons.search, size: 14),
-                      ),
-                      suffix: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(FluentIcons.clear, size: 12),
-                              onPressed: () {
-                                setState(() {
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                });
-                                _removeSearchOverlay();
-                              },
-                            )
-                          : null,
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                        // 显示搜索建议
-                        if (value.isNotEmpty && provider.state == TrainingPlanState.loaded) {
-                          _showSearchOverlay(context);
-                        } else {
-                          _removeSearchOverlay();
-                        }
-                      },
-                      onTap: () {
-                        // 点击时如果有内容也显示建议
-                        if (_searchQuery.isNotEmpty && provider.state == TrainingPlanState.loaded) {
-                          _showSearchOverlay(context);
-                        }
-                      },
-                    ),
-                  ),
-                  wrappedItem: CommandBarButton(
-                    icon: const Icon(FluentIcons.search),
-                    label: const Text('搜索'),
-                    onPressed: () {},
-                  ),
-                ),
-                const CommandBarSeparator(),
-                // 筛选按钮
-                CommandBarButton(
-                  icon: Icon(
-                    FluentIcons.filter,
-                    color: _hasActiveFilters
-                        ? FluentTheme.of(context).accentColor
-                        : null,
-                  ),
-                  label: Text(_hasActiveFilters
-                      ? '筛选 (${_selectedStatuses.length})'
-                      : '筛选'),
-                  onPressed: provider.state == TrainingPlanState.loaded
-                      ? () => setState(() => _showFilters = !_showFilters)
-                      : null,
-                ),
-                // 排序下拉
-                CommandBarBuilderItem(
-                  builder: (context, mode, child) => ComboBox<_SortOption>(
-                    value: _sortOption,
-                    items: _SortOption.values
-                        .map((opt) => ComboBoxItem<_SortOption>(
-                              value: opt,
-                              child: Text(opt.label),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          _sortOption = value;
-                          _rebuildTree(); // 重建树以应用排序
-                        });
-                      }
-                    },
-                  ),
-                  wrappedItem: CommandBarButton(
-                    icon: const Icon(FluentIcons.sort),
-                    label: const Text('排序'),
-                    onPressed: () {},
-                  ),
-                ),
-                // 清除筛选按钮 - 始终存在，但根据状态禁用
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.clear_filter),
-                  label: const Text('清除'),
-                  onPressed: _hasAnyFilters ? _clearFilters : null,
-                ),
-                const CommandBarSeparator(),
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.download),
-                  label: const Text('导出CSV'),
-                  onPressed:
-                      provider.state == TrainingPlanState.loaded ? _exportCSV : null,
-                ),
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.refresh),
-                  label: const Text('刷新'),
-                  onPressed: _refreshData,
-                ),
-              ],
+              primaryItems: _buildCommandBarItems(context, provider),
             ),
           ),
           content: _buildContent(context, provider),
@@ -699,6 +865,11 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
   Widget _buildContent(BuildContext context, TrainingPlanProvider provider) {
     if (provider.state == TrainingPlanState.loading) {
       return const WinUILoading(message: '正在加载培养方案');
+    }
+
+    // 需要选择培养方案状态（多培养方案用户）
+    if (provider.state == TrainingPlanState.needSelection) {
+      return _buildPlanSelectionView(context, provider);
     }
 
     if (provider.state == TrainingPlanState.loaded && provider.planInfo != null) {
@@ -718,6 +889,203 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
       description: '点击右上角刷新按钮加载数据',
       actionText: '刷新',
       onAction: _refreshData,
+    );
+  }
+
+  /// 构建培养方案选择视图（多培养方案用户）
+  Widget _buildPlanSelectionView(BuildContext context, TrainingPlanProvider provider) {
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final options = provider.planOptions;
+    final hint = provider.planSelectionResponse?.hint;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 提示信息
+              if (hint != null && hint.isNotEmpty)
+                WinUICard(
+                  child: Row(
+                    children: [
+                      Icon(
+                        FluentIcons.info,
+                        color: isDark ? Colors.blue.light : Colors.blue,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(hint, style: theme.typography.body),
+                      ),
+                    ],
+                  ),
+                ),
+              if (hint != null && hint.isNotEmpty) const SizedBox(height: 16),
+
+              // 说明卡片
+              WinUICard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          FluentIcons.education,
+                          color: theme.accentColor,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '您有多个培养方案',
+                          style: theme.typography.subtitle,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '请选择要查看的培养方案完成情况',
+                      style: theme.typography.body?.copyWith(
+                        color: theme.inactiveColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // 培养方案选项列表
+              ...options.map((option) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildPlanOptionCard(context, option, provider),
+              )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建培养方案选项卡片
+  Widget _buildPlanOptionCard(BuildContext context, PlanOption option, TrainingPlanProvider provider) {
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // 根据方案类型选择颜色
+    Color typeColor;
+    IconData typeIcon;
+    if (option.planType == '主修') {
+      typeColor = isDark ? Colors.green.light : Colors.green;
+      typeIcon = FluentIcons.education;
+    } else if (option.planType == '辅修') {
+      typeColor = isDark ? Colors.blue.light : Colors.blue;
+      typeIcon = FluentIcons.library;
+    } else {
+      typeColor = isDark ? Colors.purple.light : Colors.purple;
+      typeIcon = FluentIcons.certificate;
+    }
+
+    return HoverButton(
+      onPressed: () => provider.selectPlan(option.planId),
+      builder: (context, states) => AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: states.isHovered
+              ? theme.resources.subtleFillColorSecondary
+              : theme.resources.cardBackgroundFillColorDefault,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: states.isHovered
+                ? theme.accentColor
+                : theme.resources.controlStrokeColorDefault,
+            width: states.isHovered ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // 方案类型图标
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: typeColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(typeIcon, color: typeColor, size: 24),
+            ),
+            const SizedBox(width: 16),
+
+            // 方案信息
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    option.planName,
+                    style: theme.typography.bodyStrong,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      // 方案类型标签
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: typeColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          option.planType,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: typeColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (option.isCurrent) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (isDark ? Colors.green.light : Colors.green)
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '当前使用',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.green.light : Colors.green,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // 箭头
+            Icon(
+              FluentIcons.chevron_right,
+              color: theme.inactiveColor,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

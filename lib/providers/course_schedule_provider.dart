@@ -329,7 +329,7 @@ class CourseScheduleProvider extends ChangeNotifier {
     try {
       LoggerService.info('🔍 查询课程开课情况: $courseCode, 学期: $termCode');
 
-      final response = await jwcService.courseSchedule.queryCourseSchedule(
+      final response = await jwcService.courseSchedule.queryCourseScheduleAll(
         courseCode: courseCode,
         termCode: termCode,
       );

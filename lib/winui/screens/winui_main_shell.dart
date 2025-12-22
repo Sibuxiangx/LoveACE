@@ -11,6 +11,7 @@ import 'winui_aac_page.dart';
 import 'winui_term_list_page.dart';
 import 'winui_exam_page.dart';
 import 'winui_training_plan_page.dart';
+import 'winui_smart_course_selection_page.dart';
 import 'winui_competition_page.dart';
 import 'winui_electricity_page.dart';
 import 'winui_labor_club_page.dart';
@@ -42,6 +43,7 @@ class _WinUIMainShellState extends State<WinUIMainShell> {
     const WinUITermListPage(), // 学期成绩
     const WinUIExamPage(), // 考试安排
     const WinUITrainingPlanPage(), // 培养方案
+    const WinUISmartCourseSelectionPage(), // 智能排课
     const WinUICompetitionPage(), // 竞赛获奖
     const WinUIYKTPage(), // 一卡通
     const WinUIElectricityPage(), // 电费查询
@@ -294,24 +296,29 @@ class _WinUIMainShellState extends State<WinUIMainShell> {
         body: _pages[4],
       ),
       PaneItem(
+        icon: const Icon(FluentIcons.calendar_agenda),
+        title: const Text('智能排课'),
+        body: _pages[5],
+      ),
+      PaneItem(
         icon: const Icon(FluentIcons.trophy),
         title: const Text('竞赛获奖'),
-        body: _pages[5],
+        body: _pages[6],
       ),
       PaneItem(
         icon: const Icon(FluentIcons.payment_card),
         title: const Text('一卡通'),
-        body: _pages[6],
+        body: _pages[7],
       ),
       PaneItem(
         icon: const Icon(FluentIcons.lightning_bolt),
         title: const Text('电费查询'),
-        body: _pages[7],
+        body: _pages[8],
       ),
       PaneItem(
         icon: const Icon(FluentIcons.people),
         title: const Text('劳动俱乐部'),
-        body: _pages[8],
+        body: _pages[9],
       ),
     ];
   }
@@ -341,7 +348,7 @@ class _WinUIMainShellState extends State<WinUIMainShell> {
       PaneItem(
         icon: const Icon(FluentIcons.settings),
         title: const Text('设置'),
-        body: _pages[9],
+        body: _pages[10],
       ),
     ];
   }

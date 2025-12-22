@@ -12,6 +12,7 @@ import '../widgets/export_confirm_dialog.dart';
 import '../models/jwc/plan_completion_info.dart';
 import '../models/jwc/plan_category.dart';
 import '../models/jwc/plan_course.dart';
+import '../models/jwc/plan_option.dart';
 import '../services/logger_service.dart';
 
 /// 培养方案完成情况页面
@@ -69,6 +70,95 @@ class _TrainingPlanPageState extends State<TrainingPlanPage> {
 
   /// 导出CSV
   Future<void> _exportCSV() async {
+    final provider = Provider.of<TrainingPlanProvider>(context, listen: false);
+    
+    // 如果是多培养方案用户，显示选择对话框
+    if (provider.hasMultiplePlans && provider.planOptions.isNotEmpty) {
+      await _showExportPlanSelectionDialog(provider);
+      return;
+    }
+    
+    // 单培养方案用户，直接导出
+    await _performExport(null);
+  }
+
+  /// 显示导出培养方案选择对话框
+  Future<void> _showExportPlanSelectionDialog(TrainingPlanProvider provider) async {
+    final selectedPlanId = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('选择要导出的培养方案'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: provider.planOptions.map((option) {
+              final isCurrent = option.planId == provider.selectedPlanId;
+              return ListTile(
+                leading: Icon(
+                  option.planType == '主修' ? Icons.school : Icons.menu_book,
+                  color: option.planType == '主修'
+                      ? (Theme.of(context).brightness == Brightness.dark
+                            ? Colors.green.shade300
+                            : Colors.green)
+                      : (Theme.of(context).brightness == Brightness.dark
+                            ? Colors.blue.shade300
+                            : Colors.blue),
+                ),
+                title: Text(option.planName),
+                subtitle: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (option.planType == '主修' ? Colors.green : Colors.blue)
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        option.planType,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: option.planType == '主修' ? Colors.green : Colors.blue,
+                        ),
+                      ),
+                    ),
+                    if (isCurrent) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          '当前查看',
+                          style: TextStyle(fontSize: 11, color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                onTap: () => Navigator.of(context).pop(option.planId),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedPlanId != null) {
+      await _performExport(selectedPlanId);
+    }
+  }
+
+  /// 执行导出操作
+  Future<void> _performExport(String? planId) async {
     await ExportConfirmDialog.show(
       context,
       title: '导出培养方案',
@@ -102,7 +192,12 @@ class _TrainingPlanPageState extends State<TrainingPlanPage> {
             context,
             listen: false,
           );
-          await provider.exportToCSV();
+          
+          if (planId != null) {
+            await provider.exportPlanToCSV(planId);
+          } else {
+            await provider.exportToCSV();
+          }
 
           // 关闭加载指示器
           if (mounted) {
@@ -322,6 +417,11 @@ class _TrainingPlanPageState extends State<TrainingPlanPage> {
               );
             }
 
+            // 需要选择培养方案状态（多培养方案用户）
+            if (provider.state == TrainingPlanState.needSelection) {
+              return _buildPlanSelectionView(provider);
+            }
+
             // 加载完成状态
             if (provider.state == TrainingPlanState.loaded) {
               final planInfo = provider.planInfo;
@@ -359,6 +459,13 @@ class _TrainingPlanPageState extends State<TrainingPlanPage> {
                     AdaptiveSliverAppBar(
                       title: '培养方案完成情况',
                       actions: [
+                        // 如果是多培养方案用户，显示切换按钮
+                        if (provider.hasMultiplePlans)
+                          IconButton(
+                            icon: const Icon(Icons.swap_horiz),
+                            onPressed: () => provider.backToSelection(),
+                            tooltip: '切换培养方案',
+                          ),
                         IconButton(
                           icon: const Icon(Icons.file_download),
                           onPressed: _exportCSV,
@@ -438,6 +545,217 @@ class _TrainingPlanPageState extends State<TrainingPlanPage> {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  /// 构建培养方案选择视图（多培养方案用户）
+  Widget _buildPlanSelectionView(TrainingPlanProvider provider) {
+    final options = provider.planOptions;
+    final hint = provider.planSelectionResponse?.hint;
+
+    return CustomScrollView(
+      slivers: [
+        AdaptiveSliverAppBar(
+          title: '选择培养方案',
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshData,
+              tooltip: '刷新',
+            ),
+          ],
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              // 提示信息
+              if (hint != null && hint.isNotEmpty)
+                GlassCard(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.blue.shade300
+                            : Colors.blue,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          hint,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // 说明文字
+              GlassCard(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.school,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).primaryColor,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '您有多个培养方案',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '请选择要查看的培养方案完成情况',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 培养方案选项列表
+              ...options.map((option) => _buildPlanOptionCard(option, provider)),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 构建培养方案选项卡片
+  Widget _buildPlanOptionCard(PlanOption option, TrainingPlanProvider provider) {
+    final isCurrent = option.isCurrent;
+    final planType = option.planType;
+
+    // 根据方案类型选择颜色
+    Color typeColor;
+    if (planType == '主修') {
+      typeColor = Theme.of(context).brightness == Brightness.dark
+          ? Colors.green.shade300
+          : Colors.green;
+    } else if (planType == '辅修') {
+      typeColor = Theme.of(context).brightness == Brightness.dark
+          ? Colors.blue.shade300
+          : Colors.blue;
+    } else {
+      typeColor = Theme.of(context).brightness == Brightness.dark
+          ? Colors.purple.shade300
+          : Colors.purple;
+    }
+
+    return GlassCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(0),
+      child: InkWell(
+        onTap: () => provider.selectPlan(option.planId),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // 方案类型图标
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: typeColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  planType == '主修' ? Icons.school : Icons.menu_book,
+                  color: typeColor,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // 方案信息
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      option.planName,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        // 方案类型标签
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: typeColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            planType,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: typeColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        if (isCurrent) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.green.withValues(alpha: 0.25)
+                                  : Colors.green.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '当前使用',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.green.shade300
+                                    : Colors.green,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // 箭头
+              Icon(
+                Icons.chevron_right,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

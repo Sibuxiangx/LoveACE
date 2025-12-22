@@ -5,6 +5,7 @@ import 'exam_service.dart';
 import 'jwc_config.dart';
 import 'plan_service.dart';
 import 'score_service.dart';
+import 'student_schedule_service.dart';
 import 'term_service.dart';
 
 /// 教务系统服务统一入口
@@ -33,6 +34,9 @@ class JWCService {
   /// 课程开课查询服务
   late final CourseScheduleService courseSchedule;
 
+  /// 学生课表服务
+  late final StudentScheduleService studentSchedule;
+
   /// 创建教务系统服务实例
   ///
   /// [connection] AUFE连接器实例，用于网络通信
@@ -54,5 +58,8 @@ class JWCService {
 
     // 初始化课程开课查询服务
     courseSchedule = CourseScheduleService(connection, config);
+
+    // 初始化学生课表服务
+    studentSchedule = StudentScheduleService(connection, config);
   }
 }

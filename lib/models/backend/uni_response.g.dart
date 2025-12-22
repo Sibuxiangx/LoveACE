@@ -15,6 +15,8 @@ UniResponse<T> _$UniResponseFromJson<T>(
   message: json['message'] as String,
   error: json['error'] as String?,
   retryable: json['retryable'] as bool? ?? false,
+  needsSelection: json['needs_selection'] as bool? ?? false,
+  selectionData: json['selection_data'],
 );
 
 Map<String, dynamic> _$UniResponseToJson<T>(
@@ -26,6 +28,8 @@ Map<String, dynamic> _$UniResponseToJson<T>(
   'message': instance.message,
   'error': instance.error,
   'retryable': instance.retryable,
+  'needs_selection': instance.needsSelection,
+  'selection_data': instance.selectionData,
 };
 
 T? _$nullableGenericFromJson<T>(

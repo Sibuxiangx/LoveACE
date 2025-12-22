@@ -21,12 +21,22 @@ class UniResponse<T> {
   /// 是否可重试（用于网络错误等可恢复的错误）
   final bool retryable;
 
+  /// 是否需要进一步选择（用于多培养方案等场景）
+  @JsonKey(name: 'needs_selection')
+  final bool needsSelection;
+
+  /// 选择数据（当 needsSelection 为 true 时使用）
+  @JsonKey(name: 'selection_data')
+  final dynamic selectionData;
+
   UniResponse({
     required this.success,
     this.data,
     required this.message,
     this.error,
     this.retryable = false,
+    this.needsSelection = false,
+    this.selectionData,
   });
 
   /// 从JSON创建实例
@@ -60,6 +70,20 @@ class UniResponse<T> {
       message: message,
       error: error,
       retryable: retryable,
+    );
+  }
+
+  /// 创建需要选择的响应（用于多培养方案等场景）
+  factory UniResponse.needSelection(
+    dynamic selectionData, {
+    String message = '需要进一步选择',
+  }) {
+    return UniResponse(
+      success: false,
+      message: message,
+      needsSelection: true,
+      selectionData: selectionData,
+      retryable: false,
     );
   }
 }

@@ -266,6 +266,35 @@ class YKTProvider extends ChangeNotifier {
     await CacheManager.remove(_cacheKeyPurchaseHistory);
   }
 
+  /// 重置 Provider 状态（用于切换账号时）
+  ///
+  /// 清除所有缓存数据和内存状态，锁定充值模块
+  Future<void> reset() async {
+    LoggerService.info('🔄 重置一卡通 Provider 状态');
+
+    // 清除缓存
+    await _clearCache();
+
+    // 重置状态
+    _state = YKTState.initial;
+    _errorMessage = null;
+    _isRetryable = false;
+    _transactionState = TransactionLoadState.initial;
+    _transactionError = null;
+
+    // 清除数据
+    _balance = null;
+    _transactions = null;
+    _studentInfo = null;
+    _purchaseHistory = null;
+
+    // 锁定充值模块
+    _isPaymentUnlocked = false;
+
+    notifyListeners();
+    LoggerService.info('✅ 一卡通 Provider 状态已重置');
+  }
+
   /// 刷新数据
   Future<void> refresh() async {
     await loadData(forceRefresh: true);

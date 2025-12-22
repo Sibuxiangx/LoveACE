@@ -8,12 +8,12 @@ on:
       upload_manifest:
         description: '是否上传到 manifest'
         required: false
-        default: 'true'
+        default: true
         type: boolean
       force_update:
         description: '是否强制更新'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:
@@ -158,8 +158,8 @@ jobs:
           CHANGELOG=""
           
           if [[ -f "CHANGELOG.txt" ]]; then
-            # 读取对应版本的 changelog
-            # 格式: 版本号在一行，下一行是更新内容
+            # 读取对应版本的 changelog（支持多行）
+            # 格式: 版本号在一行，后续行是更新内容，直到空行或下一个版本号
             FOUND=false
             while IFS= read -r line || [[ -n "$line" ]]; do
               if [[ "$FOUND" == "true" ]]; then
@@ -167,8 +167,12 @@ jobs:
                 if [[ -z "$line" ]] || [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                   break
                 fi
-                CHANGELOG="$line"
-                break
+                # 多行拼接，用换行符连接
+                if [[ -n "$CHANGELOG" ]]; then
+                  CHANGELOG="$CHANGELOG"$'\n'"$line"
+                else
+                  CHANGELOG="$line"
+                fi
               fi
               if [[ "$line" == "$VERSION" ]]; then
                 FOUND=true
@@ -176,8 +180,14 @@ jobs:
             done < CHANGELOG.txt
           fi
           
-          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "📝 Changelog for $VERSION: $CHANGELOG"
+          # 使用 EOF 方式输出多行内容
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          echo "📝 Changelog for $VERSION:"
+          echo "$CHANGELOG"
 
       - name: Upload to manifest
         env:

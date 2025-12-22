@@ -242,4 +242,293 @@ class CourseScheduleService {
       rethrow;
     }
   }
+
+  /// 查询学期全部开课情况
+  ///
+  /// 获取指定学期的所有开课记录（不限课程号）
+  /// 使用并发请求加速获取
+  ///
+  /// [termCode] 学期代码，如 "2025-2026-2-1"
+  /// [onProgress] 进度回调，参数为 (已完成页数, 总页数, 已获取记录数)
+  ///
+  /// 成功时返回 UniResponse.success，包含 List<CourseScheduleRecord> 数据
+  /// 失败时返回 UniResponse.failure，根据错误类型设置 retryable 标志
+  Future<UniResponse<List<CourseScheduleRecord>>> queryAllCoursesForTerm({
+    required String termCode,
+    void Function(int completed, int total, int records)? onProgress,
+  }) async {
+    try {
+      return await RetryHandler.retry(
+        operation: () async => await _performQueryAllCoursesForTermConcurrent(
+          termCode,
+          onProgress: onProgress,
+        ),
+        retryIf: RetryHandler.shouldRetryOnError,
+        maxAttempts: 3,
+        onRetry: (attempt, error) {
+          LoggerService.warning('📚 查询学期全部开课失败，正在重试 (尝试 $attempt/3): $error');
+        },
+      );
+    } catch (e) {
+      LoggerService.error('📚 查询学期全部开课失败', error: e);
+      return ErrorHandler.handleError(e, '查询学期全部开课失败');
+    }
+  }
+
+  /// 获取单页数据
+  Future<CourseScheduleResponse?> _fetchPage({
+    required String url,
+    required String termCode,
+    required int pageNum,
+    required int pageSize,
+  }) async {
+    try {
+      final formData = {
+        'zxjxjhh': termCode,
+        'kkxsh': '',
+        'kkxqh': '',
+        'jxlh': '',
+        'jash': '',
+        'skxq': '',
+        'skjc': '',
+        'kch': '',
+        'kcm': '',
+        'kclb': '',
+        'skjs': '',
+        'xqname': '',
+        'jcname': '',
+        'jxlname': '',
+        'jasname': '',
+        'pageNum': pageNum.toString(),
+        'pageSize': pageSize.toString(),
+      };
+
+      final response = await connection.client.post(
+        url,
+        data: formData,
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+
+      var data = response.data;
+      if (data == null) return null;
+
+      if (data is String) {
+        data = jsonDecode(data);
+      }
+
+      if (data is! Map<String, dynamic>) return null;
+
+      return CourseScheduleResponse.fromJson(data);
+    } catch (e) {
+      LoggerService.error('📚 获取第 $pageNum 页失败', error: e);
+      return null;
+    }
+  }
+
+  /// 执行并发查询学期全部开课
+  Future<UniResponse<List<CourseScheduleRecord>>> _performQueryAllCoursesForTermConcurrent(
+    String termCode, {
+    void Function(int completed, int total, int records)? onProgress,
+  }) async {
+    try {
+      final url = config.toFullUrl(endpoints['courseInfo']!);
+      LoggerService.info('📚 正在并发查询学期全部开课: 学期: $termCode');
+
+      const int pageSize = 200; // 使用更大的页面大小
+      const int concurrency = 5; // 并发数
+
+      // 第一步：获取第一页以确定总数
+      final firstPage = await _fetchPage(
+        url: url,
+        termCode: termCode,
+        pageNum: 1,
+        pageSize: pageSize,
+      );
+
+      if (firstPage == null) {
+        throw Exception('获取第一页数据失败');
+      }
+
+      final totalCount = firstPage.list.pageContext.totalCount;
+      final totalPages = (totalCount / pageSize).ceil();
+      final allRecords = <CourseScheduleRecord>[...firstPage.list.records];
+
+      LoggerService.info('📚 总共 $totalCount 条记录，$totalPages 页，开始并发获取...');
+      onProgress?.call(1, totalPages, allRecords.length);
+
+      if (totalPages <= 1) {
+        return UniResponse.success(
+          allRecords,
+          message: '查询成功，共 ${allRecords.length} 条记录',
+        );
+      }
+
+      // 第二步：并发获取剩余页面
+      int completedPages = 1;
+      final remainingPages = List.generate(totalPages - 1, (i) => i + 2);
+
+      // 分批并发请求
+      for (int i = 0; i < remainingPages.length; i += concurrency) {
+        final batch = remainingPages.skip(i).take(concurrency).toList();
+        
+        final futures = batch.map((pageNum) => _fetchPage(
+          url: url,
+          termCode: termCode,
+          pageNum: pageNum,
+          pageSize: pageSize,
+        ));
+
+        final results = await Future.wait(futures);
+
+        for (final result in results) {
+          if (result != null) {
+            allRecords.addAll(result.list.records);
+          }
+          completedPages++;
+          onProgress?.call(completedPages, totalPages, allRecords.length);
+        }
+
+        LoggerService.info(
+          '📚 已完成 $completedPages/$totalPages 页，累计 ${allRecords.length} 条',
+        );
+      }
+
+      LoggerService.info('📚 学期全部开课查询完成，共获取 ${allRecords.length} 条记录');
+      return UniResponse.success(
+        allRecords,
+        message: '查询成功，共 ${allRecords.length} 条记录',
+      );
+    } on DioException catch (e) {
+      LoggerService.error('📚 网络请求失败', error: e);
+      rethrow;
+    } catch (e) {
+      LoggerService.error('📚 解析响应数据失败', error: e);
+      rethrow;
+    }
+  }
+
+  /// 查询课程开课情况（获取全部数据）
+  ///
+  /// 自动处理分页，获取所有符合条件的记录
+  ///
+  /// [courseCode] 课程号
+  /// [termCode] 学期代码，如 "2025-2026-2-1"
+  ///
+  /// 成功时返回 UniResponse.success，包含 List<CourseScheduleRecord> 数据
+  /// 失败时返回 UniResponse.failure，根据错误类型设置 retryable 标志
+  Future<UniResponse<List<CourseScheduleRecord>>> queryCourseScheduleAll({
+    required String courseCode,
+    required String termCode,
+  }) async {
+    try {
+      return await RetryHandler.retry(
+        operation: () async => await _performQueryCourseScheduleAll(
+          courseCode: courseCode,
+          termCode: termCode,
+        ),
+        retryIf: RetryHandler.shouldRetryOnError,
+        maxAttempts: 3,
+        onRetry: (attempt, error) {
+          LoggerService.warning('📚 查询课程开课情况失败，正在重试 (尝试 $attempt/3): $error');
+        },
+      );
+    } catch (e) {
+      LoggerService.error('📚 查询课程开课情况失败', error: e);
+      return ErrorHandler.handleError(e, '查询课程开课情况失败');
+    }
+  }
+
+  /// 执行查询课程开课情况的实际操作（获取全部数据）
+  Future<UniResponse<List<CourseScheduleRecord>>>
+      _performQueryCourseScheduleAll({
+    required String courseCode,
+    required String termCode,
+  }) async {
+    try {
+      final url = config.toFullUrl(endpoints['courseInfo']!);
+      LoggerService.info(
+        '📚 正在查询课程开课情况(全部): 课程号: $courseCode, 学期: $termCode',
+      );
+
+      final allRecords = <CourseScheduleRecord>[];
+      int pageNum = 1;
+      const int pageSize = 50;
+      int totalCount = 0;
+
+      // 循环获取所有分页数据
+      while (true) {
+        final formData = {
+          'zxjxjhh': termCode,
+          'kkxsh': '',
+          'kkxqh': '',
+          'jxlh': '',
+          'jash': '',
+          'skxq': '',
+          'skjc': '',
+          'kch': courseCode,
+          'kcm': '',
+          'kclb': '',
+          'skjs': '',
+          'xqname': '',
+          'jcname': '',
+          'jxlname': '',
+          'jasname': '',
+          'pageNum': pageNum.toString(),
+          'pageSize': pageSize.toString(),
+        };
+
+        final response = await connection.client.post(
+          url,
+          data: formData,
+          options: Options(contentType: Headers.formUrlEncodedContentType),
+        );
+
+        var data = response.data;
+        if (data == null) {
+          break;
+        }
+
+        if (data is String) {
+          try {
+            data = jsonDecode(data);
+          } catch (e) {
+            break;
+          }
+        }
+
+        if (data is! Map<String, dynamic>) {
+          break;
+        }
+
+        final courseResponse = CourseScheduleResponse.fromJson(data);
+        final records = courseResponse.list.records;
+        totalCount = courseResponse.list.pageContext.totalCount;
+
+        allRecords.addAll(records);
+
+        LoggerService.info(
+          '📚 获取第 $pageNum 页，本页 ${records.length} 条，累计 ${allRecords.length}/$totalCount 条',
+        );
+
+        // 如果已获取全部数据或本页为空，退出循环
+        if (allRecords.length >= totalCount || records.isEmpty) {
+          break;
+        }
+
+        pageNum++;
+      }
+
+      LoggerService.info('📚 课程开课查询完成，共获取 ${allRecords.length} 条记录');
+      return UniResponse.success(
+        allRecords,
+        message: '查询成功，共 ${allRecords.length} 条记录',
+      );
+    } on DioException catch (e) {
+      LoggerService.error('📚 网络请求失败', error: e);
+      rethrow;
+    } catch (e) {
+      LoggerService.error('📚 解析响应数据失败', error: e);
+      rethrow;
+    }
+  }
 }

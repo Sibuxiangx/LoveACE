@@ -19,6 +19,7 @@ import 'providers/electricity_provider.dart';
 import 'providers/labor_club_provider.dart';
 import 'providers/manifest_provider.dart';
 import 'providers/course_schedule_provider.dart';
+import 'providers/smart_course_selection_provider.dart';
 import 'providers/ykt_provider.dart';
 import 'services/session_manager.dart';
 import 'services/jwc/jwc_service.dart';
@@ -44,6 +45,7 @@ import 'screens/competition_page.dart';
 import 'screens/electricity_page.dart';
 import 'screens/labor_club_page.dart';
 import 'screens/scan_sign_in_page.dart';
+import 'screens/ykt_page.dart';
 // Desktop (WinUI) screens
 import 'winui/screens/winui_home_screen.dart';
 
@@ -279,6 +281,27 @@ class MyApp extends StatelessWidget {
               final yktService = YKTService(authProvider.connection!);
               return YKTProvider(yktService);
             }
+            // 用户未认证时，清理旧实例
+            return null;
+          },
+        ),
+
+        // Smart Course Selection Provider - depends on AuthProvider for JWCService
+        ChangeNotifierProxyProvider<AuthProvider, SmartCourseSelectionProvider?>(
+          create: (_) => null,
+          update: (context, authProvider, previous) {
+            // Only create SmartCourseSelectionProvider when user is authenticated
+            if (authProvider.isAuthenticated &&
+                authProvider.connection != null) {
+              // 如果已经有 provider 实例，直接返回
+              if (previous != null) {
+                return previous;
+              }
+
+              // 创建新的 provider 实例
+              final jwcService = JWCService(authProvider.connection!);
+              return SmartCourseSelectionProvider(jwcService);
+            }
             return previous;
           },
         ),
@@ -323,6 +346,7 @@ class MyApp extends StatelessWidget {
                 '/electricity': (context) => const ElectricityPage(),
                 '/labor-club': (context) => const LaborClubPage(),
                 '/labor-club/scan': (context) => const ScanSignInPage(),
+                '/ykt': (context) => const YKTPage(),
               },
             );
           }

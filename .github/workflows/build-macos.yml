@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Build macOS DMG
 
 on:
   release:
@@ -18,7 +18,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: macos-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       artifact_name: ${{ steps.version.outputs.artifact_name }}
@@ -36,81 +36,73 @@ jobs:
 
       - name: Get version from pubspec.yaml
         id: version
-        shell: pwsh
         run: |
-          $content = Get-Content pubspec.yaml -Raw
-          if ($content -match 'version:\s*(\d+\.\d+\.\d+)') {
-            $version = $Matches[1]
-            echo "version=$version" >> $env:GITHUB_OUTPUT
-            echo "artifact_name=loveace-windows-$version" >> $env:GITHUB_OUTPUT
-            echo "📦 Version: $version"
-          }
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "artifact_name=loveace-macos-$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build Windows
-        run: flutter build windows --release
+      - name: Build macOS
+        run: flutter build macos --release
 
-      - name: Install Inno Setup
-        shell: pwsh
+      - name: Ad-hoc code sign
         run: |
-          # Download Inno Setup
-          $innoUrl = "https://jrsoftware.org/download.php/is.exe"
-          $innoInstaller = "$env:TEMP\innosetup.exe"
-          Invoke-WebRequest -Uri $innoUrl -OutFile $innoInstaller
+          APP_PATH="build/macos/Build/Products/Release/loveace.app"
           
-          # Install silently
-          Start-Process -FilePath $innoInstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          # 递归签名所有框架和动态库
+          find "$APP_PATH" -name "*.framework" -o -name "*.dylib" | while read -r item; do
+            codesign --force --deep --sign - "$item" || true
+          done
           
-          # Add to PATH
-          $innoPath = "C:\Program Files (x86)\Inno Setup 6"
-          echo "$innoPath" >> $env:GITHUB_PATH
+          # 签名主应用
+          codesign --force --deep --sign - "$APP_PATH"
           
-          # Download Chinese Simplified language file
-          $langUrl = "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl"
-          $langPath = "$innoPath\Languages\ChineseSimplified.isl"
-          Invoke-WebRequest -Uri $langUrl -OutFile $langPath
-          echo "✅ Downloaded Chinese Simplified language file"
+          echo "✅ Ad-hoc code signing completed"
 
-      - name: Download VC++ Redistributable
-        shell: pwsh
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
         run: |
-          # Download Visual C++ Redistributable x64
-          $vcRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-          $vcRedistPath = "${{ github.workspace }}\build\windows\x64\runner\Release\vc_redist.x64.exe"
-          Invoke-WebRequest -Uri $vcRedistUrl -OutFile $vcRedistPath
-          echo "✅ Downloaded VC++ Redistributable to $vcRedistPath"
+          VERSION="${{ steps.version.outputs.version }}"
+          APP_PATH="build/macos/Build/Products/Release/loveace.app"
+          DMG_PATH="build/macos/loveace-$VERSION.dmg"
+          
+          # 创建 DMG
+          create-dmg \
+            --volname "彩带小工具" \
+            --volicon "$APP_PATH/Contents/Resources/AppIcon.icns" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "loveace.app" 150 185 \
+            --hide-extension "loveace.app" \
+            --app-drop-link 450 185 \
+            "$DMG_PATH" \
+            "$APP_PATH" || true
+          
+          # 如果 create-dmg 失败，使用简单方式创建
+          if [ ! -f "$DMG_PATH" ]; then
+            echo "⚠️ create-dmg failed, using hdiutil..."
+            hdiutil create -volname "彩带小工具" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
+          fi
+          
+          echo "✅ DMG created: $DMG_PATH"
 
-      - name: Create installer
-        shell: pwsh
-        env:
-          APP_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          $buildDir = "${{ github.workspace }}\build\windows\x64\runner\Release"
-          $outputDir = "${{ github.workspace }}\installer"
-          
-          # Create output directory
-          New-Item -ItemType Directory -Force -Path $outputDir
-          
-          # Set environment variables for Inno Setup
-          $env:BUILD_DIR = $buildDir
-          $env:OUTPUT_DIR = $outputDir
-          
-          # Run Inno Setup
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAPP_VERSION="$env:APP_VERSION" /DBUILD_DIR="$buildDir" /DOUTPUT_DIR="$outputDir" "windows\inno-ci.iss"
-
-      - name: Upload installer artifact
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.version.outputs.artifact_name }}
-          path: installer/loveace-${{ steps.version.outputs.version }}-setup.exe
+          path: build/macos/loveace-${{ steps.version.outputs.version }}.dmg
 
       - name: Upload to Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v1
         with:
-          files: installer/loveace-${{ steps.version.outputs.version }}-setup.exe
+          files: build/macos/loveace-${{ steps.version.outputs.version }}.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -124,11 +116,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download installer artifact
+      - name: Download DMG artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact_name }}
-          path: ./installer
+          path: ./dmg
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -150,11 +142,9 @@ jobs:
             FOUND=false
             while IFS= read -r line || [[ -n "$line" ]]; do
               if [[ "$FOUND" == "true" ]]; then
-                # 如果遇到空行或下一个版本号，停止
                 if [[ -z "$line" ]] || [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                   break
                 fi
-                # 多行拼接，用换行符连接
                 if [[ -n "$CHANGELOG" ]]; then
                   CHANGELOG="$CHANGELOG"$'\n'"$line"
                 else
@@ -167,7 +157,6 @@ jobs:
             done < CHANGELOG.txt
           fi
           
-          # 使用 EOF 方式输出多行内容
           {
             echo "changelog<<EOF"
             echo "$CHANGELOG"
@@ -196,14 +185,14 @@ jobs:
           if [[ -n "$CHANGELOG" ]]; then
             uv run python cli.py release \
               --version "${{ needs.build.outputs.version }}" \
-              --platform windows \
-              --file "../installer/loveace-${{ needs.build.outputs.version }}-setup.exe" \
+              --platform macos \
+              --file "../dmg/loveace-${{ needs.build.outputs.version }}.dmg" \
               --changelog "$CHANGELOG" \
               $FORCE_FLAG
           else
             uv run python cli.py release \
               --version "${{ needs.build.outputs.version }}" \
-              --platform windows \
-              --file "../installer/loveace-${{ needs.build.outputs.version }}-setup.exe" \
+              --platform macos \
+              --file "../dmg/loveace-${{ needs.build.outputs.version }}.dmg" \
               $FORCE_FLAG
           fi

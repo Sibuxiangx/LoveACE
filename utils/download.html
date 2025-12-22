@@ -122,6 +122,23 @@
             margin-bottom: 0;
         }
         
+        .platform-item-highlight {
+            border-color: #2563eb;
+            background: linear-gradient(135deg, #f0f7ff 0%, #e8f1fc 100%);
+        }
+        
+        .recommend-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        
         .platform-icon {
             width: 48px;
             height: 48px;
@@ -187,6 +204,15 @@
         
         .download-btn:active {
             transform: scale(0.98);
+        }
+        
+        .download-btn-primary {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        
+        .download-btn-primary:hover {
+            background: linear-gradient(135deg, #1d4ed8, #1e40af);
         }
         
         /* Changelog */
@@ -477,6 +503,34 @@
             }
         }
 
+        // 检测用户操作系统
+        function detectOS() {
+            const ua = navigator.userAgent.toLowerCase();
+            const platform = navigator.platform?.toLowerCase() || '';
+            
+            // iOS 检测
+            if (/iphone|ipad|ipod/.test(ua) || (platform === 'macintel' && navigator.maxTouchPoints > 1)) {
+                return 'ios';
+            }
+            // Android 检测
+            if (/android/.test(ua)) {
+                return 'android';
+            }
+            // macOS 检测
+            if (/mac/.test(platform) || /macintosh/.test(ua)) {
+                return 'macos';
+            }
+            // Windows 检测
+            if (/win/.test(platform) || /windows/.test(ua)) {
+                return 'windows';
+            }
+            // Linux 检测
+            if (/linux/.test(platform) || /linux/.test(ua)) {
+                return 'linux';
+            }
+            return null;
+        }
+
         function render(ota) {
             // 获取最新版本号（从各平台中取最新的）
             const available = Object.keys(PLATFORMS).filter(p => ota[p]);
@@ -499,39 +553,52 @@
                 return;
             }
 
-            container.innerHTML = available.map(p => {
+            // 检测用户系统并排序，将用户系统对应的发行版放在最前面
+            const userOS = detectOS();
+            const sortedPlatforms = [...available].sort((a, b) => {
+                if (a === userOS) return -1;
+                if (b === userOS) return 1;
+                return 0;
+            });
+
+            container.innerHTML = sortedPlatforms.map((p, index) => {
                 const info = PLATFORMS[p];
                 const release = ota[p];
+                const isUserOS = p === userOS;
                 // 检测是否为移动端
                 const isMobile = window.innerWidth <= 480;
+                // 推荐标签
+                const recommendBadge = isUserOS ? '<span class="recommend-badge">推荐</span>' : '';
+                // 高亮样式
+                const highlightClass = isUserOS ? ' platform-item-highlight' : '';
                 
                 if (isMobile) {
                     return `
-                        <div class="platform-item">
+                        <div class="platform-item${highlightClass}">
                             <div class="platform-header">
                                 <div class="platform-icon">
                                     <svg viewBox="0 0 24 24">${info.icon}</svg>
                                 </div>
                                 <div class="platform-info">
-                                    <div class="platform-name">${info.name} <span class="platform-version">v${release.version}</span></div>
+                                    <div class="platform-name">${info.name} ${recommendBadge}<span class="platform-version">v${release.version}</span></div>
                                     <div class="platform-md5">${release.md5}</div>
                                 </div>
                             </div>
-                            <a href="${release.url}" class="download-btn">下载 ${info.name}</a>
+                            <a href="${release.url}" class="download-btn${isUserOS ? ' download-btn-primary' : ''}">下载 ${info.name}</a>
                         </div>
                     `;
                 }
                 
                 return `
-                    <div class="platform-item">
+                    <div class="platform-item${highlightClass}">
                         <div class="platform-icon">
                             <svg viewBox="0 0 24 24">${info.icon}</svg>
                         </div>
                         <div class="platform-info">
-                            <div class="platform-name">${info.name} <span class="platform-version">v${release.version}</span></div>
+                            <div class="platform-name">${info.name} ${recommendBadge}<span class="platform-version">v${release.version}</span></div>
                             <div class="platform-md5">${release.md5}</div>
                         </div>
-                        <a href="${release.url}" class="download-btn">下载</a>
+                        <a href="${release.url}" class="download-btn${isUserOS ? ' download-btn-primary' : ''}">下载</a>
                     </div>
                 `;
             }).join('');

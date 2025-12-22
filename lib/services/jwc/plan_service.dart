@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' as html_parser;
@@ -6,6 +7,7 @@ import '../../models/backend/uni_response.dart';
 import '../../models/jwc/plan_completion_info.dart';
 import '../../models/jwc/plan_category.dart';
 import '../../models/jwc/plan_course.dart';
+import '../../models/jwc/plan_option.dart';
 import '../../models/jwc/score_record.dart';
 import '../../utils/error_handler.dart';
 import '../../utils/retry_handler.dart';
@@ -19,6 +21,7 @@ import 'term_service.dart';
 ///
 /// 提供培养方案完成情况的查询功能
 /// 当检测到所有课程未通过时，会自动拉取学期成绩进行匹配
+/// 内置请求锁和节流机制，防止频繁请求导致封禁
 class PlanService {
   final AUFEConnection connection;
   final JWCConfig config;
@@ -29,9 +32,31 @@ class PlanService {
   /// 成绩服务（用于获取学期成绩）
   late final ScoreService _scoreService;
 
+  /// 请求锁 - 防止并发请求
+  bool _isRequesting = false;
+
+  /// 上次请求时间
+  DateTime? _lastRequestTime;
+
+  /// 最小请求间隔（秒）
+  static const int _minRequestIntervalSeconds = 3;
+
+  /// 缓存的培养方案数据（按 planId 缓存）
+  final Map<String?, PlanCompletionInfo> _planCache = {};
+
+  /// 缓存的培养方案选项
+  PlanSelectionResponse? _planOptionsCache;
+
+  /// 缓存有效期（分钟）
+  static const int _cacheValidMinutes = 5;
+
+  /// 缓存时间戳
+  final Map<String?, DateTime> _cacheTimestamps = {};
+
   /// API端点常量
   static const Map<String, String> endpoints = {
     'plan': '/student/integratedQuery/planCompletion/index',
+    'planByFajhh': '/student/integratedQuery/planCompletion/getPyfaIndex/',
   };
 
   PlanService(this.connection, this.config) {
@@ -39,34 +64,193 @@ class PlanService {
     _scoreService = ScoreService(connection, config);
   }
 
+  /// 检查缓存是否有效
+  bool _isCacheValid(String? planId) {
+    final timestamp = _cacheTimestamps[planId];
+    if (timestamp == null) return false;
+    return DateTime.now().difference(timestamp).inMinutes < _cacheValidMinutes;
+  }
+
+  /// 清除所有缓存
+  void clearCache() {
+    _planCache.clear();
+    _planOptionsCache = null;
+    _cacheTimestamps.clear();
+    LoggerService.info('🗑️ 培养方案缓存已清除');
+  }
+
+  /// 等待请求锁释放
+  Future<void> _waitForLock() async {
+    int waitCount = 0;
+    while (_isRequesting && waitCount < 30) {
+      // 最多等待30秒
+      await Future.delayed(const Duration(seconds: 1));
+      waitCount++;
+    }
+  }
+
+  /// 检查并等待节流
+  Future<void> _throttle() async {
+    if (_lastRequestTime != null) {
+      final elapsed = DateTime.now().difference(_lastRequestTime!).inSeconds;
+      if (elapsed < _minRequestIntervalSeconds) {
+        final waitTime = _minRequestIntervalSeconds - elapsed;
+        LoggerService.info('⏳ 请求节流，等待 $waitTime 秒...');
+        await Future.delayed(Duration(seconds: waitTime));
+      }
+    }
+  }
+
   /// 获取培养方案完成信息
   ///
   /// 返回包含培养方案完成情况的响应
   /// 使用 compute 隔离进行 HTML 解析以避免阻塞 UI 线程
+  /// 内置请求锁和缓存机制，防止频繁请求
   ///
   /// 成功时返回 UniResponse.success，包含 PlanCompletionInfo 数据
+  /// 如果用户有多个培养方案需要选择，返回 UniResponse.needSelection
   /// 失败时返回 UniResponse.failure，根据错误类型设置 retryable 标志
-  Future<UniResponse<PlanCompletionInfo>> getPlanCompletion() async {
+  ///
+  /// [planId] 可选的培养方案ID，用于多培养方案用户选择具体方案
+  /// [forceRefresh] 是否强制刷新（忽略缓存）
+  Future<UniResponse<PlanCompletionInfo>> getPlanCompletion({
+    String? planId,
+    bool forceRefresh = false,
+  }) async {
+    // 检查缓存（非强制刷新时）
+    if (!forceRefresh && _isCacheValid(planId) && _planCache.containsKey(planId)) {
+      LoggerService.info('📦 使用缓存的培养方案数据 (planId: $planId)');
+      return UniResponse.success(_planCache[planId]!, message: '培养方案获取成功（缓存）');
+    }
+
+    // 如果正在请求中，等待锁释放后返回缓存
+    if (_isRequesting) {
+      LoggerService.warning('🔒 培养方案请求正在进行中，等待...');
+      await _waitForLock();
+      // 等待后检查缓存
+      if (_planCache.containsKey(planId)) {
+        return UniResponse.success(_planCache[planId]!, message: '培养方案获取成功（缓存）');
+      }
+    }
+
+    // 获取锁
+    _isRequesting = true;
+
     try {
-      return await RetryHandler.retry(
-        operation: () async => await _performGetPlanCompletion(),
+      // 节流
+      await _throttle();
+
+      final result = await RetryHandler.retry(
+        operation: () async => await _performGetPlanCompletion(planId: planId),
         retryIf: RetryHandler.shouldRetryOnError,
         maxAttempts: 3,
         onRetry: (attempt, error) {
           LoggerService.warning('📚 获取培养方案失败，正在重试 (尝试 $attempt/3): $error');
         },
       );
+
+      // 更新请求时间
+      _lastRequestTime = DateTime.now();
+
+      // 缓存成功的结果
+      if (result.success && result.data != null) {
+        _planCache[planId] = result.data!;
+        _cacheTimestamps[planId] = DateTime.now();
+      }
+
+      return result;
     } catch (e) {
       LoggerService.error('📚 获取培养方案失败', error: e);
       return ErrorHandler.handleError(e, '获取培养方案失败');
+    } finally {
+      // 释放锁
+      _isRequesting = false;
+    }
+  }
+
+  /// 获取培养方案选项列表（用于多培养方案用户）
+  ///
+  /// 返回可选的培养方案列表
+  /// 内置缓存机制
+  Future<UniResponse<PlanSelectionResponse>> getPlanOptions() async {
+    // 检查缓存
+    if (_planOptionsCache != null) {
+      LoggerService.info('📦 使用缓存的培养方案选项');
+      return UniResponse.success(_planOptionsCache!, message: '获取培养方案选项成功（缓存）');
+    }
+
+    try {
+      return await RetryHandler.retry(
+        operation: () async {
+          final result = await _performGetPlanOptions();
+          // 缓存成功的结果
+          if (result.success && result.data != null) {
+            _planOptionsCache = result.data;
+          }
+          return result;
+        },
+        retryIf: RetryHandler.shouldRetryOnError,
+        maxAttempts: 3,
+        onRetry: (attempt, error) {
+          LoggerService.warning('📚 获取培养方案选项失败，正在重试 (尝试 $attempt/3): $error');
+        },
+      );
+    } catch (e) {
+      LoggerService.error('📚 获取培养方案选项失败', error: e);
+      return ErrorHandler.handleError(e, '获取培养方案选项失败');
+    }
+  }
+
+  /// 执行获取培养方案选项的实际操作
+  Future<UniResponse<PlanSelectionResponse>> _performGetPlanOptions() async {
+    try {
+      final url = config.toFullUrl(endpoints['plan']!);
+      LoggerService.info('📚 正在获取培养方案选项: $url');
+
+      final response = await connection.client.get(url);
+
+      var data = response.data;
+      if (data == null) {
+        throw Exception('响应数据为空');
+      }
+
+      String htmlContent;
+      if (data is String) {
+        htmlContent = data;
+      } else {
+        throw Exception('响应数据格式错误：期望HTML字符串，实际类型: ${data.runtimeType}');
+      }
+
+      // 解析培养方案选项
+      final selectionResponse = _parsePlanSelectionHtml(htmlContent);
+      if (selectionResponse != null) {
+        LoggerService.info('📚 检测到多培养方案，共 ${selectionResponse.options.length} 个选项');
+        return UniResponse.success(selectionResponse, message: '获取培养方案选项成功');
+      }
+
+      // 如果不是选择页面，返回空列表
+      return UniResponse.success(
+        PlanSelectionResponse(options: [], hint: '无需选择培养方案'),
+        message: '无需选择培养方案',
+      );
+    } catch (e) {
+      LoggerService.error('📚 获取培养方案选项失败', error: e);
+      rethrow;
     }
   }
 
   /// 执行获取培养方案的实际操作
-  Future<UniResponse<PlanCompletionInfo>> _performGetPlanCompletion() async {
+  Future<UniResponse<PlanCompletionInfo>> _performGetPlanCompletion({String? planId}) async {
     try {
-      final url = config.toFullUrl(endpoints['plan']!);
-      LoggerService.info('📚 正在获取培养方案: $url');
+      String url;
+      if (planId != null && planId.isNotEmpty) {
+        // 使用指定的培养方案ID
+        url = config.toFullUrl('${endpoints['planByFajhh']}$planId');
+        LoggerService.info('📚 正在获取指定培养方案: $url');
+      } else {
+        url = config.toFullUrl(endpoints['plan']!);
+        LoggerService.info('📚 正在获取培养方案: $url');
+      }
 
       final response = await connection.client.get(url);
 
@@ -82,6 +266,17 @@ class PlanService {
         htmlContent = data;
       } else {
         throw Exception('响应数据格式错误：期望HTML字符串，实际类型: ${data.runtimeType}');
+      }
+
+      // 首先检查是否是多培养方案选择页面
+      final selectionResponse = _parsePlanSelectionHtml(htmlContent);
+      if (selectionResponse != null && selectionResponse.options.isNotEmpty) {
+        LoggerService.info('📚 检测到多培养方案选择页面，需要用户选择');
+        // 返回特殊的响应，表示需要选择培养方案
+        return UniResponse<PlanCompletionInfo>.needSelection(
+          selectionResponse,
+          message: '请选择要查看的培养方案',
+        );
       }
 
       LoggerService.info('📚 开始解析HTML数据...');
@@ -100,6 +295,78 @@ class PlanService {
     } catch (e) {
       LoggerService.error('📚 网络请求失败', error: e);
       rethrow;
+    }
+  }
+
+  /// 解析培养方案选择页面的HTML
+  ///
+  /// 如果是多培养方案选择页面，返回 PlanSelectionResponse
+  /// 否则返回 null
+  static PlanSelectionResponse? _parsePlanSelectionHtml(String html) {
+    try {
+      final document = html_parser.parse(html);
+
+      // 查找培养方案选择按钮
+      // 格式: <button class="btn btn-success btn-round" onclick="getPyfaIndex('7352');return false;">2024级供应链管理本科培养方案(主修)</button>
+      final buttons = document.querySelectorAll('button.btn-success.btn-round');
+
+      if (buttons.isEmpty) {
+        return null;
+      }
+
+      final options = <PlanOption>[];
+      String? hint;
+
+      // 尝试获取提示信息
+      final alertDiv = document.querySelector('.alert-warning strong');
+      if (alertDiv != null) {
+        // 获取完整的提示文本
+        final alertContainer = document.querySelector('.alert-warning');
+        if (alertContainer != null) {
+          hint = alertContainer.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+        }
+      }
+
+      for (final button in buttons) {
+        final onclick = button.attributes['onclick'] ?? '';
+        final buttonText = button.text.trim();
+
+        // 解析 onclick 中的方案ID: getPyfaIndex('7352')
+        final match = RegExp(r"getPyfaIndex\('(\d+)'\)").firstMatch(onclick);
+        if (match != null) {
+          final planId = match.group(1)!;
+
+          // 解析方案类型（主修/辅修）
+          String planType = '主修';
+          if (buttonText.contains('辅修')) {
+            planType = '辅修';
+          } else if (buttonText.contains('微专业')) {
+            planType = '微专业';
+          }
+
+          // 判断是否为当前使用的方案（绿色按钮表示当前使用）
+          final isCurrent = button.classes.contains('btn-success');
+
+          options.add(PlanOption(
+            planId: planId,
+            planName: buttonText,
+            planType: planType,
+            isCurrent: isCurrent,
+          ));
+        }
+      }
+
+      if (options.isEmpty) {
+        return null;
+      }
+
+      return PlanSelectionResponse(
+        options: options,
+        hint: hint,
+      );
+    } catch (e) {
+      LoggerService.error('📚 解析培养方案选择页面失败', error: e);
+      return null;
     }
   }
 
