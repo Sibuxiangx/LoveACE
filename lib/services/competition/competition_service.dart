@@ -55,6 +55,7 @@ class CompetitionService {
   /// 两步请求流程：
   /// 1. GET请求获取初始页面和ASP.NET表单数据
   /// 2. POST请求提交表单数据获取实际内容
+  /// 3. 循环获取所有分页数据
   Future<UniResponse<CompetitionFullResponse>>
   _performGetCompetitionInfo() async {
     try {
@@ -103,7 +104,7 @@ class CompetitionService {
         throw Exception('无法获取表单数据，页面格式可能已变更');
       }
 
-      // 第二步：POST请求提交表单数据
+      // 第二步：POST请求提交表单数据获取第一页
       final resultResponse = await connection.client.post(
         url,
         data: formData,
@@ -119,15 +120,179 @@ class CompetitionService {
         throw Exception('竞赛信息响应为空');
       }
 
-      // 在compute中解析HTML
-      final parsed = await compute(_parseHtmlInIsolate, resultHtml);
+      // 在compute中解析第一页HTML
+      final firstPageResult = await compute(_parseHtmlInIsolate, resultHtml);
 
-      LoggerService.info('🏆 竞赛信息获取成功，共 ${parsed.totalAwardsCount} 项获奖');
-      return UniResponse.success(parsed, message: '获取竞赛信息成功');
+      // 收集所有获奖项目
+      final allAwards = <AwardProject>[...firstPageResult.awards];
+
+      // 解析分页信息
+      final pageInfo = await compute(_parsePageInfoInIsolate, resultHtml);
+      final totalPages = pageInfo['totalPages'] ?? 1;
+
+      LoggerService.info('🏆 第1页获取成功，共 ${firstPageResult.awards.length} 项，总页数: $totalPages');
+
+      // 第三步：循环获取剩余页面
+      String currentHtml = resultHtml;
+      for (int page = 2; page <= totalPages; page++) {
+        LoggerService.info('🏆 正在获取第 $page 页...');
+
+        // 提取当前页面的表单数据用于翻页
+        final nextPageFormData = await compute(
+          _extractNextPageFormDataInIsolate,
+          {'html': currentHtml, 'targetPage': page},
+        );
+
+        if (nextPageFormData['__VIEWSTATE'] == null ||
+            nextPageFormData['__VIEWSTATE']!.isEmpty) {
+          LoggerService.warning('🏆 第 $page 页表单数据提取失败，停止翻页');
+          break;
+        }
+
+        // 请求下一页
+        final nextPageResponse = await connection.client.post(
+          url,
+          data: nextPageFormData,
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          ),
+        );
+
+        currentHtml = nextPageResponse.data;
+        if (currentHtml.isEmpty) {
+          LoggerService.warning('🏆 第 $page 页响应为空，停止翻页');
+          break;
+        }
+
+        // 解析当前页的获奖项目
+        final pageResult = await compute(_parseHtmlInIsolate, currentHtml);
+        allAwards.addAll(pageResult.awards);
+
+        LoggerService.info('🏆 第 $page 页获取成功，本页 ${pageResult.awards.length} 项');
+      }
+
+      // 构建最终结果
+      final finalResult = CompetitionFullResponse(
+        studentId: firstPageResult.studentId,
+        totalAwardsCount: allAwards.length,
+        awards: allAwards,
+        creditsSummary: firstPageResult.creditsSummary,
+      );
+
+      LoggerService.info('🏆 竞赛信息获取成功，共 ${finalResult.totalAwardsCount} 项获奖');
+      return UniResponse.success(finalResult, message: '获取竞赛信息成功');
     } catch (e) {
       LoggerService.error('🏆 网络请求失败', error: e);
       rethrow;
     }
+  }
+
+  /// 在compute隔离中解析分页信息
+  ///
+  /// 参数：HTML字符串
+  /// 返回：包含 currentPage 和 totalPages 的 Map
+  static Map<String, int> _parsePageInfoInIsolate(String html) {
+    final document = html_parser.parse(html);
+
+    int currentPage = 1;
+    int totalPages = 1;
+
+    try {
+      // 查找当前页码 span: ContentPlaceHolder1_ContentPlaceHolder2_gvHj_LabelCurrentPage
+      final currentPageSpan = document.querySelector(
+        'span[id*="gvHj_LabelCurrentPage"]',
+      );
+      if (currentPageSpan != null) {
+        currentPage = int.tryParse(currentPageSpan.text.trim()) ?? 1;
+      }
+
+      // 查找总页数 span: ContentPlaceHolder1_ContentPlaceHolder2_gvHj_LabelPageCount
+      final totalPagesSpan = document.querySelector(
+        'span[id*="gvHj_LabelPageCount"]',
+      );
+      if (totalPagesSpan != null) {
+        totalPages = int.tryParse(totalPagesSpan.text.trim()) ?? 1;
+      }
+    } catch (e) {
+      // 解析失败时使用默认值
+    }
+
+    return {'currentPage': currentPage, 'totalPages': totalPages};
+  }
+
+  /// 在compute隔离中提取翻页所需的表单数据
+  ///
+  /// 参数：包含 html 和 targetPage 的 Map
+  /// 返回：表单数据Map
+  static Map<String, String> _extractNextPageFormDataInIsolate(
+    Map<String, dynamic> params,
+  ) {
+    final html = params['html'] as String;
+    final targetPage = params['targetPage'] as int;
+
+    final document = html_parser.parse(html);
+
+    // 提取隐藏字段
+    final viewState = _extractInputValue(document, '__VIEWSTATE');
+    final viewStateGenerator = _extractInputValue(
+      document,
+      '__VIEWSTATEGENERATOR',
+    );
+    final eventValidation = _extractInputValue(document, '__EVENTVALIDATION');
+
+    // 动态提取"下一页"链接的 __doPostBack 参数
+    // 链接格式: <a id="..._LinkButtonNextPage" href="javascript:__doPostBack('ctl00$...$LinkButtonNextPage','')">下一页</a>
+    String? nextPageTarget;
+    String? pageIndexInputName;
+
+    // 查找下一页链接
+    final nextPageLink = document.querySelector('a[id*="LinkButtonNextPage"]');
+    if (nextPageLink != null) {
+      final href = nextPageLink.attributes['href'] ?? '';
+      // 从 javascript:__doPostBack('ctl00$...$LinkButtonNextPage','') 中提取参数
+      final match = RegExp(r"__doPostBack\('([^']+)'").firstMatch(href);
+      if (match != null) {
+        nextPageTarget = match.group(1);
+      }
+    }
+
+    // 查找页码输入框，获取其 name 属性
+    // 格式: <input name="ctl00$...$txtNewPageIndex" type="text" value="1" ...>
+    final pageIndexInput = document.querySelector('input[id*="txtNewPageIndex"]');
+    if (pageIndexInput != null) {
+      pageIndexInputName = pageIndexInput.attributes['name'];
+    }
+
+    // 如果找不到下一页链接，尝试使用 GO 按钮跳转
+    // 格式: <a id="..._btnGo" href="javascript:__doPostBack('ctl00$...$btnGo','')">GO</a>
+    if (nextPageTarget == null) {
+      final goLink = document.querySelector('a[id*="btnGo"]');
+      if (goLink != null) {
+        final href = goLink.attributes['href'] ?? '';
+        final match = RegExp(r"__doPostBack\('([^']+)'").firstMatch(href);
+        if (match != null) {
+          nextPageTarget = match.group(1);
+        }
+      }
+    }
+
+    // 构建表单数据
+    final formData = <String, String>{
+      '__VIEWSTATE': viewState ?? '',
+      '__VIEWSTATEGENERATOR': viewStateGenerator ?? '',
+      '__EVENTVALIDATION': eventValidation ?? '',
+      '__EVENTTARGET': nextPageTarget ?? '',
+      '__EVENTARGUMENT': '',
+      '__LASTFOCUS': '',
+    };
+
+    // 添加页码输入框的值（如果使用 GO 按钮跳转）
+    if (pageIndexInputName != null) {
+      formData[pageIndexInputName] = targetPage.toString();
+    }
+
+    return formData;
   }
 
   /// 在compute隔离中提取ASP.NET表单数据
@@ -265,7 +430,6 @@ class CompetitionService {
       }
 
       if (table == null) {
-        LoggerService.warning('🏆 未找到获奖项目表格');
         return projects;
       }
 
@@ -277,13 +441,26 @@ class CompetitionService {
 
         // 表格有15列：申报ID, 项目名称, 级别, 等级, 取得日期, 申报人, 姓名, 排序, 学分, 奖励金, 申报状态, 学校审核, 删除, 查看/编辑, 毕设替代
         // 我们需要前12列的数据
+        // 跳过分页行（只有1个td且colspan=15）和表头行
         if (cells.length < 12) {
+          continue;
+        }
+
+        // 跳过分页行：检查第一个单元格是否包含分页控件
+        final firstCellText = cells[0].text.trim();
+        if (firstCellText.contains('当前第') || firstCellText.contains('页/共')) {
           continue;
         }
 
         try {
           // 解析每个字段（索引0-11）
           final projectId = cells[0].text.trim();
+
+          // 跳过无效的项目ID（非数字）
+          if (int.tryParse(projectId) == null) {
+            continue;
+          }
+
           final projectName = cells[1].text.trim();
           final level = cells[2].text.trim();
           final grade = cells[3].text.trim();
@@ -313,12 +490,11 @@ class CompetitionService {
             ),
           );
         } catch (e) {
-          LoggerService.warning('🏆 解析项目行失败: $e');
           continue;
         }
       }
     } catch (e) {
-      LoggerService.error('🏆 解析获奖项目列表失败', error: e);
+      // 解析失败时返回空列表
     }
 
     return projects;

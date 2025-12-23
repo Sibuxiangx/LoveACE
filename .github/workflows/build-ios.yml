@@ -1,0 +1,86 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact_name: ${{ steps.version.outputs.artifact_name }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.2'
+          channel: 'stable'
+          cache: true
+
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "artifact_name=loveace-ios-$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Disable code signing for CI
+        run: |
+          # 禁用代码签名
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "iPhone Developer"/"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = ""/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = "";/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = "[^"]*"/PROVISIONING_PROFILE_SPECIFIER = ""/g' ios/Runner.xcodeproj/project.pbxproj
+          echo "✅ Code signing disabled for CI"
+
+      - name: Build iOS (no codesign)
+        run: |
+          flutter build ios --release --no-codesign
+          echo "✅ Flutter iOS build completed"
+
+      - name: Create unsigned IPA
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          PAYLOAD_DIR="build/ios/Payload"
+          IPA_PATH="build/ios/loveace-$VERSION-unsigned.ipa"
+          
+          # 创建 Payload 目录
+          mkdir -p "$PAYLOAD_DIR"
+          cp -r "$APP_PATH" "$PAYLOAD_DIR/"
+          
+          # 创建 IPA
+          cd build/ios
+          zip -r "loveace-$VERSION-unsigned.ipa" Payload
+          
+          echo "✅ Unsigned IPA created: $IPA_PATH"
+          ls -la "loveace-$VERSION-unsigned.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: build/ios/loveace-${{ steps.version.outputs.version }}-unsigned.ipa
+
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/ios/loveace-${{ steps.version.outputs.version }}-unsigned.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
