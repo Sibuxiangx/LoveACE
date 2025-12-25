@@ -216,19 +216,15 @@ class ExamService {
       final url = config.toFullUrl(endpoints['otherExamRecord']!);
       LoggerService.info('📋 正在获取其他考试信息: $url');
 
-      // 构造请求参数
-      final formData = {
-        'zxjxjhh': termCode,
-        'tab': '0',
-        'pageNum': '1',
-        'pageSize': '30',
-      };
+      // 构造请求参数（URL 编码格式）
+      final formData = 'zxjxjhh=$termCode&tab=0&pageNum=1&pageSize=30';
 
       // 添加 Accept 头确保服务器返回正确编码的数据
       final response = await connection.client.post(
         url,
         data: formData,
         options: Options(
+          contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
           headers: {
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Accept-Charset': 'utf-8',
@@ -332,6 +328,27 @@ class ExamService {
     }
   }
 
+  /// 将中文日期格式转换为标准格式
+  ///
+  /// 例如: "2026年1月3日" -> "2026-01-03"
+  String _convertChineseDateToStandard(String chineseDate) {
+    try {
+      // 匹配 "2026年1月3日" 格式
+      final match = RegExp(r'(\d{4})年(\d{1,2})月(\d{1,2})日').firstMatch(chineseDate);
+      if (match != null) {
+        final year = match.group(1)!;
+        final month = match.group(2)!.padLeft(2, '0');
+        final day = match.group(3)!.padLeft(2, '0');
+        return '$year-$month-$day';
+      }
+      // 如果不匹配，返回原始值
+      return chineseDate;
+    } catch (e) {
+      LoggerService.warning('⚠️ 日期格式转换失败: $chineseDate');
+      return chineseDate;
+    }
+  }
+
   /// 将其他考试记录转换为统一格式
   ///
   /// [record] 其他考试记录
@@ -339,9 +356,12 @@ class ExamService {
   /// 返回统一格式的考试信息，如果解析失败返回 null
   UnifiedExamInfo? _convertOtherExamToUnified(OtherExamRecord record) {
     try {
+      // 转换中文日期格式为标准格式
+      final standardDate = _convertChineseDateToStandard(record.examDate);
+      
       return UnifiedExamInfo(
         courseName: record.courseName,
-        examDate: record.examDate,
+        examDate: standardDate,
         examTime: record.examTime,
         examLocation: record.examLocation,
         examType: '其他考试',

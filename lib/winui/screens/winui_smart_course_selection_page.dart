@@ -87,16 +87,41 @@ class _WinUISmartCourseSelectionPageState
     ));
 
     items.add(CommandBarButton(
-      icon: const Icon(FluentIcons.add),
-      label: const Text('新建选课表'),
-      onPressed: () async {
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        final userId = authProvider.credentials?.userId ?? '';
-        await provider.newSelectionTable(userId);
-      },
+      icon: const Icon(FluentIcons.reset),
+      label: const Text('重置课表'),
+      onPressed: provider.state == SmartCourseSelectionState.loading
+          ? null
+          : () => _showResetConfirmDialog(context, provider),
     ));
 
     return items;
+  }
+
+  /// 显示重置课表确认对话框
+  Future<void> _showResetConfirmDialog(
+      BuildContext context, SmartCourseSelectionProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('重置课表'),
+        content: const Text('这将清除所有模拟选课/退课记录，以当前实际课表为基准重新开始。确定吗？'),
+        actions: [
+          Button(
+            child: const Text('取消'),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          FilledButton(
+            child: const Text('确定重置'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userId = authProvider.credentials?.userId ?? '';
+      await provider.resetSelection(userId);
+    }
   }
 
   @override
@@ -193,132 +218,32 @@ class _WinUISmartCourseSelectionPageState
     }
 
     // 加载完成 - 三栏布局
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 课表变化提示
-        if (provider.scheduleChanged) _buildScheduleChangeWarning(context, provider),
-        // 主内容
+        // 左侧：培养方案树
+        SizedBox(
+          width: 320,
+          child: _buildLeftPanel(context, provider),
+        ),
+        Container(
+          width: 1,
+          color: FluentTheme.of(context).resources.controlStrokeColorDefault,
+        ),
+        // 中间：课程表（自适应宽度）
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 左侧：培养方案树 + 预设管理
-              SizedBox(
-                width: 320,
-                child: _buildLeftPanel(context, provider),
-              ),
-              Container(
-                width: 1,
-                color: FluentTheme.of(context).resources.controlStrokeColorDefault,
-              ),
-              // 中间：课程表（自适应宽度）
-              Expanded(
-                child: _buildScheduleView(context, provider),
-              ),
-              Container(
-                width: 1,
-                color: FluentTheme.of(context).resources.controlStrokeColorDefault,
-              ),
-              // 右侧：课程信息面板（始终显示）
-              SizedBox(
-                width: 360,
-                child: _buildSidePanel(context, provider),
-              ),
-            ],
-          ),
+          child: _buildScheduleView(context, provider),
+        ),
+        Container(
+          width: 1,
+          color: FluentTheme.of(context).resources.controlStrokeColorDefault,
+        ),
+        // 右侧：课程信息面板（始终显示）
+        SizedBox(
+          width: 360,
+          child: _buildSidePanel(context, provider),
         ),
       ],
-    );
-  }
-
-  /// 构建课表变化警告
-  Widget _buildScheduleChangeWarning(
-      BuildContext context, SmartCourseSelectionProvider provider) {
-    final theme = FluentTheme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: (isDark ? Colors.orange.light : Colors.orange).withValues(alpha: 0.15),
-        border: Border(
-          bottom: BorderSide(
-            color: isDark ? Colors.orange.light : Colors.orange,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            FluentIcons.warning,
-            color: isDark ? Colors.orange.light : Colors.orange,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '检测到课表变化',
-                  style: theme.typography.bodyStrong?.copyWith(
-                    color: isDark ? Colors.orange.light : Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '新增 ${provider.addedToSchedule.length} 门课程，移除 ${provider.removedFromSchedule.length} 门课程',
-                  style: theme.typography.caption,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Button(
-            child: const Text('接受变化'),
-            onPressed: () async {
-              final authProvider =
-                  Provider.of<AuthProvider>(context, listen: false);
-              final userId = authProvider.credentials?.userId ?? '';
-              await provider.acceptScheduleChanges(userId);
-            },
-          ),
-          const SizedBox(width: 8),
-          Button(
-            child: const Text('忽略'),
-            onPressed: () => provider.ignoreScheduleChanges(),
-          ),
-          const SizedBox(width: 8),
-          Button(
-            child: const Text('重新开始'),
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (context) => ContentDialog(
-                  title: const Text('重新开始选课'),
-                  content: const Text('这将清除所有模拟选课/退课记录，以当前课表为基准重新开始。确定吗？'),
-                  actions: [
-                    Button(
-                      child: const Text('取消'),
-                      onPressed: () => Navigator.of(context).pop(false),
-                    ),
-                    FilledButton(
-                      child: const Text('确定'),
-                      onPressed: () => Navigator.of(context).pop(true),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed == true && context.mounted) {
-                final authProvider =
-                    Provider.of<AuthProvider>(context, listen: false);
-                final userId = authProvider.credentials?.userId ?? '';
-                await provider.resetSelection(userId);
-              }
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -409,185 +334,10 @@ class _WinUISmartCourseSelectionPageState
     );
   }
 
-  /// 构建左侧面板（培养方案树 + 可折叠预设管理）
+  /// 构建左侧面板（培养方案树）
   Widget _buildLeftPanel(
       BuildContext context, SmartCourseSelectionProvider provider) {
-    return Column(
-      children: [
-        // 培养方案树（主要区域）
-        Expanded(
-          child: _buildPlanTreeView(context, provider),
-        ),
-        Container(
-          height: 1,
-          color: FluentTheme.of(context).resources.controlStrokeColorDefault,
-        ),
-        // 底部：可折叠的预设管理
-        _buildCollapsiblePresetPanel(context, provider),
-      ],
-    );
-  }
-
-
-  /// 构建可折叠的预设管理面板
-  Widget _buildCollapsiblePresetPanel(
-      BuildContext context, SmartCourseSelectionProvider provider) {
-    final theme = FluentTheme.of(context);
-
-    return Expander(
-      initiallyExpanded: false,
-      header: Row(
-        children: [
-          Icon(FluentIcons.favorite_list, size: 14, color: theme.accentColor),
-          const SizedBox(width: 8),
-          Text('预设管理', style: theme.typography.bodyStrong),
-          const Spacer(),
-          if (provider.presets.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.accentColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                '${provider.presets.length}',
-                style: theme.typography.caption?.copyWith(
-                  color: theme.accentColor,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-        ],
-      ),
-      content: Column(
-        children: [
-          // 操作按钮行
-          Row(
-            children: [
-              Expanded(
-                child: Button(
-                  onPressed: () => _showSavePresetDialog(context, provider),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(FluentIcons.save, size: 12),
-                      SizedBox(width: 4),
-                      Text('保存'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Button(
-                  onPressed: () async {
-                    final authProvider =
-                        Provider.of<AuthProvider>(context, listen: false);
-                    final userId = authProvider.credentials?.userId ?? '';
-                    await provider.newSelectionTable(userId);
-                  },
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(FluentIcons.add, size: 12),
-                      SizedBox(width: 4),
-                      Text('新建'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (provider.presets.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            // 预设列表（紧凑版）
-            ...provider.presets.map((preset) {
-              final isSelected =
-                  provider.selectionData?.currentPresetId == preset.id;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: ListTile.selectable(
-                  selected: isSelected,
-                  title: Text(preset.name, style: theme.typography.caption),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${preset.selectedCourses.length}门',
-                        style: theme.typography.caption?.copyWith(
-                          color: theme.inactiveColor,
-                          fontSize: 10,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: Icon(FluentIcons.delete, size: 12, color: Colors.red),
-                        onPressed: () async {
-                          final authProvider =
-                              Provider.of<AuthProvider>(context, listen: false);
-                          final userId = authProvider.credentials?.userId ?? '';
-                          await provider.deletePreset(preset.id, userId);
-                        },
-                      ),
-                    ],
-                  ),
-                  onPressed: () async {
-                    final authProvider =
-                        Provider.of<AuthProvider>(context, listen: false);
-                    final userId = authProvider.credentials?.userId ?? '';
-                    await provider.loadPreset(preset.id, userId);
-                  },
-                ),
-              );
-            }),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// 显示保存预设对话框
-  Future<void> _showSavePresetDialog(
-      BuildContext context, SmartCourseSelectionProvider provider) async {
-    final controller = TextEditingController();
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => ContentDialog(
-        title: const Text('保存预设'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('请输入预设名称：'),
-            const SizedBox(height: 8),
-            TextBox(
-              controller: controller,
-              placeholder: '预设名称',
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          Button(
-            child: const Text('取消'),
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-          ),
-          FilledButton(
-            child: const Text('保存'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true && controller.text.isNotEmpty && mounted) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final userId = authProvider.credentials?.userId ?? '';
-      await provider.savePreset(controller.text, userId);
-    }
-
-    controller.dispose();
+    return _buildPlanTreeView(context, provider);
   }
 
   /// 构建课程表视图

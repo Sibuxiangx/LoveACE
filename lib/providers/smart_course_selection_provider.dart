@@ -155,9 +155,6 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   List<CourseScheduleRecord> get availableCourses =>
       _selectionData?.availableCourses ?? [];
 
-  /// 预设列表
-  List<CourseSelectionPreset> get presets => _selectionData?.presets ?? [];
-
   /// 当前模拟选课的课程（新增的）
   List<String> get currentSelectedCourses =>
       _selectionData?.currentSelectedCourses ?? [];
@@ -169,9 +166,8 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   List<String> get baseScheduleSnapshot =>
       _selectionData?.baseScheduleSnapshot ?? [];
 
-  /// 是否检测到课表变化
+  /// 是否检测到课表变化（内部使用）
   bool _scheduleChanged = false;
-  bool get scheduleChanged => _scheduleChanged;
 
   /// 课表变化详情
   List<String> _addedToSchedule = [];
@@ -258,7 +254,7 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
 
       // 5. 加载学生课表
       if (_selectedTermCode != null) {
-        await _loadStudentSchedule(_selectedTermCode!);
+        await _loadStudentSchedule(_selectedTermCode!, userId);
       }
 
       // 6. 如果没有开课数据或数据为空，自动刷新
@@ -311,7 +307,7 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
 
       // 继续加载学生课表
       if (_selectedTermCode != null) {
-        await _loadStudentSchedule(_selectedTermCode!);
+        await _loadStudentSchedule(_selectedTermCode!, userId);
       }
 
       // 如果没有开课数据或数据为空，自动刷新
@@ -379,8 +375,8 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     }
   }
 
-  /// 加载学生课表并检测变化
-  Future<void> _loadStudentSchedule(String termCode) async {
+  /// 加载学生课表并自动同步变化
+  Future<void> _loadStudentSchedule(String termCode, String userId) async {
     try {
       LoggerService.info('📅 加载学生课表: $termCode');
       final response =
@@ -390,8 +386,8 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
         LoggerService.info(
             '✅ 学生课表加载成功，共 ${_studentSchedule!.courses.length} 门课');
 
-        // 检测课表变化
-        _checkScheduleChanges();
+        // 检测并自动同步课表变化
+        await _checkAndSyncScheduleChanges(userId);
       }
     } catch (e) {
       LoggerService.error('❌ 加载学生课表失败', error: e);
@@ -406,8 +402,9 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
         .toList();
   }
 
-  /// 检测课表变化
-  void _checkScheduleChanges() {
+  /// 检测课表变化并自动同步
+  /// 当原始课表变化时，自动更新快照并清理无效的模拟选课/退课记录
+  Future<void> _checkAndSyncScheduleChanges(String userId) async {
     if (_selectionData == null ||
         _selectionData!.baseScheduleSnapshot.isEmpty) {
       // 没有快照，不需要检测
@@ -432,7 +429,43 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     if (_scheduleChanged) {
       LoggerService.warning(
           '⚠️ 检测到课表变化: 新增 ${_addedToSchedule.length} 门, 移除 ${_removedFromSchedule.length} 门');
+      
+      // 自动同步：更新快照并清理无效记录
+      await _autoSyncScheduleChanges(userId);
     }
+  }
+
+  /// 自动同步课表变化
+  Future<void> _autoSyncScheduleChanges(String userId) async {
+    if (_selectionData == null || _studentSchedule == null) return;
+
+    final currentKeys = _getCurrentScheduleKeys();
+    final currentKeysSet = currentKeys.toSet();
+    
+    // 清理无效的模拟选课记录（已经在实际课表中的课程）
+    final newSelected = _selectionData!.currentSelectedCourses
+        .where((key) => !currentKeysSet.contains(key))
+        .toList();
+    
+    // 清理无效的退课记录（已经不在实际课表中的课程）
+    final newRemoved = _selectionData!.removedCourses
+        .where((key) => currentKeysSet.contains(key))
+        .toList();
+
+    _selectionData = _selectionData!.copyWith(
+      baseScheduleSnapshot: currentKeys,
+      snapshotTime: DateTime.now(),
+      currentSelectedCourses: newSelected,
+      removedCourses: newRemoved,
+    );
+
+    // 清除变化标记
+    _scheduleChanged = false;
+    _addedToSchedule = [];
+    _removedFromSchedule = [];
+
+    await _savePersistedData(userId);
+    LoggerService.info('✅ 已自动同步课表变化，新基准共 ${currentKeys.length} 门课');
   }
 
   /// 切换学期
@@ -444,15 +477,15 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 加载新学期的课表
-      await _loadStudentSchedule(termCode);
-
       // 更新或创建选课数据（确保 userId 和 termCode 都匹配）
       if (_selectionData == null || 
           _selectionData!.userId != userId || 
           _selectionData!.termCode != termCode) {
         _selectionData = SmartCourseSelectionData.empty(userId, termCode);
       }
+
+      // 加载新学期的课表
+      await _loadStudentSchedule(termCode, userId);
 
       // 自动刷新开课数据
       await _refreshCourseDataInternal(userId);
@@ -715,46 +748,6 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     LoggerService.info('📸 课表快照已初始化，共 ${currentKeys.length} 门课');
   }
 
-  /// 接受课表变化（将当前课表作为新的基准）
-  Future<void> acceptScheduleChanges(String userId) async {
-    if (_selectionData == null || _studentSchedule == null) return;
-
-    final currentKeys = _getCurrentScheduleKeys();
-    final newSelected =
-        List<String>.from(_selectionData!.currentSelectedCourses);
-    final newRemoved = List<String>.from(_selectionData!.removedCourses);
-
-    // 处理移除的课程：如果用户之前手动选了，需要从 currentSelectedCourses 中移除
-    for (final key in _removedFromSchedule) {
-      newSelected.remove(key);
-      newRemoved.remove(key);
-    }
-
-    _selectionData = _selectionData!.copyWith(
-      baseScheduleSnapshot: currentKeys,
-      snapshotTime: DateTime.now(),
-      currentSelectedCourses: newSelected,
-      removedCourses: newRemoved,
-    );
-
-    // 清除变化标记
-    _scheduleChanged = false;
-    _addedToSchedule = [];
-    _removedFromSchedule = [];
-
-    await _savePersistedData(userId);
-    notifyListeners();
-    LoggerService.info('✅ 已接受课表变化，新基准共 ${currentKeys.length} 门课');
-  }
-
-  /// 忽略课表变化（保持用户的选课状态）
-  void ignoreScheduleChanges() {
-    _scheduleChanged = false;
-    // 不清除 _addedToSchedule 和 _removedFromSchedule，下次加载时会重新检测
-    notifyListeners();
-    LoggerService.info('🙈 已忽略课表变化');
-  }
-
   /// 重置选课（清除所有模拟选课/退课，恢复到当前课表状态）
   Future<void> resetSelection(String userId) async {
     await initializeScheduleSnapshot(userId);
@@ -924,82 +917,6 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
         .toList();
     campuses.sort();
     return campuses;
-  }
-
-  /// 保存预设
-  Future<void> savePreset(String name, String userId) async {
-    if (_selectionData == null || _selectedTermCode == null) return;
-
-    final preset = CourseSelectionPreset.create(
-      name: name,
-      termCode: _selectedTermCode!,
-      selectedCourses: List.from(_selectionData!.currentSelectedCourses),
-    );
-
-    final newPresets = List<CourseSelectionPreset>.from(_selectionData!.presets);
-    newPresets.add(preset);
-
-    _selectionData = _selectionData!.copyWith(presets: newPresets);
-    await _savePersistedData(userId);
-    notifyListeners();
-
-    LoggerService.info('💾 保存预设: $name');
-  }
-
-  /// 加载预设
-  Future<void> loadPreset(String presetId, String userId) async {
-    if (_selectionData == null) return;
-
-    final preset = _selectionData!.presets.firstWhere(
-      (p) => p.id == presetId,
-      orElse: () => throw Exception('预设不存在'),
-    );
-
-    _selectionData = _selectionData!.copyWith(
-      currentPresetId: presetId,
-      currentSelectedCourses: List.from(preset.selectedCourses),
-    );
-
-    await _savePersistedData(userId);
-    notifyListeners();
-
-    LoggerService.info('📂 加载预设: ${preset.name}');
-  }
-
-  /// 删除预设
-  Future<void> deletePreset(String presetId, String userId) async {
-    if (_selectionData == null) return;
-
-    final newPresets = _selectionData!.presets.where((p) => p.id != presetId).toList();
-
-    _selectionData = _selectionData!.copyWith(
-      presets: newPresets,
-      currentPresetId: _selectionData!.currentPresetId == presetId
-          ? null
-          : _selectionData!.currentPresetId,
-    );
-
-    await _savePersistedData(userId);
-    notifyListeners();
-
-    LoggerService.info('🗑️ 删除预设: $presetId');
-  }
-
-  /// 新建选课表（重置到当前课表状态）
-  Future<void> newSelectionTable(String userId) async {
-    if (_selectionData == null) return;
-
-    // 重新初始化快照，清除所有模拟选课/退课
-    await initializeScheduleSnapshot(userId);
-
-    _selectionData = _selectionData!.copyWith(
-      currentPresetId: null,
-    );
-
-    await _savePersistedData(userId);
-    notifyListeners();
-
-    LoggerService.info('🆕 新建选课表（已重置到当前课表状态）');
   }
 
   /// 检查课程是否与当前课表冲突
