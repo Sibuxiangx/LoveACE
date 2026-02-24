@@ -1,3 +1,4 @@
+from email import message
 import secrets
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -74,7 +75,7 @@ async def login(
             if user is None:
                 logger.info(f"用户不存在: {login_request.userid}")
                 return LoginErrorToCode().invalid_credentials.to_json_response(
-                    logger.trace_id
+                    logger.trace_id,message="用户不存在"
                 )
             # 检查是否在冷却时间内
             query = select(LoginCoolDown).where(LoginCoolDown.userid == user.userid)

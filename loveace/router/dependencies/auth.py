@@ -37,7 +37,8 @@ async def get_user_by_token(
             if user_token is None:
                 logger.error("无效的认证令牌")
                 raise ProtectRouterErrorToCode().invalid_authentication.to_http_exception(
-                    logger.trace_id
+                    logger.trace_id,
+                    message="无效的认证令牌",
                 )
             query = select(ACEUser).where(ACEUser.userid == user_token.user_id)
             result = await session.execute(query)
