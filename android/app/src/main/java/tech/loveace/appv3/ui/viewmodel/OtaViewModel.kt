@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.service.DownloadProgress
 import tech.loveace.appv3.service.OtaService
 import tech.loveace.appv3.service.UpdateInfo
@@ -34,6 +35,11 @@ class OtaViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _state.value = _state.value.copy(checking = true, noUpdateMessage = null)
             val info = OtaService.checkForUpdate(getApplication())
+            Analytics.trackOtaCheck(
+                result = if (info == null) "up_to_date" else "update_available",
+                currentVersion = info?.currentVersion ?: OtaService.getCurrentVersion(getApplication()),
+                latestVersion = info?.latestVersion,
+            )
             _state.value = _state.value.copy(
                 checking = false,
                 updateInfo = info,
@@ -55,6 +61,7 @@ class OtaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startDownload() {
         val info = _state.value.updateInfo ?: return
+        Analytics.trackOtaUpdateClick(info.currentVersion, info.latestVersion)
         _state.value = _state.value.copy(
             dialogMode = OtaDialogMode.DOWNLOADING,
             downloadProgress = 0f,

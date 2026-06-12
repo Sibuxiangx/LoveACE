@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.data.local.CredentialStore
 import tech.loveace.appv3.data.local.ScheduleStore
 import tech.loveace.appv3.data.model.UserCredentials
@@ -88,6 +89,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         ecResult.failNetworkError -> "网络连接失败"
                         else -> "VPN 登录失败"
                     }
+                    Analytics.trackLoginFailed(userId, msg)
                     _uiState.value = AuthUiState(state = AuthState.Error, errorMessage = msg)
                     return@launch
                 }
@@ -100,6 +102,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         uaapResult.failNetworkError -> "网络连接失败"
                         else -> "UAAP 登录失败"
                     }
+                    Analytics.trackLoginFailed(userId, msg)
                     _uiState.value = AuthUiState(state = AuthState.Error, errorMessage = msg)
                     return@launch
                 }
@@ -114,9 +117,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 credentialStore.saveRemembered(UserCredentials(userId, ecPassword, password))
 
                 _uiState.value = AuthUiState(state = AuthState.Authenticated, userId = userId)
+                Analytics.trackLoginSuccess(userId)
                 Log.i(TAG, "✅ Login successful: $userId")
             } catch (e: Exception) {
                 Log.e(TAG, "Login error", e)
+                Analytics.trackLoginFailed(userId, "登录异常")
                 _uiState.value = AuthUiState(state = AuthState.Error, errorMessage = "登录异常: ${e.message}")
             }
         }
@@ -138,12 +143,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
                 val ecResult = conn.ecLogin()
                 if (!ecResult.success) {
+                    Analytics.trackLoginFailed(creds.userId, "VPN 登录失败")
                     _uiState.value = AuthUiState(state = AuthState.Unauthenticated)
                     return@launch
                 }
 
                 val uaapResult = conn.uaapLogin()
                 if (!uaapResult.success) {
+                    Analytics.trackLoginFailed(creds.userId, "UAAP 登录失败")
                     _uiState.value = AuthUiState(state = AuthState.Unauthenticated)
                     return@launch
                 }
@@ -157,9 +164,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 credentialStore.save(creds)
 
                 _uiState.value = AuthUiState(state = AuthState.Authenticated, userId = creds.userId)
+                Analytics.trackLoginSuccess(creds.userId)
                 Log.i(TAG, "✅ Session restored: ${creds.userId}")
             } catch (e: Exception) {
                 Log.e(TAG, "Session restore failed", e)
+                Analytics.trackLoginFailed(creds.userId, "会话恢复失败")
                 _uiState.value = AuthUiState(state = AuthState.Unauthenticated)
             }
         }
@@ -173,6 +182,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             connection?.close()
             clearServices()
             credentialStore.clear() // 只清 session 凭证，保留 remembered 用于快速登录
+            Analytics.clearUser()
             _uiState.value = AuthUiState(state = AuthState.Unauthenticated)
             Log.i(TAG, "👋 Logged out")
         }
@@ -190,6 +200,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSavedCredentials() {
         credentialStore.clear()
         credentialStore.clearRemembered()
+        Analytics.clearUser()
     }
 
     // ==================== Heartbeat Keepalive ====================
@@ -229,6 +240,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun handleSessionExpired() {
         if (isReconnecting) return
         isReconnecting = true
+        Analytics.trackSessionExpired("session_expired")
         try {
             val conn = connection ?: return
             Log.i(TAG, "🔄 Auto-reconnecting...")
@@ -238,9 +250,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 wireSessionExpiredHandler(conn)
                 // Re-init services with refreshed connection
                 initServices(conn)
+                Analytics.trackSessionReconnectSuccess()
                 Log.i(TAG, "✅ Auto-reconnect succeeded")
             } else {
                 Log.e(TAG, "❌ Auto-reconnect failed, user needs to re-login")
+                Analytics.trackSessionReconnectFailed()
                 stopHeartbeat()
                 _uiState.value = AuthUiState(
                     state = AuthState.Error,

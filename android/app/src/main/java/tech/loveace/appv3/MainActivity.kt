@@ -29,6 +29,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.ui.navigation.*
 import tech.loveace.appv3.ui.screen.*
 import tech.loveace.appv3.ui.screen.landscape.LandscapeLoginScreen
@@ -49,6 +50,8 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         AppLogger.init(this)
+        Analytics.init(this)
+        Analytics.trackAppStart(if (intent?.getStringExtra("navigate_to") != null) "widget" else "launcher")
         handleWidgetIntent(intent)
 
         // 请求设备支持的最高刷新率（120Hz / 90Hz 等）

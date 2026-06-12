@@ -8,6 +8,11 @@ android {
     namespace = "tech.loveace.appv3"
     compileSdk = 36
 
+    fun buildConfigString(value: String): String {
+        val escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
+        return "\"$escaped\""
+    }
+
     val releaseStoreFile = System.getenv("ANDROID_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
     val releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() }
     val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")?.takeIf { it.isNotBlank() }
@@ -32,9 +37,13 @@ android {
         applicationId = "tech.loveace.appv3"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10112
-        versionName = "1.1.12"
+        versionCode = 10113
+        versionName = "1.1.13"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "ANALYTICS_ENDPOINT", buildConfigString("https://analyst-api.linota.cn/v1/events"))
+        buildConfigField("String", "ANALYTICS_API_KEY", buildConfigString(System.getenv("ANALYTICS_API_KEY") ?: ""))
+        buildConfigField("String", "ANALYTICS_SIGNING_SECRET", buildConfigString(System.getenv("ANALYTICS_SIGNING_SECRET") ?: ""))
+        buildConfigField("String", "ANALYTICS_HASH_SALT", buildConfigString(System.getenv("ANALYTICS_HASH_SALT") ?: ""))
     }
 
     buildTypes {
@@ -55,6 +64,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

@@ -115,6 +115,8 @@ private fun QuickLoginView(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(48.dp))
+        TelemetryNotice()
+        Spacer(Modifier.height(16.dp))
 
         if (isLoading) {
             CircularWavyProgressIndicator(modifier = Modifier.size(64.dp))
@@ -224,6 +226,10 @@ private fun ManualLoginView(
 
         Spacer(Modifier.height(24.dp))
 
+        TelemetryNotice()
+
+        Spacer(Modifier.height(16.dp))
+
         val canLogin = !isLoading && userId.isNotBlank() && ecPassword.isNotBlank() && password.isNotBlank()
         Button(
             onClick = { onLogin(userId, ecPassword, password) },
@@ -269,6 +275,16 @@ private fun ManualLoginView(
     }
 
     if (showPasswordHelp) { PasswordHelpDialog(onDismiss = { showPasswordHelp = false }) }
+}
+
+@Composable
+private fun TelemetryNotice() {
+    Text(
+        "登录即表示同意上传匿名使用统计（本地随机 ID、学号前四位与加盐哈希、版本和基础设备信息），不会上传密码、完整学号或业务内容。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable

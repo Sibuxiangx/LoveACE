@@ -28,6 +28,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import tech.loveace.appv3.R
+import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.ui.navigation.*
 import tech.loveace.appv3.ui.screen.landscape.LandscapeShell
 import tech.loveace.appv3.ui.theme.ThemeViewModel
@@ -107,6 +108,10 @@ private fun PortraitShell(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val pillShape = RoundedCornerShape(50)
+
+    LaunchedEffect(currentRoute) {
+        currentRoute?.substringAfterLast('.')?.let { Analytics.trackScreen(it) }
+    }
 
     Box(Modifier.fillMaxSize()) {
         NavHost(

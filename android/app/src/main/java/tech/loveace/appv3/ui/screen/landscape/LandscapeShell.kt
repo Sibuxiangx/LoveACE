@@ -24,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import tech.loveace.appv3.R
+import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.ui.theme.ThemeViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.ProfileViewModel
@@ -57,13 +58,6 @@ fun LandscapeShell(
         }
     }
 
-    // 设置用户隔离存储
-    LaunchedEffect(authState.userId) {
-        if (authState.userId.isNotEmpty()) {
-            profileViewModel.setActiveUserId(authState.userId)
-        }
-    }
-
     val navItems = listOf(
         LandscapeNavItem("首页", Icons.Filled.School, Icons.Outlined.School, "主要"),
         LandscapeNavItem("爱安财", Icons.Filled.VolunteerActivism, Icons.Outlined.VolunteerActivism),
@@ -80,6 +74,17 @@ fun LandscapeShell(
         LandscapeNavItem("劳动俱乐部", Icons.Filled.Handshake, Icons.Outlined.Handshake),
         LandscapeNavItem("我的", Icons.Filled.Person, Icons.Outlined.Person, "设置"),
     )
+
+    LaunchedEffect(selectedIndex) {
+        Analytics.trackScreen(navItems.getOrNull(selectedIndex)?.label ?: "unknown")
+    }
+
+    // 设置用户隔离存储
+    LaunchedEffect(authState.userId) {
+        if (authState.userId.isNotEmpty()) {
+            profileViewModel.setActiveUserId(authState.userId)
+        }
+    }
 
     PermanentNavigationDrawer(
         drawerContent = {
