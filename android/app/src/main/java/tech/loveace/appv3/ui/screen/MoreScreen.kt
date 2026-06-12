@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.ui.components.SectionTitle
 import tech.loveace.appv3.ui.navigation.*
 
@@ -41,7 +42,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "查看各学期课程成绩",
                     iconColor = MaterialTheme.colorScheme.primary,
                     iconBg = MaterialTheme.colorScheme.primaryContainer,
-                    onClick = { onNavigateToDetail(ScoresRoute) },
+                    onClick = { navigateFeature("成绩查询", ScoresRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -50,7 +51,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "查看考试时间和地点",
                     iconColor = MaterialTheme.colorScheme.secondary,
                     iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                    onClick = { onNavigateToDetail(ExamRoute) },
+                    onClick = { navigateFeature("考试安排", ExamRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -59,7 +60,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "查看学期课程安排",
                     iconColor = MaterialTheme.colorScheme.secondary,
                     iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                    onClick = { onNavigateToDetail(ScheduleRoute) },
+                    onClick = { navigateFeature("课表查询", ScheduleRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -68,7 +69,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "查看专业培养计划完成情况",
                     iconColor = MaterialTheme.colorScheme.tertiary,
                     iconBg = MaterialTheme.colorScheme.tertiaryContainer,
-                    onClick = { onNavigateToDetail(PlanRoute) },
+                    onClick = { navigateFeature("培养方案", PlanRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -77,7 +78,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "批量完成教务系统教师评价",
                     iconColor = MaterialTheme.colorScheme.primary,
                     iconBg = MaterialTheme.colorScheme.primaryContainer,
-                    onClick = { onNavigateToDetail(TeacherEvaluationRoute) },
+                    onClick = { navigateFeature("自动教师评价", TeacherEvaluationRoute, onNavigateToDetail) },
                 )
             }
 
@@ -90,7 +91,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "报修和查看维修进度",
                     iconColor = MaterialTheme.colorScheme.tertiary,
                     iconBg = MaterialTheme.colorScheme.tertiaryContainer,
-                    onClick = { onNavigateToDetail(RepairRoute) },
+                    onClick = { navigateFeature("零星维修", RepairRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -99,7 +100,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "余额查询和消费记录",
                     iconColor = MaterialTheme.colorScheme.primary,
                     iconBg = MaterialTheme.colorScheme.primaryContainer,
-                    onClick = { onNavigateToDetail(YKTRoute) },
+                    onClick = { navigateFeature("一卡通", YKTRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -108,7 +109,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "宿舍电费余额和用电记录",
                     iconColor = MaterialTheme.colorScheme.secondary,
                     iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                    onClick = { onNavigateToDetail(ElectricityRoute) },
+                    onClick = { navigateFeature("电费查询", ElectricityRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -117,7 +118,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "蓝牙开门和门卡管理",
                     iconColor = MaterialTheme.colorScheme.tertiary,
                     iconBg = MaterialTheme.colorScheme.tertiaryContainer,
-                    onClick = { onNavigateToDetail(DoorCardRoute) },
+                    onClick = { navigateFeature("宿舍门卡", DoorCardRoute, onNavigateToDetail) },
                 )
             }
 
@@ -131,7 +132,7 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "学科竞赛获奖和学分",
                     iconColor = MaterialTheme.colorScheme.tertiary,
                     iconBg = MaterialTheme.colorScheme.tertiaryContainer,
-                    onClick = { onNavigateToDetail(CompetitionRoute) },
+                    onClick = { navigateFeature("竞赛信息", CompetitionRoute, onNavigateToDetail) },
                 )
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 FeatureListItem(
@@ -140,11 +141,16 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     subtitle = "劳动教育活动和签到",
                     iconColor = MaterialTheme.colorScheme.primary,
                     iconBg = MaterialTheme.colorScheme.primaryContainer,
-                    onClick = { onNavigateToDetail(LaborClubRoute) },
+                    onClick = { navigateFeature("劳动俱乐部", LaborClubRoute, onNavigateToDetail) },
                 )
             }
         }
     }
+}
+
+private fun navigateFeature(feature: String, route: Any, onNavigateToDetail: (Any) -> Unit) {
+    Analytics.trackFeature(feature)
+    onNavigateToDetail(route)
 }
 
 /** 分组卡片容器 */

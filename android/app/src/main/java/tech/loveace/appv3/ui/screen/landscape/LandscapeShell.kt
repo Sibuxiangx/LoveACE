@@ -35,6 +35,7 @@ data class LandscapeNavItem(
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
     val section: String = "", // 分组标题
+    val trackFeature: Boolean = false,
 )
 
 /** 横屏主 Shell：左侧固定导航栏 + 右侧内容区 */
@@ -61,17 +62,17 @@ fun LandscapeShell(
     val navItems = listOf(
         LandscapeNavItem("首页", Icons.Filled.School, Icons.Outlined.School, "主要"),
         LandscapeNavItem("爱安财", Icons.Filled.VolunteerActivism, Icons.Outlined.VolunteerActivism),
-        LandscapeNavItem("成绩查询", Icons.Filled.Grade, Icons.Outlined.Grade, "教务服务"),
-        LandscapeNavItem("考试安排", Icons.Filled.EventNote, Icons.Outlined.EventNote),
-        LandscapeNavItem("课程表", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-        LandscapeNavItem("培养方案", Icons.Filled.MenuBook, Icons.Outlined.MenuBook),
-        LandscapeNavItem("自动评教", Icons.Filled.RateReview, Icons.Outlined.RateReview),
-        LandscapeNavItem("一卡通", Icons.Filled.CreditCard, Icons.Outlined.CreditCard, "校园生活"),
-        LandscapeNavItem("电费查询", Icons.Filled.ElectricBolt, Icons.Outlined.ElectricBolt),
-        LandscapeNavItem("零星维修", Icons.Filled.Build, Icons.Outlined.Build),
-        LandscapeNavItem("宿舍门卡", Icons.Filled.Key, Icons.Outlined.Key),
-        LandscapeNavItem("竞赛信息", Icons.Filled.EmojiEvents, Icons.Outlined.EmojiEvents, "素质拓展"),
-        LandscapeNavItem("劳动俱乐部", Icons.Filled.Handshake, Icons.Outlined.Handshake),
+        LandscapeNavItem("成绩查询", Icons.Filled.Grade, Icons.Outlined.Grade, "教务服务", trackFeature = true),
+        LandscapeNavItem("考试安排", Icons.Filled.EventNote, Icons.Outlined.EventNote, trackFeature = true),
+        LandscapeNavItem("课程表", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth, trackFeature = true),
+        LandscapeNavItem("培养方案", Icons.Filled.MenuBook, Icons.Outlined.MenuBook, trackFeature = true),
+        LandscapeNavItem("自动评教", Icons.Filled.RateReview, Icons.Outlined.RateReview, trackFeature = true),
+        LandscapeNavItem("一卡通", Icons.Filled.CreditCard, Icons.Outlined.CreditCard, "校园生活", trackFeature = true),
+        LandscapeNavItem("电费查询", Icons.Filled.ElectricBolt, Icons.Outlined.ElectricBolt, trackFeature = true),
+        LandscapeNavItem("零星维修", Icons.Filled.Build, Icons.Outlined.Build, trackFeature = true),
+        LandscapeNavItem("宿舍门卡", Icons.Filled.Key, Icons.Outlined.Key, trackFeature = true),
+        LandscapeNavItem("竞赛信息", Icons.Filled.EmojiEvents, Icons.Outlined.EmojiEvents, "素质拓展", trackFeature = true),
+        LandscapeNavItem("劳动俱乐部", Icons.Filled.Handshake, Icons.Outlined.Handshake, trackFeature = true),
         LandscapeNavItem("我的", Icons.Filled.Person, Icons.Outlined.Person, "设置"),
     )
 
@@ -150,7 +151,10 @@ fun LandscapeShell(
                                 )
                             },
                             selected = selectedIndex == index,
-                            onClick = { selectedIndex = index },
+                            onClick = {
+                                if (item.trackFeature) Analytics.trackFeature(item.label)
+                                selectedIndex = index
+                            },
                             modifier = Modifier.padding(horizontal = 12.dp),
                         )
                     }

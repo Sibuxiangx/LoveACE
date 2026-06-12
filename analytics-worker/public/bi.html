@@ -93,7 +93,7 @@
       <section class="grid lower">
         <article class="card panel"><div class="panel-head"><h2>事件分布</h2><span class="stamp">EVENT_NAME</span></div><div id="events"></div></article>
         <article class="card panel"><div class="panel-head"><h2>平台分布</h2><span class="stamp">PLATFORM</span></div><div id="platforms"></div></article>
-        <article class="card panel"><div class="panel-head"><h2>年级前缀</h2><span class="stamp">GRADE_PREFIX</span></div><div id="grades"></div><div class="privacy">ONLY_PREFIX: first 4 digits</div></article>
+        <article class="card panel"><div class="panel-head"><h2>年级前缀</h2><span class="stamp">DISTINCT_USERS</span></div><div id="grades"></div><div class="privacy">DATA_RULE: COUNT(DISTINCT student_hash) GROUP BY grade_prefix</div></article>
       </section>
       <section class="grid lower">
         <article class="card panel"><div class="panel-head"><h2>App 版本</h2><span class="stamp">APP_VERSION</span></div><div id="versions"></div></article>

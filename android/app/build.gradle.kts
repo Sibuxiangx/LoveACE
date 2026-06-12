@@ -37,8 +37,8 @@ android {
         applicationId = "tech.loveace.appv3"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10113
-        versionName = "1.1.13"
+        versionCode = 10114
+        versionName = "1.1.14"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ANALYTICS_ENDPOINT", buildConfigString("https://analyst-api.linota.cn/v1/events"))
         buildConfigField("String", "ANALYTICS_API_KEY", buildConfigString(System.getenv("ANALYTICS_API_KEY") ?: ""))

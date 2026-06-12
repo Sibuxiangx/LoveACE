@@ -78,6 +78,10 @@ object Analytics {
 
     fun trackScreen(screen: String) = track("screen_view", mapOf("screen" to screen))
 
+    fun trackFeature(feature: String, action: String = "open") {
+        track("feature_action", mapOf("feature" to feature, "action" to action))
+    }
+
     fun trackOtaCheck(result: String, currentVersion: String, latestVersion: String? = null) {
         val properties = mutableMapOf<String, Any?>(
             "result" to result,
