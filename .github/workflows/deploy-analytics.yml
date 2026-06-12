@@ -26,6 +26,42 @@ jobs:
           docker pull postgres:16-alpine
           docker save loveace-analytics-api:latest postgres:16-alpine | gzip > analytics-images.tar.gz
 
+      - name: Install coscli
+        run: |
+          curl -fsSL -o coscli https://cosbrowser.cloud.tencent.com/software/coscli/coscli-linux-amd64
+          chmod 755 coscli
+          ./coscli --version
+
+      - name: Configure COS
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ vars.COS_BUCKET }}
+          COS_REGION: ${{ vars.COS_REGION }}
+        run: |
+          cat > cos.yaml <<EOF
+          cos:
+            base:
+              secretid: $COS_SECRET_ID
+              secretkey: $COS_SECRET_KEY
+              sessiontoken: ""
+              protocol: https
+            buckets:
+            - name: $COS_BUCKET
+              alias: analytics
+              region: $COS_REGION
+              endpoint: cos.$COS_REGION.myqcloud.com
+              ofs: false
+          EOF
+
+      - name: Upload image archive to COS
+        env:
+          ARTIFACT_KEY: ${{ vars.ANALYTICS_ARTIFACT_KEY }}
+        run: |
+          ./coscli cp analytics-images.tar.gz "cos://analytics/$ARTIFACT_KEY" -c cos.yaml
+          SIGNED_URL=$(./coscli signurl "cos://analytics/$ARTIFACT_KEY" --time 1800 --simple-output -c cos.yaml)
+          printf 'SIGNED_URL=%s\n' "$SIGNED_URL" >> "$GITHUB_ENV"
+
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.ANALYTICS_DEPLOY_SSH_KEY }}
@@ -67,9 +103,8 @@ jobs:
         run: |
           ssh -i ~/.ssh/loveace_analytics_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$SERVER_PATH'"
           rsync -az --delete -e "ssh -i ~/.ssh/loveace_analytics_deploy -p $SSH_PORT" .deploy/analytics-server/ "$SSH_USER@$SSH_HOST:$SERVER_PATH/"
-          scp -i ~/.ssh/loveace_analytics_deploy -P "$SSH_PORT" analytics-images.tar.gz "$SSH_USER@$SSH_HOST:$SERVER_PATH/analytics-images.tar.gz"
 
-      - name: Load images and restart services
+      - name: Download images on server and restart services
         env:
           SSH_HOST: ${{ vars.ANALYTICS_SERVER_HOST }}
           SSH_USER: ${{ vars.ANALYTICS_SERVER_USER }}
@@ -77,7 +112,7 @@ jobs:
           SERVER_PATH: ${{ vars.ANALYTICS_SERVER_PATH }}
         run: |
           ssh -i ~/.ssh/loveace_analytics_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "cd '$SERVER_PATH' && gzip -dc analytics-images.tar.gz | docker load && docker compose up -d --no-build && rm -f analytics-images.tar.gz"
+            "cd '$SERVER_PATH' && curl --fail --location --retry 3 --connect-timeout 20 --output analytics-images.tar.gz '$SIGNED_URL' && gzip -dc analytics-images.tar.gz | docker load && docker compose up -d --no-build && rm -f analytics-images.tar.gz"
 
       - name: Health check
         env:
@@ -88,3 +123,10 @@ jobs:
         run: |
           ssh -i ~/.ssh/loveace_analytics_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             "curl --fail --silent --show-error 'http://127.0.0.1:$SERVER_PORT/healthz'"
+
+      - name: Delete image archive from COS
+        if: success()
+        env:
+          ARTIFACT_KEY: ${{ vars.ANALYTICS_ARTIFACT_KEY }}
+        run: |
+          ./coscli rm "cos://analytics/$ARTIFACT_KEY" --force -c cos.yaml
