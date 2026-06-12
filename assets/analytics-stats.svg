@@ -24,39 +24,68 @@
   <g>
     <rect x="52" y="124" width="140" height="72" rx="16" fill="#7c3aed" opacity="0.10"/>
     <text x="70" y="152" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">总事件</text>
-    <text x="70" y="182" fill="#7c3aed" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">0</text>
+    <text x="70" y="182" fill="#7c3aed" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">42</text>
   </g>
   <g>
     <rect x="224" y="124" width="140" height="72" rx="16" fill="#0891b2" opacity="0.10"/>
     <text x="242" y="152" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">客户端</text>
-    <text x="242" y="182" fill="#0891b2" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">0</text>
+    <text x="242" y="182" fill="#0891b2" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">7</text>
   </g>
   <g>
     <rect x="396" y="124" width="140" height="72" rx="16" fill="#db2777" opacity="0.10"/>
     <text x="414" y="152" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">匿名用户</text>
-    <text x="414" y="182" fill="#db2777" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">0</text>
+    <text x="414" y="182" fill="#db2777" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">6</text>
   </g>
   <g>
     <rect x="568" y="124" width="140" height="72" rx="16" fill="#16a34a" opacity="0.10"/>
     <text x="586" y="152" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">近 24 小时</text>
-    <text x="586" y="182" fill="#16a34a" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">0</text>
+    <text x="586" y="182" fill="#16a34a" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="28" font-weight="800">42</text>
   </g>
 
   <text x="52" y="226" fill="#111827" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="700">事件分布</text>
   <g>
-    <text x="52" y="246" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">暂无事件</text>
+    <text x="52" y="246" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">screen_view</text>
     <rect x="190" y="236" width="150" height="8" rx="4" fill="#eef2ff"/>
-    <rect x="190" y="236" width="0" height="8" rx="4" fill="url(#accent)"/>
-    <text x="352" y="246" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" text-anchor="end">0</text>
+    <rect x="190" y="236" width="150" height="8" rx="4" fill="url(#accent)"/>
+    <text x="352" y="246" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" text-anchor="end">23</text>
+  </g>
+<g>
+    <text x="52" y="264" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">app_start</text>
+    <rect x="190" y="254" width="150" height="8" rx="4" fill="#eef2ff"/>
+    <rect x="190" y="254" width="39" height="8" rx="4" fill="url(#accent)"/>
+    <text x="352" y="264" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" text-anchor="end">6</text>
+  </g>
+<g>
+    <text x="52" y="282" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">login_success</text>
+    <rect x="190" y="272" width="150" height="8" rx="4" fill="#eef2ff"/>
+    <rect x="190" y="272" width="33" height="8" rx="4" fill="url(#accent)"/>
+    <text x="352" y="282" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" text-anchor="end">5</text>
+  </g>
+<g>
+    <text x="52" y="300" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">ota_check</text>
+    <rect x="190" y="290" width="150" height="8" rx="4" fill="#eef2ff"/>
+    <rect x="190" y="290" width="33" height="8" rx="4" fill="url(#accent)"/>
+    <text x="352" y="300" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" text-anchor="end">5</text>
+  </g>
+<g>
+    <text x="52" y="318" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">session_expired</text>
+    <rect x="190" y="308" width="150" height="8" rx="4" fill="#eef2ff"/>
+    <rect x="190" y="308" width="13" height="8" rx="4" fill="url(#accent)"/>
+    <text x="352" y="318" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" text-anchor="end">2</text>
   </g>
 
   <text x="432" y="226" fill="#111827" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="700">版本概览</text>
   <g>
-    <text x="432" y="246" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="600">v暂无版本</text>
-    <text x="520" y="246" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">客户端 0</text>
-    <text x="622" y="246" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">事件 0</text>
+    <text x="432" y="246" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="600">v1.1.13</text>
+    <text x="520" y="246" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">客户端 6</text>
+    <text x="622" y="246" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">事件 41</text>
+  </g>
+<g>
+    <text x="432" y="270" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="600">vdiagnostic</text>
+    <text x="520" y="270" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">客户端 1</text>
+    <text x="622" y="270" fill="#6b7280" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">事件 1</text>
   </g>
 
-  <text x="52" y="320" fill="#9ca3af" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">最近事件：暂无数据</text>
-  <text x="520" y="320" fill="#9ca3af" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">更新：2026-06-12 07:04:45 UTC</text>
+  <text x="52" y="320" fill="#9ca3af" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">最近事件：2026-06-12 07:24:00 UTC</text>
+  <text x="520" y="320" fill="#9ca3af" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12">更新：2026-06-12 07:24:22 UTC</text>
 </svg>
