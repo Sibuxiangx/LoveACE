@@ -32,8 +32,8 @@ android {
         applicationId = "tech.loveace.appv3"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10111
-        versionName = "1.1.11"
+        versionCode = 10112
+        versionName = "1.1.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

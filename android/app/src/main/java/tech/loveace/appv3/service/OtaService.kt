@@ -19,7 +19,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 private const val TAG = "OtaService"
-private const val MANIFEST_URL = "https://release-oss.loveace.tech/loveace/manifest.json"
+private const val MANIFEST_URL = "https://loveace.linota.cn/loveace/manifest.json"
 
 private val json = Json { ignoreUnknownKeys = true }
 
