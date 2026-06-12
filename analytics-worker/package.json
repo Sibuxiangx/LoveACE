@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "check": "tsc --noEmit",
-    "stats:card": "node scripts/generate-stats-card.mjs"
+    "check": "tsc --noEmit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251212.0",

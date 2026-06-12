@@ -7,6 +7,10 @@ routes = [
   { pattern = "analyst-api.loveace.top", custom_domain = true }
 ]
 
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
 [vars]
 MAX_BODY_BYTES = "32768"
 MAX_EVENTS_PER_REQUEST = "50"

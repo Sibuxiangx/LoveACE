@@ -5,6 +5,7 @@
 ## 接口
 
 - `GET /healthz`
+- `GET /bi`
 - `POST /v1/events`
 
 请求 `/v1/events` 时必须带上以下鉴权头：
@@ -28,6 +29,6 @@ HMAC_SHA256(ANALYTICS_SIGNING_SECRET, timestamp + "." + nonce + "." + sha256(raw
 - 不接收成绩、课表、一卡通消费、门禁、评教等具体业务内容。
 - 遥测不可用时客户端会静默忽略，不影响正常使用。
 
-## 统计卡片
+## 匿名统计 BI
 
-仓库根目录的 `assets/analytics-stats.svg` 由 `.github/workflows/update-analytics-stats.yml` 生成。该工作流会定时或手动读取 D1 的聚合统计，只提交 SVG 汇总卡片，不输出原始事件数据。
+`/bi` 会实时读取 D1 的聚合统计并渲染 Worker 托管的只读 BI 页面。页面展示事件、版本、平台、年级前缀、功能/页面、登录与 OTA 的汇总指标，不展示原始事件、明文学号、`client_id`、`student_hash`、IP 或 User-Agent 明细。

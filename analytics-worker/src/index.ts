@@ -1,5 +1,6 @@
 interface Env {
   DB: D1Database;
+  ASSETS: Fetcher;
   ANALYTICS_API_KEY: string;
   ANALYTICS_SIGNING_SECRET: string;
   ANALYTICS_IP_HASH_SALT: string;
@@ -26,6 +27,45 @@ interface EventsIn {
   grade_prefix?: string | null;
   student_hash?: string | null;
   events: EventIn[];
+}
+
+interface SummaryRow {
+  total_events: number;
+  clients: number;
+  users: number;
+  events_24h: number;
+  events_7d: number;
+  last_event_at: string | null;
+}
+
+interface CountRow {
+  label: string | null;
+  count: number;
+}
+
+interface VersionRow {
+  app_version: string | null;
+  clients: number;
+  events: number;
+}
+
+interface TrendRow {
+  bucket: string;
+  count: number;
+}
+
+interface AnalyticsDashboardData {
+  summary: SummaryRow;
+  eventDistribution: CountRow[];
+  platformDistribution: CountRow[];
+  gradeDistribution: CountRow[];
+  screenDistribution: CountRow[];
+  featureDistribution: CountRow[];
+  versions: VersionRow[];
+  authStats: CountRow[];
+  otaStats: CountRow[];
+  trend: TrendRow[];
+  generatedAt: string;
 }
 
 const ALLOWED_EVENTS = new Set([
@@ -60,6 +100,15 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/healthz") {
       return json({ ok: true });
+    }
+
+    if (request.method === "GET" && url.pathname === "/bi/data") {
+      const data = await loadDashboardData(env.DB);
+      return json(data, 200, { "Cache-Control": "no-store" });
+    }
+
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/bi")) {
+      return serveDashboard(request, env);
     }
 
     if (request.method === "POST" && url.pathname === "/v1/events") {
@@ -132,6 +181,118 @@ async function ingestEvents(request: Request, env: Env): Promise<Response> {
 
   await env.DB.batch(statements);
   return json({ ok: true, accepted: payload.events.length });
+}
+
+async function serveDashboard(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  url.pathname = "/bi.html";
+  const response = await env.ASSETS.fetch(new Request(url, request));
+  const headers = new Headers(response.headers);
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("Cache-Control", "public, max-age=300");
+  return new Response(response.body, {
+    status: response.status,
+    headers,
+  });
+}
+
+async function loadDashboardData(db: D1Database): Promise<AnalyticsDashboardData> {
+  const [
+    summary,
+    eventDistribution,
+    platformDistribution,
+    gradeDistribution,
+    screenDistribution,
+    featureDistribution,
+    versions,
+    authStats,
+    otaStats,
+    trend,
+  ] = await Promise.all([
+    db.prepare(`
+      SELECT
+        COUNT(*) AS total_events,
+        COUNT(DISTINCT client_id) AS clients,
+        COUNT(DISTINCT student_hash) AS users,
+        SUM(CASE WHEN created_at >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS events_24h,
+        SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) AS events_7d,
+        MAX(created_at) AS last_event_at
+      FROM analytics_events
+    `).first<SummaryRow>(),
+    countRows(db, "event_name", 8),
+    countRows(db, "platform", 4),
+    countRows(db, "grade_prefix", 8, "grade_prefix IS NOT NULL"),
+    jsonPropertyRows(db, "screen", 8),
+    jsonPropertyRows(db, "feature", 8),
+    db.prepare(`
+      SELECT app_version, COUNT(DISTINCT client_id) AS clients, COUNT(*) AS events
+      FROM analytics_events
+      GROUP BY app_version
+      ORDER BY events DESC, app_version DESC
+      LIMIT 6
+    `).all<VersionRow>(),
+    db.prepare(`
+      SELECT event_name AS label, COUNT(*) AS count
+      FROM analytics_events
+      WHERE event_name IN ('login_success', 'login_failed', 'session_expired', 'session_reconnect_success', 'session_reconnect_failed')
+      GROUP BY event_name
+      ORDER BY count DESC, event_name ASC
+    `).all<CountRow>(),
+    db.prepare(`
+      SELECT event_name AS label, COUNT(*) AS count
+      FROM analytics_events
+      WHERE event_name IN ('ota_check', 'ota_update_click')
+      GROUP BY event_name
+      ORDER BY count DESC, event_name ASC
+    `).all<CountRow>(),
+    db.prepare(`
+      SELECT strftime('%Y-%m-%d %H:00', created_at) AS bucket, COUNT(*) AS count
+      FROM analytics_events
+      WHERE created_at >= datetime('now', '-24 hours')
+      GROUP BY bucket
+      ORDER BY bucket ASC
+    `).all<TrendRow>(),
+  ]);
+
+  return {
+    summary: summary ?? emptySummary(),
+    eventDistribution: eventDistribution.results ?? [],
+    platformDistribution: platformDistribution.results ?? [],
+    gradeDistribution: gradeDistribution.results ?? [],
+    screenDistribution: screenDistribution.results ?? [],
+    featureDistribution: featureDistribution.results ?? [],
+    versions: versions.results ?? [],
+    authStats: authStats.results ?? [],
+    otaStats: otaStats.results ?? [],
+    trend: trend.results ?? [],
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function countRows(db: D1Database, column: string, limit: number, where = "1 = 1"): Promise<D1Result<CountRow>> {
+  return db.prepare(`
+    SELECT ${column} AS label, COUNT(*) AS count
+    FROM analytics_events
+    WHERE ${where}
+    GROUP BY ${column}
+    ORDER BY count DESC, ${column} ASC
+    LIMIT ?
+  `).bind(limit).all<CountRow>();
+}
+
+function jsonPropertyRows(db: D1Database, key: string, limit: number): Promise<D1Result<CountRow>> {
+  return db.prepare(`
+    SELECT json_extract(properties, ?) AS label, COUNT(*) AS count
+    FROM analytics_events
+    WHERE json_extract(properties, ?) IS NOT NULL AND json_extract(properties, ?) != ''
+    GROUP BY label
+    ORDER BY count DESC, label ASC
+    LIMIT ?
+  `).bind(`$.${key}`, `$.${key}`, `$.${key}`, limit).all<CountRow>();
+}
+
+function emptySummary(): SummaryRow {
+  return { total_events: 0, clients: 0, users: 0, events_24h: 0, events_7d: 0, last_event_at: null };
 }
 
 async function authenticateRequest(request: Request, body: string, env: Env): Promise<Response | null> {
@@ -256,10 +417,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function json(data: unknown, status = 200): Response {
+function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
+    headers: { "Content-Type": "application/json; charset=utf-8", ...headers },
   });
 }
 

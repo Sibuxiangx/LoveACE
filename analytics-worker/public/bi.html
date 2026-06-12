@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LoveACE Telemetry BI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --shell: #16161a;
+      --paper: #f5f4f1;
+      --card: #fffefa;
+      --ink: #1c1c1e;
+      --muted: #6e6e73;
+      --line: #e7e2dc;
+      --soft: #ece8e1;
+      --orange: #f4511e;
+      --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+      --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 12% 0%, rgba(244, 81, 30, 0.18), transparent 28rem), linear-gradient(135deg, #101014 0%, var(--shell) 48%, #24201d 100%);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+    .shell { width: min(1240px, calc(100vw - 32px)); margin: 24px auto; border: 1px solid rgba(255,255,255,0.12); background: rgba(22,22,26,0.72); box-shadow: 0 24px 80px rgba(0,0,0,0.28); }
+    .topbar { min-height: 72px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #f8f3ed; backdrop-filter: blur(14px); }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand img { width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 0 14px rgba(244,81,30,0.28)); }
+    .brand-title { font-size: 15px; font-weight: 760; letter-spacing: .02em; }
+    .brand-subtitle { margin-top: 2px; color: rgba(248,243,237,.62); font: 12px/1.2 var(--mono); }
+    .live { display: flex; align-items: center; gap: 10px; color: rgba(248,243,237,.78); font: 12px/1 var(--mono); white-space: nowrap; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--orange); box-shadow: 0 0 0 5px rgba(244,81,30,.12), 0 0 18px rgba(244,81,30,.64); animation: pulse 1.9s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: .55; transform: scale(.88); } 50% { opacity: 1; transform: scale(1); } }
+    .workspace { background: var(--paper); padding: 18px; border-top: 1px solid rgba(255,255,255,.12); }
+    .notice { display: flex; justify-content: space-between; gap: 16px; padding: 14px 16px 18px; color: var(--muted); font-size: 13px; }
+    .notice strong { color: var(--ink); }
+    .grid { display: grid; gap: 14px; }
+    .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .main { grid-template-columns: minmax(0, 2fr) minmax(320px, .95fr); margin-top: 14px; }
+    .lower { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 14px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 1px 0 rgba(28,28,30,.04), 0 10px 28px rgba(28,28,30,.045); transition: border-color .2s ease; }
+    .card:hover { border-color: rgba(244,81,30,.42); }
+    .metric { padding: 18px; min-height: 116px; }
+    .label { color: var(--muted); font-size: 12px; font-weight: 680; letter-spacing: .08em; text-transform: uppercase; }
+    .value { margin-top: 14px; font: 760 34px/1 var(--mono); letter-spacing: -.04em; transition: color .2s ease; }
+    .flash .value { color: var(--orange); }
+    .hint { margin-top: 10px; color: var(--muted); font: 11px/1.2 var(--mono); }
+    .panel { padding: 18px; }
+    .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    h2 { margin: 0; font-size: 15px; letter-spacing: -.01em; }
+    .stamp { color: var(--muted); font: 11px/1 var(--mono); }
+    .trend { height: 260px; border-radius: 6px; background: repeating-linear-gradient(to bottom, transparent 0 51px, rgba(28,28,30,.06) 52px), linear-gradient(180deg, #fffefa, #fbfaf7); border: 1px solid #eee8e1; }
+    .trend svg { width: 100%; height: 100%; display: block; overflow: visible; }
+    .bar-list { display: grid; gap: 12px; }
+    .bar-row { display: grid; grid-template-columns: minmax(92px, 1fr) 96px 54px; align-items: center; gap: 10px; }
+    .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #343235; font-size: 13px; }
+    .bar-track { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--ink), #4a4540); transition: width .35s ease; }
+    .bar-fill.hot { background: var(--orange); }
+    .bar-count { text-align: right; color: var(--muted); font: 12px/1 var(--mono); }
+    .version-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eee8e1; align-items: center; }
+    .version-row:last-child { border-bottom: 0; }
+    .code { font-family: var(--mono); }
+    .privacy { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #ddd6ce; color: var(--muted); font: 11px/1.45 var(--mono); }
+    @media (max-width: 900px) { .metrics, .main, .lower { grid-template-columns: 1fr; } .topbar, .notice { align-items: flex-start; flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="https://raw.githubusercontent.com/Sibuxiangx/LoveACE/main/assets/logo.png" alt="LoveACE Logo" />
+        <div><div class="brand-title">LoveACE Telemetry BI</div><div class="brand-subtitle">ANONYMOUS_USAGE_CONSOLE</div></div>
+      </div>
+      <div class="live"><span class="dot"></span><span id="generated-at">SYNC_PENDING</span></div>
+    </header>
+
+    <section class="workspace">
+      <div class="notice">
+        <div><strong>匿名汇总视图。</strong>只展示聚合统计，不展示原始事件、明文学号、client_id、student_hash、IP 或 UA 明细。</div>
+        <div class="code" id="last-event">LAST_EVENT=---</div>
+      </div>
+
+      <section class="grid metrics" id="metrics"></section>
+      <section class="grid main">
+        <article class="card panel"><div class="panel-head"><h2>24 小时事件趋势</h2><span class="stamp">BUCKET: HOUR</span></div><div class="trend" id="trend"></div></article>
+        <article class="card panel"><div class="panel-head"><h2>功能 / 页面排行</h2><span class="stamp">TOP_USAGE</span></div><div id="usage"></div><div class="privacy">DATA_RULE: COUNT(client_id) WHERE hash_enabled=true; NO_RAW_LOGS_RETAINED</div></article>
+      </section>
+      <section class="grid lower">
+        <article class="card panel"><div class="panel-head"><h2>事件分布</h2><span class="stamp">EVENT_NAME</span></div><div id="events"></div></article>
+        <article class="card panel"><div class="panel-head"><h2>平台分布</h2><span class="stamp">PLATFORM</span></div><div id="platforms"></div></article>
+        <article class="card panel"><div class="panel-head"><h2>年级前缀</h2><span class="stamp">GRADE_PREFIX</span></div><div id="grades"></div><div class="privacy">ONLY_PREFIX: first 4 digits</div></article>
+      </section>
+      <section class="grid lower">
+        <article class="card panel"><div class="panel-head"><h2>App 版本</h2><span class="stamp">APP_VERSION</span></div><div id="versions"></div></article>
+        <article class="card panel"><div class="panel-head"><h2>登录健康度</h2><span class="stamp">AUTH_EVENTS</span></div><div id="auth"></div></article>
+        <article class="card panel"><div class="panel-head"><h2>OTA 触达</h2><span class="stamp">UPDATE_EVENTS</span></div><div id="ota"></div></article>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const numberFormat = new Intl.NumberFormat("zh-CN");
+    const byId = (id) => document.getElementById(id);
+
+    async function syncDashboard() {
+      const response = await fetch("/bi/data", { cache: "no-store" });
+      if (!response.ok) throw new Error(`BI data request failed: ${response.status}`);
+      render(await response.json());
+    }
+
+    function render(data) {
+      const summary = data.summary || {};
+      byId("generated-at").textContent = `Live · ${formatDate(data.generatedAt)}`;
+      byId("last-event").textContent = `LAST_EVENT=${summary.last_event_at ? `${summary.last_event_at} UTC` : "---"}`;
+      byId("metrics").innerHTML = [
+        metric("总事件", summary.total_events, "COUNT(*) · 100% anonymous"),
+        metric("匿名客户端", summary.clients, "COUNT(DISTINCT client_id)"),
+        metric("匿名用户", summary.users, "COUNT(DISTINCT student_hash)"),
+        metric("近 24h 事件", summary.events_24h, `7D=${formatNumber(summary.events_7d)}`),
+      ].join("");
+      byId("trend").innerHTML = trend(data.trend || []);
+      byId("usage").innerHTML = bars(mergeUsage(data.featureDistribution || [], data.screenDistribution || []), true);
+      byId("events").innerHTML = bars(data.eventDistribution || [], true);
+      byId("platforms").innerHTML = bars(data.platformDistribution || [], false);
+      byId("grades").innerHTML = bars(data.gradeDistribution || [], false);
+      byId("versions").innerHTML = versions(data.versions || []);
+      byId("auth").innerHTML = bars(data.authStats || [], false);
+      byId("ota").innerHTML = bars(data.otaStats || [], false);
+      document.querySelectorAll(".metric").forEach((node) => {
+        node.classList.add("flash");
+        setTimeout(() => node.classList.remove("flash"), 360);
+      });
+    }
+
+    function metric(label, value, hint) {
+      return `<article class="card metric"><div class="label">${escapeHtml(label)}</div><div class="value">${formatNumber(value)}</div><div class="hint">${escapeHtml(hint)}</div></article>`;
+    }
+
+    function bars(rows, hotFirst) {
+      if (!rows.length) return `<div class="hint">--- NO_AGGREGATE_DATA ---</div>`;
+      const max = Math.max(1, ...rows.map((row) => Number(row.count) || 0));
+      return `<div class="bar-list">${rows.map((row, index) => {
+        const count = Number(row.count) || 0;
+        const width = Math.max(4, Math.round((count / max) * 100));
+        const label = row.label || "未标记";
+        const fillClass = hotFirst && index === 0 ? "bar-fill hot" : "bar-fill";
+        return `<div class="bar-row"><div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div><div class="bar-track"><div class="${fillClass}" style="width:${width}%"></div></div><div class="bar-count">${formatNumber(count)}</div></div>`;
+      }).join("")}</div>`;
+    }
+
+    function trend(rows) {
+      const max = Math.max(1, ...rows.map((row) => Number(row.count) || 0));
+      const points = rows.length > 1 ? rows.map((row, index) => {
+        const x = (index / (rows.length - 1)) * 100;
+        const y = 100 - ((Number(row.count) || 0) / max) * 86 - 7;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      }).join(" ") : "0,72 100,72";
+      return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="#1c1c1e" stroke-width="1.4" vector-effect="non-scaling-stroke"/><polyline points="${lastSegment(points)}" fill="none" stroke="#f4511e" stroke-width="2.2" vector-effect="non-scaling-stroke" stroke-linecap="round"/></svg>`;
+    }
+
+    function versions(rows) {
+      if (!rows.length) return `<div class="hint">--- NO_VERSION_DATA ---</div>`;
+      return rows.map((row) => `<div class="version-row"><strong class="code">v${escapeHtml(row.app_version || "unknown")}</strong><span class="bar-count">CLIENTS ${formatNumber(row.clients)}</span><span class="bar-count">EVENTS ${formatNumber(row.events)}</span></div>`).join("");
+    }
+
+    function mergeUsage(features, screens) {
+      return [...features.map((row) => ({ label: `feature:${row.label}`, count: row.count })), ...screens.map((row) => ({ label: `screen:${row.label}`, count: row.count }))]
+        .sort((left, right) => Number(right.count) - Number(left.count))
+        .slice(0, 8);
+    }
+
+    function lastSegment(points) {
+      const segments = points.split(" ");
+      return segments.slice(Math.max(0, segments.length - 3)).join(" ");
+    }
+
+    function formatNumber(value) { return numberFormat.format(Number(value) || 0); }
+    function formatDate(value) { return value ? value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC") : "SYNC_PENDING"; }
+    function escapeHtml(value) {
+      return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+    }
+
+    syncDashboard().catch((error) => { byId("generated-at").textContent = `SYNC_ERROR · ${error.message}`; });
+    setInterval(() => syncDashboard().catch(() => {}), 60000);
+  </script>
+</body>
+</html>
