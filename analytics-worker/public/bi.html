@@ -43,7 +43,7 @@
     .range-tab.active { border-color: rgba(244,81,30,.7); background: rgba(244,81,30,.08); color: var(--ink); }
     .grid { display: grid; gap: 14px; }
     .metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .main { grid-template-columns: minmax(0, 2fr) minmax(320px, .95fr); margin-top: 14px; }
+    .main { grid-template-columns: minmax(0, 2fr) minmax(320px, .95fr); align-items: start; margin-top: 14px; }
     .lower { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 14px; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 1px 0 rgba(28,28,30,.04), 0 10px 28px rgba(28,28,30,.045); transition: border-color .2s ease; }
     .card:hover { border-color: rgba(244,81,30,.42); }
@@ -56,8 +56,11 @@
     .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
     h2 { margin: 0; font-size: 15px; letter-spacing: -.01em; }
     .stamp { color: var(--muted); font: 11px/1 var(--mono); }
-    .trend { height: 260px; border-radius: 6px; background: repeating-linear-gradient(to bottom, transparent 0 51px, rgba(28,28,30,.06) 52px), linear-gradient(180deg, #fffefa, #fbfaf7); border: 1px solid #eee8e1; }
+    .trend { position: relative; height: 340px; border-radius: 6px; background: repeating-linear-gradient(to bottom, transparent 0 67px, rgba(28,28,30,.06) 68px), linear-gradient(180deg, #fffefa, #fbfaf7); border: 1px solid #eee8e1; }
     .trend svg { width: 100%; height: 100%; display: block; overflow: visible; }
+    .trend-tooltip { position: absolute; z-index: 3; min-width: 138px; transform: translate(-50%, calc(-100% - 14px)); border: 1px solid #dcd4ca; border-radius: 8px; background: rgba(255,254,250,.96); box-shadow: 0 12px 28px rgba(28,28,30,.12); padding: 9px 10px; color: var(--ink); font: 12px/1.35 var(--mono); pointer-events: none; opacity: 0; transition: opacity .12s ease; }
+    .trend-tooltip.visible { opacity: 1; }
+    .trend-tooltip strong { display: block; margin-bottom: 4px; font-size: 12px; }
     .bar-list { display: grid; gap: 12px; }
     .bar-row { display: grid; grid-template-columns: minmax(92px, 1fr) 96px 54px; align-items: center; gap: 10px; }
     .usage-row { display: grid; grid-template-columns: minmax(96px, 1fr) minmax(64px, .72fr) repeat(3, 40px); align-items: center; gap: 8px; }
@@ -148,6 +151,7 @@
         metric("MAU", summary.mau, "month active users"),
       ].join("");
       byId("trend").innerHTML = trend(data.trend || []);
+      bindTrendInteractions();
       byId("usage").innerHTML = usageRows(data.normalizedUsage || []);
       byId("events").innerHTML = bars(data.eventDistribution || [], true);
       byId("platforms").innerHTML = bars(data.platformDistribution || [], false);
@@ -192,8 +196,8 @@
 
     function trend(rows) {
       const width = 640;
-      const height = 260;
-      const margin = { top: 18, right: 18, bottom: 34, left: 52 };
+      const height = 320;
+      const margin = { top: 14, right: 18, bottom: 32, left: 46 };
       const plotWidth = width - margin.left - margin.right;
       const plotHeight = height - margin.top - margin.bottom;
       const max = Math.max(1, ...rows.map((row) => Number(row.count) || 0));
@@ -213,8 +217,36 @@
         </g>
         <polyline points="${points}" fill="none" stroke="#1c1c1e" stroke-width="2" stroke-linejoin="round"/>
         <polyline points="${hotPoints}" fill="none" stroke="#f4511e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-        ${rows.map((row, index) => `<g><circle cx="${xAt(index).toFixed(2)}" cy="${yAt(valueAt(row)).toFixed(2)}" r="4" fill="#fffefa" stroke="${index >= rows.length - 3 ? '#f4511e' : '#1c1c1e'}" stroke-width="2"/><circle cx="${xAt(index).toFixed(2)}" cy="${yAt(valueAt(row)).toFixed(2)}" r="14" fill="transparent"><title>${escapeHtml(row.bucket)} · 事件 ${formatNumber(row.count)} · 用户 ${formatNumber(row.users)}</title></circle></g>`).join("")}
-      </svg>`;
+        ${rows.map((row, index) => `<g><circle cx="${xAt(index).toFixed(2)}" cy="${yAt(valueAt(row)).toFixed(2)}" r="4" fill="#fffefa" stroke="${index >= rows.length - 3 ? '#f4511e' : '#1c1c1e'}" stroke-width="2"/><circle class="trend-hit" cx="${xAt(index).toFixed(2)}" cy="${yAt(valueAt(row)).toFixed(2)}" r="18" fill="transparent" data-x="${xAt(index).toFixed(2)}" data-y="${yAt(valueAt(row)).toFixed(2)}" data-bucket="${escapeHtml(row.bucket)}" data-count="${formatNumber(row.count)}" data-users="${formatNumber(row.users)}"></circle></g>`).join("")}
+      </svg><div class="trend-tooltip" id="trend-tooltip" role="status" aria-live="polite"></div>`;
+    }
+
+    function bindTrendInteractions() {
+      const trendEl = byId("trend");
+      const tooltip = byId("trend-tooltip");
+      if (!trendEl || !tooltip) return;
+      let pinned = false;
+      const show = (target) => {
+        const rect = trendEl.getBoundingClientRect();
+        const x = (Number(target.dataset.x) / 640) * rect.width;
+        const y = (Number(target.dataset.y) / 320) * rect.height;
+        tooltip.style.left = `${Math.min(Math.max(x, 78), rect.width - 78)}px`;
+        tooltip.style.top = `${Math.max(y, 58)}px`;
+        tooltip.innerHTML = `<strong>${escapeHtml(target.dataset.bucket || "---")}</strong><div>事件 ${escapeHtml(target.dataset.count || "0")}</div><div>用户 ${escapeHtml(target.dataset.users || "0")}</div>`;
+        tooltip.classList.add("visible");
+      };
+      trendEl.querySelectorAll(".trend-hit").forEach((node) => {
+        node.addEventListener("pointerenter", () => { if (!pinned) show(node); });
+        node.addEventListener("pointermove", () => { if (!pinned) show(node); });
+        node.addEventListener("click", () => { pinned = !pinned; pinned ? show(node) : tooltip.classList.remove("visible"); });
+      });
+      trendEl.addEventListener("pointerleave", () => { if (!pinned) tooltip.classList.remove("visible"); });
+      trendEl.addEventListener("click", (event) => {
+        if (!event.target.classList.contains("trend-hit")) {
+          pinned = false;
+          tooltip.classList.remove("visible");
+        }
+      });
     }
 
     function versions(rows) {
