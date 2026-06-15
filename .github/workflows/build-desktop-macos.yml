@@ -176,6 +176,7 @@ jobs:
           fi
 
       - name: Sign and notarize DMG
+        timeout-minutes: 45
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
@@ -191,7 +192,50 @@ jobs:
             --key "$KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
             --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
-            --wait
+            --output-format json > /tmp/notary-submit.json
+
+          SUBMISSION_ID=$(python3 - <<'PY'
+          import json
+          with open('/tmp/notary-submit.json') as file:
+              print(json.load(file)['id'])
+          PY
+          )
+          echo "Notary submission id: $SUBMISSION_ID"
+
+          for attempt in $(seq 1 60); do
+            xcrun notarytool info "$SUBMISSION_ID" \
+              --key "$KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
+              --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
+              --output-format json > /tmp/notary-info.json
+
+            STATUS=$(python3 - <<'PY'
+            import json
+            with open('/tmp/notary-info.json') as file:
+                print(json.load(file)['status'])
+            PY
+            )
+            echo "Notary status [$attempt/60]: $STATUS"
+
+            if [ "$STATUS" = "Accepted" ]; then
+              break
+            fi
+
+            if [ "$STATUS" = "Invalid" ] || [ "$STATUS" = "Rejected" ]; then
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --key "$KEY_PATH" \
+                --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
+                --issuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+              exit 1
+            fi
+
+            if [ "$attempt" = "60" ]; then
+              echo "Notarization timed out" >&2
+              exit 1
+            fi
+
+            sleep 30
+          done
 
           xcrun stapler staple "$DMG_PATH"
           spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH"
