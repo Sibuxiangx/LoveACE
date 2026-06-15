@@ -150,56 +150,26 @@ jobs:
           codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" --sign "$CERT_IDENTITY" "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-      - name: Install create-dmg
-        run: brew install create-dmg
-
-      - name: Create DMG
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          APP_PATH="build/macos/Build/Products/Release/loveace.app"
-          DMG_PATH="build/macos/loveace-$VERSION.dmg"
-
-          create-dmg \
-            --volname "彩带小工具" \
-            --volicon "$APP_PATH/Contents/Resources/AppIcon.icns" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "loveace.app" 150 185 \
-            --hide-extension "loveace.app" \
-            --app-drop-link 450 185 \
-            "$DMG_PATH" \
-            "$APP_PATH" || true
-
-          if [ ! -f "$DMG_PATH" ]; then
-            hdiutil create -volname "彩带小工具" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
-          fi
-
-      - name: Sign and notarize DMG
+      - name: Notarize app bundle
         timeout-minutes: 45
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          DMG_PATH="build/macos/loveace-$VERSION.dmg"
+          APP_PATH="build/macos/Build/Products/Release/loveace.app"
+          ZIP_PATH="build/macos/loveace-$VERSION.app.zip"
           KEY_PATH="$HOME/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
 
-          codesign --force --timestamp --sign "$CERT_IDENTITY" "$DMG_PATH"
-          codesign --verify --verbose=2 "$DMG_PATH"
+          ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 
-          xcrun notarytool submit "$DMG_PATH" \
+          xcrun notarytool submit "$ZIP_PATH" \
             --key "$KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
             --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
             --output-format json > /tmp/notary-submit.json
 
-          SUBMISSION_ID=$(python3 - <<'PY'
-          import json
-          with open('/tmp/notary-submit.json') as file:
-              print(json.load(file)['id'])
-          PY
-          )
+          SUBMISSION_ID=$(python3 -c "import json; print(json.load(open('/tmp/notary-submit.json'))['id'])")
           echo "Notary submission id: $SUBMISSION_ID"
 
           for attempt in $(seq 1 60); do
@@ -209,12 +179,7 @@ jobs:
               --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
               --output-format json > /tmp/notary-info.json
 
-            STATUS=$(python3 - <<'PY'
-            import json
-            with open('/tmp/notary-info.json') as file:
-                print(json.load(file)['status'])
-            PY
-            )
+            STATUS=$(python3 -c "import json; print(json.load(open('/tmp/notary-info.json'))['status'])")
             echo "Notary status [$attempt/60]: $STATUS"
 
             if [ "$STATUS" = "Accepted" ]; then
@@ -237,8 +202,36 @@ jobs:
             sleep 30
           done
 
-          xcrun stapler staple "$DMG_PATH"
-          spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH"
+          xcrun stapler staple "$APP_PATH"
+          spctl --assess --type execute --verbose "$APP_PATH"
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create and sign DMG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP_PATH="build/macos/Build/Products/Release/loveace.app"
+          DMG_PATH="build/macos/loveace-$VERSION.dmg"
+
+          create-dmg \
+            --volname "彩带小工具" \
+            --volicon "$APP_PATH/Contents/Resources/AppIcon.icns" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "loveace.app" 150 185 \
+            --hide-extension "loveace.app" \
+            --app-drop-link 450 185 \
+            "$DMG_PATH" \
+            "$APP_PATH" || true
+
+          if [ ! -f "$DMG_PATH" ]; then
+            hdiutil create -volname "彩带小工具" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
+          fi
+
+          codesign --force --timestamp --sign "$CERT_IDENTITY" "$DMG_PATH"
+          codesign --verify --verbose=2 "$DMG_PATH"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v5
