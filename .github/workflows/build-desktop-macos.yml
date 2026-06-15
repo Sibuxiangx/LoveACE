@@ -1,0 +1,118 @@
+name: Build macOS Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build only; do not publish OTA or GitHub Release assets
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    runs-on: macos-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact_name: ${{ steps.version.outputs.artifact_name }}
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          channel: stable
+          cache: true
+
+      - name: Read desktop version
+        id: version
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          text = Path('pubspec.yaml').read_text()
+          match = re.search(r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)', text, re.MULTILINE)
+          if not match:
+              raise SystemExit('Cannot read version from desktop/pubspec.yaml')
+
+          version = match.group(1)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+              output.write(f'artifact_name=loveace-macos-{version}\n')
+          print(f'Desktop version: {version}')
+          PY
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze desktop project
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Disable CI code signing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('macos/Runner.xcodeproj/project.pbxproj')
+          text = path.read_text()
+          text = text.replace('CODE_SIGN_STYLE = Automatic;', 'CODE_SIGN_STYLE = Manual;')
+          text = text.replace('"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";', '"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";')
+          text = text.replace('DEVELOPMENT_TEAM = 2PYK4BY5P6;', 'DEVELOPMENT_TEAM = "";')
+          text = text.replace('PROVISIONING_PROFILE_SPECIFIER = "";', 'PROVISIONING_PROFILE_SPECIFIER = "";')
+          path.write_text(text)
+          PY
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Ad-hoc sign app bundle
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/loveace.app"
+          while IFS= read -r item; do
+            codesign --force --sign - "$item" || true
+          done < <(find "$APP_PATH" \( -name "*.framework" -o -name "*.dylib" \))
+          codesign --force --deep --sign - "$APP_PATH"
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP_PATH="build/macos/Build/Products/Release/loveace.app"
+          DMG_PATH="build/macos/loveace-$VERSION.dmg"
+
+          create-dmg \
+            --volname "彩带小工具" \
+            --volicon "$APP_PATH/Contents/Resources/AppIcon.icns" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "loveace.app" 150 185 \
+            --hide-extension "loveace.app" \
+            --app-drop-link 450 185 \
+            "$DMG_PATH" \
+            "$APP_PATH" || true
+
+          if [ ! -f "$DMG_PATH" ]; then
+            hdiutil create -volname "彩带小工具" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
+          fi
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: desktop/build/macos/loveace-${{ steps.version.outputs.version }}.dmg
+
+      - name: Confirm dry run
+        run: |
+          echo "Dry run: ${{ inputs.dry_run }}"
+          echo "OTA/manifest publishing is disabled in this workflow."

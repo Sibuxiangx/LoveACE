@@ -1,0 +1,98 @@
+name: Build Windows Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build only; do not publish OTA or GitHub Release assets
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact_name: ${{ steps.version.outputs.artifact_name }}
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          channel: stable
+          cache: true
+
+      - name: Read desktop version
+        id: version
+        shell: pwsh
+        run: |
+          $content = Get-Content pubspec.yaml -Raw
+          if ($content -notmatch '(?m)^version:\s*([0-9]+\.[0-9]+\.[0-9]+)') {
+            throw 'Cannot read version from desktop/pubspec.yaml'
+          }
+          $version = $Matches[1]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "artifact_name=loveace-windows-$version" >> $env:GITHUB_OUTPUT
+          "Desktop version: $version"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze desktop project
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $innoUrl = 'https://jrsoftware.org/download.php/is.exe'
+          $innoInstaller = "$env:TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri $innoUrl -OutFile $innoInstaller
+          Start-Process -FilePath $innoInstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+
+          $innoPath = 'C:\Program Files (x86)\Inno Setup 6'
+          "$innoPath" >> $env:GITHUB_PATH
+
+          $langUrl = 'https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl'
+          $langPath = "$innoPath\Languages\ChineseSimplified.isl"
+          Invoke-WebRequest -Uri $langUrl -OutFile $langPath
+
+      - name: Download VC++ Redistributable
+        shell: pwsh
+        run: |
+          $vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+          $vcRedistPath = '${{ github.workspace }}\desktop\build\windows\x64\runner\Release\vc_redist.x64.exe'
+          Invoke-WebRequest -Uri $vcRedistUrl -OutFile $vcRedistPath
+
+      - name: Create installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $buildDir = '${{ github.workspace }}\desktop\build\windows\x64\runner\Release'
+          $outputDir = '${{ github.workspace }}\desktop\installer'
+          New-Item -ItemType Directory -Force -Path $outputDir
+          $env:BUILD_DIR = $buildDir
+          $env:OUTPUT_DIR = $outputDir
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /DAPP_VERSION="$env:APP_VERSION" /DBUILD_DIR="$buildDir" /DOUTPUT_DIR="$outputDir" 'windows\inno-ci.iss'
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: desktop/installer/loveace-${{ steps.version.outputs.version }}-setup.exe
+
+      - name: Confirm dry run
+        run: |
+          echo "Dry run: ${{ inputs.dry_run }}"
+          echo "OTA/manifest publishing is disabled in this workflow."
