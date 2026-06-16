@@ -25,6 +25,7 @@ import okhttp3.WebSocketListener
 import tech.loveace.appv3.BuildConfig
 import tech.loveace.appv3.data.model.PlanCompletionInfo
 import tech.loveace.appv3.data.model.PlanOption
+import tech.loveace.appv3.data.model.TermItem
 import tech.loveace.appv3.data.service.CourseScheduleService
 import tech.loveace.appv3.data.service.JWCService
 import tech.loveace.appv3.data.service.PlanService
@@ -39,9 +40,15 @@ data class SmartCourseSelectionUiState(
     val isScanning: Boolean = false,
     val isConnected: Boolean = false,
     val isWorking: Boolean = false,
+    val isLoadingTerms: Boolean = false,
+    val targetTerms: List<TermItem> = emptyList(),
+    val selectedTermCode: String? = null,
     val error: String? = null,
     val sessionId: String? = null,
-)
+) {
+    val selectedTerm: TermItem?
+        get() = targetTerms.firstOrNull { it.termCode == selectedTermCode }
+}
 
 class SmartCourseSelectionViewModel(application: Application) : AndroidViewModel(application) {
     private val client = OkHttpClient.Builder().build()
@@ -52,7 +59,63 @@ class SmartCourseSelectionViewModel(application: Application) : AndroidViewModel
     private var webSocket: WebSocket? = null
     private var heartbeatJob: Job? = null
 
+    fun loadTargetTerms(courseScheduleService: CourseScheduleService?, jwcService: JWCService?) {
+        if (_uiState.value.targetTerms.isNotEmpty() || _uiState.value.isLoadingTerms) return
+        if (courseScheduleService == null && jwcService == null) return
+        _uiState.value = _uiState.value.copy(isLoadingTerms = true, error = null)
+        viewModelScope.launch {
+            try {
+                val terms = withContext(Dispatchers.IO) {
+                    val scheduleTerms = courseScheduleService?.getScheduleTerms()
+                    if (scheduleTerms?.success == true && !scheduleTerms.data.isNullOrEmpty()) {
+                        scheduleTerms.data.map {
+                            TermItem(
+                                termCode = it.termCode,
+                                termName = formatTermName(it.termCode, it.termName),
+                                isCurrent = it.isSelected,
+                            )
+                        }
+                    } else {
+                        val jwcTerms = jwcService?.getAllTerms()
+                        if (jwcTerms?.success == true && !jwcTerms.data.isNullOrEmpty()) {
+                            jwcTerms.data.map { it.copy(termName = formatTermName(it.termCode, it.termName)) }
+                        } else {
+                            throw Exception(scheduleTerms?.error ?: jwcTerms?.error ?: "获取学期列表失败")
+                        }
+                    }
+                }
+                val selected = pickDefaultTerm(terms)
+                _uiState.value = _uiState.value.copy(
+                    isLoadingTerms = false,
+                    targetTerms = terms,
+                    selectedTermCode = selected?.termCode,
+                    detail = selected?.let { "已选择 ${it.termName}，请打开电脑网页并扫码连接。" }
+                        ?: "请选择要排课的学期。",
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingTerms = false,
+                    error = e.message,
+                    detail = e.message ?: "获取学期列表失败",
+                )
+            }
+        }
+    }
+
+    fun selectTerm(termCode: String) {
+        val term = _uiState.value.targetTerms.firstOrNull { it.termCode == termCode } ?: return
+        _uiState.value = _uiState.value.copy(
+            selectedTermCode = term.termCode,
+            detail = "已选择 ${term.termName}，请打开电脑网页并扫码连接。",
+            error = null,
+        )
+    }
+
     fun startScanning() {
+        if (_uiState.value.selectedTermCode == null) {
+            setError("请选择学期", "请先选择要排课的学期，再扫描网页二维码。")
+            return
+        }
         _uiState.value = _uiState.value.copy(isScanning = true, error = null)
     }
 
@@ -126,11 +189,15 @@ class SmartCourseSelectionViewModel(application: Application) : AndroidViewModel
     ) {
         try {
             val terms = step("正在获取学期列表") {
-                val response = jwcService.getAllTerms()
-                if (!response.success || response.data.isNullOrEmpty()) throw Exception(response.error ?: "获取学期列表失败")
-                response.data
+                val cachedTerms = _uiState.value.targetTerms
+                if (cachedTerms.isNotEmpty()) cachedTerms else {
+                    val response = jwcService.getAllTerms()
+                    if (!response.success || response.data.isNullOrEmpty()) throw Exception(response.error ?: "获取学期列表失败")
+                    response.data.map { it.copy(termName = formatTermName(it.termCode, it.termName)) }
+                }
             }
-            val selectedTerm = terms.firstOrNull { it.isCurrent } ?: terms.first()
+            val selectedTerm = terms.firstOrNull { it.termCode == _uiState.value.selectedTermCode }
+                ?: throw Exception("请选择要排课的学期")
 
             sendJson(buildJsonObject {
                 put("type", "upload_start")
@@ -278,6 +345,38 @@ class SmartCourseSelectionViewModel(application: Application) : AndroidViewModel
         val options: List<PlanOption>,
         val selectedPlanId: String?,
     )
+
+    private fun pickDefaultTerm(terms: List<TermItem>): TermItem? {
+        val current = terms.firstOrNull { it.isCurrent } ?: terms.firstOrNull()
+        val nextCode = current?.termCode?.let { nextTermCode(it) }
+        return terms.firstOrNull { it.termCode == nextCode } ?: current
+    }
+
+    private fun nextTermCode(termCode: String): String? {
+        val parts = termCode.split("-")
+        if (parts.size < 4) return null
+        val start = parts[0].toIntOrNull() ?: return null
+        val end = parts[1].toIntOrNull() ?: return null
+        val semester = parts[2].toIntOrNull() ?: return null
+        return if (semester == 1) {
+            "$start-$end-2-${parts[3]}"
+        } else {
+            "${start + 1}-${end + 1}-1-${parts[3]}"
+        }
+    }
+
+    private fun formatTermName(termCode: String, fallback: String): String {
+        val parts = termCode.split("-")
+        if (parts.size >= 3) {
+            val season = when (parts[2]) {
+                "1" -> "秋"
+                "2" -> "春/夏"
+                else -> "第${parts[2]}学期"
+            }
+            return "${parts[0]}-${parts[1]} $season"
+        }
+        return fallback.ifBlank { termCode }
+    }
 
     companion object {
         const val SMART_SELECT_WEB_URL = "https://analyst-api.linota.cn/smart-select"

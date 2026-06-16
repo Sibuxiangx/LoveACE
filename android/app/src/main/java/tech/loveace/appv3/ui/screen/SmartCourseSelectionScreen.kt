@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -44,8 +47,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +74,7 @@ fun SmartCourseSelectionScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var termMenuExpanded by remember { mutableStateOf(false) }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -78,6 +84,7 @@ fun SmartCourseSelectionScreen(
     }
 
     LaunchedEffect(Unit) {
+        viewModel.loadTargetTerms(authViewModel.courseScheduleService, authViewModel.jwcService)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -174,12 +181,50 @@ fun SmartCourseSelectionScreen(
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("排课学期", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "请选择要排课的学期。学校通常会在本学期末开放下学期开课数据。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Box {
+                        FilledTonalButton(
+                            onClick = { termMenuExpanded = true },
+                            enabled = !state.isLoadingTerms && state.targetTerms.isNotEmpty() && !state.isWorking,
+                        ) {
+                            Text(
+                                when {
+                                    state.isLoadingTerms -> "正在加载学期..."
+                                    state.selectedTerm != null -> state.selectedTerm!!.termName
+                                    else -> "选择学期"
+                                },
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = termMenuExpanded,
+                            onDismissRequest = { termMenuExpanded = false },
+                        ) {
+                            state.targetTerms.forEach { term ->
+                                DropdownMenuItem(
+                                    text = { Text(term.termName) },
+                                    onClick = {
+                                        viewModel.selectTerm(term.termCode)
+                                        termMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("连接步骤", style = MaterialTheme.typography.titleMedium)
                     Text("1. 在电脑打开上方链接。\n2. 点击网页生成二维码。\n3. 用这里的扫码按钮扫描二维码。\n4. 保持本页打开，等待课表、培养方案和开课数据上传完成。")
                     Spacer(Modifier.height(4.dp))
                     FilledTonalButton(
                         onClick = { viewModel.startScanning() },
-                        enabled = !state.isWorking,
+                        enabled = !state.isWorking && state.selectedTermCode != null,
                     ) {
                         Icon(Icons.Default.QrCodeScanner, null)
                         Spacer(Modifier.width(8.dp))

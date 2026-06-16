@@ -52,7 +52,7 @@ class CourseScheduleService(private val connection: AUFEConnection) {
         pageSize: Int = 50,
     ): UniResponse<List<CourseScheduleRecord>> = withContext(Dispatchers.IO) {
         try {
-            val records = fetchPage(termCode, courseCode, pageNum, pageSize)
+            val records = fetchPage(termCode, courseCode, pageNum, pageSize).records
             UniResponse.success(records)
         } catch (e: Exception) {
             Log.e(TAG, "queryCourseSchedule failed", e)
@@ -68,42 +68,37 @@ class CourseScheduleService(private val connection: AUFEConnection) {
             val pageSize = 200
             val concurrency = 5
 
-            // 第一页获取总数
-            val firstPageRecords = fetchPage(termCode, "", 1, pageSize)
-            val allRecords = firstPageRecords.toMutableList()
+            val firstPage = fetchPage(termCode, "", 1, pageSize)
+            val allRecords = firstPage.records.toMutableList()
+            val totalPages = ((firstPage.totalCount + pageSize - 1) / pageSize).coerceAtLeast(1)
+            onProgress?.invoke(1, totalPages, allRecords.size)
 
-            // 从第一次请求推断总页数（简化：如果第一页满了就继续）
-            if (firstPageRecords.size < pageSize) {
-                onProgress?.invoke(1, 1, allRecords.size)
-                return@withContext UniResponse.success(allRecords)
-            }
-
-            // 继续获取后续页面
             var pageNum = 2
-            while (true) {
-                val batch = (pageNum until pageNum + concurrency).map { p ->
-                    async { runCatching { fetchPage(termCode, "", p, pageSize) }.getOrElse { emptyList() } }
+            while (pageNum <= totalPages) {
+                val endPage = minOf(pageNum + concurrency - 1, totalPages)
+                val batch = (pageNum..endPage).map { p ->
+                    async { runCatching { fetchPage(termCode, "", p, pageSize).records }.getOrElse { emptyList() } }
                 }
                 val results = batch.awaitAll()
-                var anyData = false
                 for (result in results) {
-                    if (result.isNotEmpty()) {
-                        allRecords.addAll(result)
-                        anyData = true
-                    }
+                    allRecords.addAll(result)
                 }
-                onProgress?.invoke(pageNum, pageNum, allRecords.size)
-                if (!anyData) break
+                onProgress?.invoke(endPage, totalPages, allRecords.size)
                 pageNum += concurrency
             }
-            UniResponse.success(allRecords)
+            UniResponse.success(dedupeRecords(allRecords))
         } catch (e: Exception) {
             Log.e(TAG, "queryAllCoursesForTerm failed", e)
             UniResponse.failure(e.message ?: "查询学期全部开课失败", retryable = true)
         }
     }
 
-    private fun fetchPage(termCode: String, courseCode: String, pageNum: Int, pageSize: Int): List<CourseScheduleRecord> {
+    private data class CourseSchedulePage(
+        val records: List<CourseScheduleRecord>,
+        val totalCount: Int,
+    )
+
+    private fun fetchPage(termCode: String, courseCode: String, pageNum: Int, pageSize: Int): CourseSchedulePage {
         val url = "$BASE_URL/student/integratedQuery/course/courseSchdule/courseInfo?sf_request_type=ajax"
         val response = connection.client.post(url, formData = mapOf(
             "zxjxjhh" to termCode, "kch" to courseCode, "kcm" to "",
@@ -112,12 +107,22 @@ class CourseScheduleService(private val connection: AUFEConnection) {
             "xqname" to "", "jcname" to "", "jxlname" to "", "jasname" to "",
             "pageNum" to pageNum.toString(), "pageSize" to pageSize.toString(),
         ))
-        val body = response.body?.string() ?: return emptyList()
+        val body = response.body?.string() ?: return CourseSchedulePage(emptyList(), 0)
         val json = Json { ignoreUnknownKeys = true }
         val data = json.parseToJsonElement(body).jsonObject
-        val listObj = data["list"]?.jsonObject ?: return emptyList()
-        val records = listObj["records"]?.jsonArray ?: return emptyList()
-        return records.mapNotNull { parseCourseScheduleRecord(it.jsonObject) }
+        val listObj = data["list"]?.jsonObject ?: return CourseSchedulePage(emptyList(), 0)
+        val pageContext = listObj["pageContext"]?.jsonObject
+        val totalCount = pageContext?.get("totalCount")?.jsonPrimitive?.intOrNull
+            ?: listObj["totalCount"]?.jsonPrimitive?.intOrNull
+            ?: 0
+        val records = listObj["records"]?.jsonArray ?: return CourseSchedulePage(emptyList(), totalCount)
+        return CourseSchedulePage(records.mapNotNull { parseCourseScheduleRecord(it.jsonObject) }, totalCount)
+    }
+
+    private fun dedupeRecords(records: List<CourseScheduleRecord>): List<CourseScheduleRecord> {
+        return records.distinctBy {
+            listOf(it.kch, it.kxh, it.skxq, it.skjc, it.cxjc, it.skzc, it.xqm, it.jxlm, it.jasm).joinToString("|")
+        }
     }
 
     private fun parseCourseScheduleRecord(obj: JsonObject): CourseScheduleRecord {
