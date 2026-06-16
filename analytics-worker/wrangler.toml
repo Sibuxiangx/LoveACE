@@ -18,6 +18,10 @@ NONCE_TTL_SECONDS = "600"
 RATE_LIMIT_PER_MINUTE = "60"
 TIMESTAMP_SKEW_SECONDS = "300"
 
+[[migrations]]
+tag = "v2"
+deleted_classes = ["SmartSelectSession"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "loveace-analytics"
