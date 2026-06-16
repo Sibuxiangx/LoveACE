@@ -1,3 +1,5 @@
+import QRCode from "qrcode";
+
 interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
@@ -456,13 +458,21 @@ async function createSmartSelectSession(request: Request, env: Env): Promise<Res
   ).bind(sessionId, await sha256Hex(webToken), await sha256Hex(pairingToken), expiresAt).run();
 
   const origin = new URL(request.url).origin;
+  const qrPayload = `loveace://smart-select?session_id=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(pairingToken)}`;
+  const qrSvg = await QRCode.toString(qrPayload, {
+    type: "svg",
+    margin: 1,
+    width: 220,
+    color: { dark: "#2C3333", light: "#F9FBFC" },
+  });
   return json({
     ok: true,
     session_id: sessionId,
     web_token: webToken,
     pairing_token: pairingToken,
     expires_at: expiresAt,
-    qr_payload: `loveace://smart-select?session_id=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(pairingToken)}`,
+    qr_payload: qrPayload,
+    qr_svg: qrSvg,
     web_ws_url: `${origin.replace(/^http/, "ws")}/v1/smart-select/ws/web?session_id=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(webToken)}`,
   }, 200, { "Cache-Control": "no-store" });
 }

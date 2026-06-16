@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>LoveACE 智能选课</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
   <style>
     :root {
       color-scheme: light;
@@ -76,7 +75,8 @@
       box-shadow: var(--shadow);
     }
     .connect { display: grid; grid-template-columns: 280px 1fr; gap: var(--space-xl); padding: var(--space-xl); align-items: center; }
-    #qr { width: 220px; height: 220px; padding: 12px; border-radius: 24px; background: var(--paper); border: 1px solid var(--line); }
+    #qr { width: 246px; height: 246px; padding: 12px; border-radius: 24px; background: var(--paper); border: 1px solid var(--line); display: grid; place-items: center; }
+    #qr svg { width: 220px; height: 220px; display: block; }
     .status-card { display: grid; gap: var(--space-md); }
     .status-line { display: flex; align-items: center; gap: var(--space-md); font-size: 1.12rem; font-weight: 800; }
     .dot { width: 12px; height: 12px; border-radius: 999px; background: var(--warning); box-shadow: 0 0 0 8px color-mix(in oklch, var(--warning-soft), transparent 20%); }
@@ -136,7 +136,7 @@
     </header>
 
     <section id="connect" class="panel connect">
-      <canvas id="qr"></canvas>
+      <div id="qr" aria-label="智能选课连接二维码"></div>
       <div class="status-card">
         <div class="status-line"><span id="dot" class="dot"></span><span id="status">正在准备二维码...</span></div>
         <div id="detail" class="meta">请稍候。</div>
@@ -223,8 +223,7 @@
       if (!session.ok) throw new Error(session.error || '创建会话失败');
       state.session = session.session_id;
       state.token = session.web_token;
-      await waitForQRCode();
-      QRCode.toCanvas($('qr'), session.qr_payload, { width: 220, margin: 1, color: { dark: '#2C3333', light: '#F9FBFC' } });
+      $('qr').innerHTML = session.qr_svg || '<div class="meta">二维码生成失败，请重新生成。</div>';
       setStatus('正在等待手机端连线中...', `二维码将在 ${new Date(session.expires_at).toLocaleTimeString()} 过期。`);
       connectWebSocket(session.web_ws_url);
     }
@@ -260,13 +259,6 @@
       $('status').textContent = title;
       $('detail').textContent = detail;
       $('dot').style.background = error ? 'var(--warning)' : '';
-    }
-
-    function waitForQRCode() {
-      return new Promise(resolve => {
-        if (window.QRCode) resolve();
-        else setTimeout(() => resolve(waitForQRCode()), 80);
-      });
     }
 
     function indexPlan(plan) {

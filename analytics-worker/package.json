@@ -8,10 +8,14 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251212.0",
+    "@types/qrcode": "^1.5.5",
     "typescript": "^5.9.3",
     "wrangler": "^4.100.0"
   },
   "overrides": {
     "esbuild": "0.28.1"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }
