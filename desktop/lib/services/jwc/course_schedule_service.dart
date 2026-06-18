@@ -485,19 +485,19 @@ class CourseScheduleService {
 
         var data = response.data;
         if (data == null) {
-          break;
+          throw Exception('第 $pageNum 页响应数据为空');
         }
 
         if (data is String) {
           try {
             data = jsonDecode(data);
           } catch (e) {
-            break;
+            throw Exception('第 $pageNum 页 JSON 解析失败: $e');
           }
         }
 
         if (data is! Map<String, dynamic>) {
-          break;
+          throw Exception('第 $pageNum 页响应数据格式错误: ${data.runtimeType}');
         }
 
         final courseResponse = CourseScheduleResponse.fromJson(data);

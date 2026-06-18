@@ -1,5 +1,6 @@
 import '../aufe/connector.dart';
 import 'academic_service.dart';
+import 'class_curriculum_service.dart';
 import 'course_schedule_service.dart';
 import 'exam_service.dart';
 import 'jwc_config.dart';
@@ -37,6 +38,9 @@ class JWCService {
   /// 学生课表服务
   late final StudentScheduleService studentSchedule;
 
+  /// 班级课表服务
+  late final ClassCurriculumService classCurriculum;
+
   /// 创建教务系统服务实例
   ///
   /// [connection] AUFE连接器实例，用于网络通信
@@ -61,5 +65,8 @@ class JWCService {
 
     // 初始化学生课表服务
     studentSchedule = StudentScheduleService(connection, config);
+
+    // 初始化班级课表服务
+    classCurriculum = ClassCurriculumService(connection, config);
   }
 }

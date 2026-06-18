@@ -4,9 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Build, sign, submit notarization, and upload artifacts only
+        description: Build, sign, notarize, staple, and upload artifacts only
         required: false
         default: true
+        type: boolean
+      changelog:
+        description: Release changelog
+        required: false
+        default: ""
+        type: string
+      content:
+        description: OTA dialog content
+        required: false
+        default: ""
+        type: string
+      force:
+        description: Force OTA update
+        required: false
+        default: false
         type: boolean
 
 jobs:
@@ -135,68 +150,94 @@ jobs:
           codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" --sign "$CERT_IDENTITY" "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-      - name: Submit app notarization
-        timeout-minutes: 10
+      - name: Notarize and staple app
+        timeout-minutes: 30
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           APP_PATH="build/macos/Build/Products/Release/loveace.app"
-          ZIP_PATH="build/macos/loveace-$VERSION.app.zip"
+          NOTARY_ZIP="build/macos/loveace-$VERSION-notary.zip"
+          RELEASE_ZIP="build/macos/loveace-$VERSION.zip"
           KEY_PATH="$HOME/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
 
-          ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+          ditto -c -k --keepParent "$APP_PATH" "$NOTARY_ZIP"
 
-          xcrun notarytool submit "$ZIP_PATH" \
+          xcrun notarytool submit "$NOTARY_ZIP" \
             --key "$KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
             --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            --wait \
             --output-format json > build/macos/notary-submit.json
 
           SUBMISSION_ID=$(python3 -c "import json; print(json.load(open('build/macos/notary-submit.json'))['id'])")
+          STATUS=$(python3 -c "import json; print(json.load(open('build/macos/notary-submit.json'))['status'])")
           echo "Notary submission id: $SUBMISSION_ID"
+          echo "Notary status: $STATUS"
           printf '%s\n' "$SUBMISSION_ID" > build/macos/notary-submission-id.txt
-
-      - name: Install create-dmg
-        run: brew install create-dmg
-
-      - name: Create and sign DMG
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          APP_PATH="build/macos/Build/Products/Release/loveace.app"
-          DMG_PATH="build/macos/loveace-$VERSION.dmg"
-
-          create-dmg \
-            --volname "彩带小工具" \
-            --volicon "$APP_PATH/Contents/Resources/AppIcon.icns" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "loveace.app" 150 185 \
-            --hide-extension "loveace.app" \
-            --app-drop-link 450 185 \
-            "$DMG_PATH" \
-            "$APP_PATH" || true
-
-          if [ ! -f "$DMG_PATH" ]; then
-            hdiutil create -volname "彩带小工具" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
+          if [ "$STATUS" != "Accepted" ]; then
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
+              --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" || true
+            exit 1
           fi
 
-          codesign --force --timestamp --sign "$CERT_IDENTITY" "$DMG_PATH"
-          codesign --verify --verbose=2 "$DMG_PATH"
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          spctl --assess --type execute --verbose "$APP_PATH"
 
-      - name: Upload DMG artifact
+          rm -f "$RELEASE_ZIP"
+          ditto -c -k --keepParent "$APP_PATH" "$RELEASE_ZIP"
+
+      - name: Upload app zip artifact
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.version.outputs.artifact_name }}
           path: |
-            desktop/build/macos/loveace-${{ steps.version.outputs.version }}.dmg
-            desktop/build/macos/loveace-${{ steps.version.outputs.version }}.app.zip
+            desktop/build/macos/loveace-${{ steps.version.outputs.version }}.zip
             desktop/build/macos/notary-submit.json
             desktop/build/macos/notary-submission-id.txt
 
       - name: Confirm dry run
         run: |
           echo "Dry run: ${{ inputs.dry_run }}"
-          echo "This workflow never publishes OTA. Use Check macOS Notarization after Apple accepts the submission."
+          echo "OTA/manifest publishing is skipped when dry_run is true."
+
+  upload-manifest:
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ inputs.dry_run == false }}
+    environment: S3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download app zip artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: ./release
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Publish macOS release
+        env:
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          CDN_BASE_URL: ${{ secrets.CDN_BASE_URL }}
+        run: |
+          uv run python cli.py release \
+            --version "${{ needs.build.outputs.version }}" \
+            --platform macos \
+            --file "../../../release/loveace-${{ needs.build.outputs.version }}.zip" \
+            --content "${{ inputs.content }}" \
+            --changelog "${{ inputs.changelog }}" \
+            ${{ inputs.force && '--force' || '' }}
+        working-directory: android/tools/publish

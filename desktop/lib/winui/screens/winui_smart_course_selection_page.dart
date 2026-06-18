@@ -10,6 +10,7 @@ import '../../models/jwc/plan_option.dart';
 import '../../models/jwc/student_schedule.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/smart_course_selection_provider.dart';
+import '../../services/jwc/class_curriculum_service.dart';
 import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
@@ -31,6 +32,181 @@ class _CourseInfo {
     required this.credits,
     this.schedule,
   });
+}
+
+class _ClassCurriculumDialog extends StatefulWidget {
+  final String termCode;
+  final ClassCurriculumService service;
+
+  const _ClassCurriculumDialog({
+    required this.termCode,
+    required this.service,
+  });
+
+  @override
+  State<_ClassCurriculumDialog> createState() => _ClassCurriculumDialogState();
+}
+
+class _ClassCurriculumDialogState extends State<_ClassCurriculumDialog> {
+  var _departments = <ClassCurriculumOption>[];
+  var _subjects = <ClassCurriculumOption>[];
+  var _classes = <ClassCurriculumClassOption>[];
+  ClassCurriculumOption? _selectedDepartment;
+  ClassCurriculumOption? _selectedSubject;
+  ClassCurriculumClassOption? _selectedClass;
+  var _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDepartments();
+  }
+
+  Future<void> _loadDepartments() async {
+    final response = await widget.service.getDepartments();
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (response.success && response.data != null) {
+        _departments = response.data!;
+      } else {
+        _errorMessage = response.error ?? '获取学院失败';
+      }
+    });
+  }
+
+  Future<void> _loadSubjects(ClassCurriculumOption department) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _selectedDepartment = department;
+      _selectedSubject = null;
+      _selectedClass = null;
+      _subjects = [];
+      _classes = [];
+    });
+
+    final response = await widget.service.getSubjects(departmentCode: department.code);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (response.success && response.data != null) {
+        _subjects = response.data!;
+      } else {
+        _errorMessage = response.error ?? '获取专业失败';
+      }
+    });
+    await _loadClasses();
+  }
+
+  Future<void> _loadClasses() async {
+    final department = _selectedDepartment;
+    if (department == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _selectedClass = null;
+      _classes = [];
+    });
+
+    final response = await widget.service.queryClasses(
+      planCode: widget.termCode,
+      departmentCode: department.code,
+      subjectCode: _selectedSubject?.code,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (response.success && response.data != null) {
+        _classes = response.data!;
+      } else {
+        _errorMessage = response.error ?? '获取班级失败';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ContentDialog(
+      title: const Text('班级课表模式'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('当前学期：${widget.termCode}'),
+            const SizedBox(height: 12),
+            if (_errorMessage != null) ...[
+              InfoBar(
+                severity: InfoBarSeverity.error,
+                title: Text(_errorMessage!),
+              ),
+              const SizedBox(height: 12),
+            ],
+            ComboBox<ClassCurriculumOption>(
+              isExpanded: true,
+              placeholder: const Text('选择学院'),
+              value: _selectedDepartment,
+              items: _departments
+                  .map((item) => ComboBoxItem(value: item, child: Text(item.name)))
+                  .toList(),
+              onChanged: _isLoading || _departments.isEmpty
+                  ? null
+                  : (value) {
+                      if (value != null) _loadSubjects(value);
+                    },
+            ),
+            const SizedBox(height: 10),
+            ComboBox<ClassCurriculumOption>(
+              isExpanded: true,
+              placeholder: const Text('选择专业（可选）'),
+              value: _selectedSubject,
+              items: _subjects
+                  .map((item) => ComboBoxItem(value: item, child: Text(item.name)))
+                  .toList(),
+              onChanged: _selectedDepartment == null || _isLoading
+                  ? null
+                  : (value) {
+                      setState(() => _selectedSubject = value);
+                      _loadClasses();
+                    },
+            ),
+            const SizedBox(height: 10),
+            ComboBox<ClassCurriculumClassOption>(
+              isExpanded: true,
+              placeholder: const Text('选择班级'),
+              value: _selectedClass,
+              items: _classes
+                  .map((item) => ComboBoxItem(value: item, child: Text(item.className)))
+                  .toList(),
+              onChanged: _isLoading
+                  ? null
+                  : (value) => setState(() => _selectedClass = value),
+            ),
+            if (_isLoading) ...[
+              const SizedBox(height: 12),
+              const ProgressBar(),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        Button(
+          child: const Text('取消'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        FilledButton(
+          onPressed: _selectedClass == null || _isLoading
+              ? null
+              : () => Navigator.of(context).pop(_selectedClass),
+          child: const Text('切换'),
+        ),
+      ],
+    );
+  }
 }
 
 /// WinUI 风格的智能排课页面
@@ -83,6 +259,30 @@ class _WinUISmartCourseSelectionPageState
     return DateFormat('MM-dd HH:mm').format(time);
   }
 
+  Future<void> _showClassCurriculumDialog(
+      BuildContext context, SmartCourseSelectionProvider provider) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userId = authProvider.credentials?.userId ?? '';
+    final termCode = provider.selectedTermCode;
+    if (termCode == null || termCode.isEmpty) return;
+
+    final selectedClass = await showDialog<ClassCurriculumClassOption>(
+      context: context,
+      builder: (_) => _ClassCurriculumDialog(
+        termCode: termCode,
+        service: provider.jwcService.classCurriculum,
+      ),
+    );
+
+    if (selectedClass == null || !context.mounted) return;
+    await provider.useClassCurriculum(
+      userId: userId,
+      planCode: selectedClass.planCode,
+      classCode: selectedClass.classCode,
+      className: selectedClass.className,
+    );
+  }
+
   /// 构建 CommandBar 按钮列表
   List<CommandBarItem> _buildCommandBarItems(
       BuildContext context, SmartCourseSelectionProvider provider) {
@@ -117,6 +317,20 @@ class _WinUISmartCourseSelectionPageState
     ));
 
     items.add(CommandBarButton(
+      icon: const Icon(FluentIcons.switcher_start_end),
+      label: Text(provider.usingClassCurriculum ? '个人课表模式' : '班级课表模式'),
+      onPressed: provider.state == SmartCourseSelectionState.loading
+          ? null
+          : () async {
+              if (provider.usingClassCurriculum) {
+                await _refreshCourseData();
+              } else {
+                await _showClassCurriculumDialog(context, provider);
+              }
+            },
+    ));
+
+    items.add(CommandBarButton(
       icon: const Icon(FluentIcons.reset),
       label: const Text('重置课表'),
       onPressed: provider.state == SmartCourseSelectionState.loading
@@ -147,7 +361,7 @@ class _WinUISmartCourseSelectionPageState
         ],
       ),
     );
-    if (confirmed == true && mounted) {
+    if (confirmed == true && context.mounted) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final userId = authProvider.credentials?.userId ?? '';
       await provider.resetSelection(userId);
@@ -717,9 +931,21 @@ class _WinUISmartCourseSelectionPageState
             children: [
               Icon(FluentIcons.calendar, size: 16, color: theme.accentColor),
               const SizedBox(width: 8),
-              Text('课程表', style: theme.typography.subtitle),
+              Text(
+                provider.usingClassCurriculum
+                    ? '班级课表${provider.classCurriculumName != null ? " · ${provider.classCurriculumName}" : ""}'
+                    : '课程表',
+                style: theme.typography.subtitle,
+              ),
               const Spacer(),
-              if (schedule != null)
+              if (provider.usingClassCurriculum)
+                Text(
+                  '共 ${provider.availableCourses.length} 条课程安排',
+                  style: theme.typography.caption?.copyWith(
+                    color: theme.inactiveColor,
+                  ),
+                )
+              else if (schedule != null)
                 Text(
                   '已选 ${provider.getEffectiveSelectedCourses().length} 门课程，'
                   '共 ${_calculateEffectiveCredits(provider)} 学分'
@@ -919,6 +1145,25 @@ class _WinUISmartCourseSelectionPageState
   ) {
     final cards = <Widget>[];
 
+    if (provider.usingClassCurriculum) {
+      for (final course in provider.availableCourses) {
+        if (course.skxq == null || course.skjc == null) continue;
+        final left = sessionColumnWidth + (course.skxq! - 1) * cellWidth;
+        final top = headerHeight + (course.skjc! - 1) * cellHeight;
+        final continuingSession = course.cxjc ?? 1;
+        final height = continuingSession * cellHeight;
+
+        cards.add(Positioned(
+          left: left + 2,
+          top: top + 2,
+          width: cellWidth - 4,
+          height: height - 4,
+          child: _buildClassCurriculumCourseCard(context, course, provider),
+        ));
+      }
+      return cards;
+    }
+
     // 已有课程（排除已退课的）
     if (provider.studentSchedule != null) {
       for (final course in provider.studentSchedule!.courses) {
@@ -1031,6 +1276,57 @@ class _WinUISmartCourseSelectionPageState
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建班级课表课程卡片
+  Widget _buildClassCurriculumCourseCard(
+    BuildContext context,
+    CourseScheduleRecord course,
+    SmartCourseSelectionProvider provider,
+  ) {
+    final theme = FluentTheme.of(context);
+
+    return GestureDetector(
+      onTap: () {
+        if (course.skxq != null && course.skjc != null) {
+          provider.selectTimeSlot(course.skxq!, course.skjc!);
+        }
+        provider.selectCourse(course);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.accentColor.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: theme.accentColor.withValues(alpha: 0.45)),
+        ),
+        padding: const EdgeInsets.all(3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              course.kcm ?? '',
+              style: theme.typography.caption?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.accentColor,
+                fontSize: 10,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Spacer(),
+            Text(
+              course.jasm ?? course.skjs ?? '',
+              style: theme.typography.caption?.copyWith(
+                fontSize: 8,
+                color: theme.inactiveColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -1718,6 +2014,48 @@ class _WinUISmartCourseSelectionPageState
             spacing: 12,
             runSpacing: 4,
             children: [
+              // 只看培养方案内
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ToggleSwitch(
+                    checked: provider.filterPlanOnly,
+                    onChanged: (value) {
+                      provider.setFilter(planOnly: value);
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '计划内',
+                    style: theme.typography.caption?.copyWith(
+                      color: provider.filterPlanOnly
+                          ? (isDark ? Colors.teal.light : Colors.teal)
+                          : theme.inactiveColor,
+                    ),
+                  ),
+                ],
+              ),
+              // 只看不在培养方案内
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ToggleSwitch(
+                    checked: provider.filterOutOfPlanOnly,
+                    onChanged: (value) {
+                      provider.setFilter(outOfPlanOnly: value);
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '计划外',
+                    style: theme.typography.caption?.copyWith(
+                      color: provider.filterOutOfPlanOnly
+                          ? (isDark ? Colors.teal.light : Colors.teal)
+                          : theme.inactiveColor,
+                    ),
+                  ),
+                ],
+              ),
               // 隐藏已修
               Row(
                 mainAxisSize: MainAxisSize.min,

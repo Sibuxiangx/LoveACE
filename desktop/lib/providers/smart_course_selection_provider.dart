@@ -78,11 +78,20 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   int? _selectedDay;
   int? _selectedSession;
 
+  /// 是否正在使用班级课表作为中间课表数据源
+  bool _usingClassCurriculum = false;
+
+  /// 当前班级课表名称
+  String? _classCurriculumName;
+
   /// 筛选：校区
   String? _filterCampus;
 
   /// 筛选：只显示培养方案内课程
   bool _filterPlanOnly = true;
+
+  /// 筛选：只显示不在培养方案内课程
+  bool _filterOutOfPlanOnly = false;
 
   /// 筛选：隐藏已修课程
   bool _filterHidePassed = true;
@@ -91,19 +100,19 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   bool _filterHideCompletedCategory = true;
 
   /// 培养方案课程代码集合（用于快速查找）
-  Set<String> _planCourseCodes = {};
+  final Set<String> _planCourseCodes = {};
 
   /// 课程代码到培养方案路径的映射
-  Map<String, String> _courseCodeToPlanPath = {};
+  final Map<String, String> _courseCodeToPlanPath = {};
 
   /// 课程代码到通过状态的映射
-  Map<String, bool> _courseCodeToPassed = {};
+  final Map<String, bool> _courseCodeToPassed = {};
 
   /// 课程代码到成绩的映射
-  Map<String, String?> _courseCodeToScore = {};
+  final Map<String, String?> _courseCodeToScore = {};
 
   /// 课程代码到所属分类是否已完成的映射
-  Map<String, bool> _courseCodeToCategoryCompleted = {};
+  final Map<String, bool> _courseCodeToCategoryCompleted = {};
 
   /// 加载进度：已完成页数
   int _loadingProgressCompleted = 0;
@@ -131,7 +140,7 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   /// 加载进度百分比 (0.0 - 1.0)
   double get loadingProgress {
     if (_loadingProgressTotal <= 0) return 0.0;
-    return _loadingProgressCompleted / _loadingProgressTotal;
+    return (_loadingProgressCompleted / _loadingProgressTotal).clamp(0.0, 1.0).toDouble();
   }
   StudentScheduleResponse? get studentSchedule => _studentSchedule;
   PlanCompletionInfo? get planCompletion => _planCompletion;
@@ -143,10 +152,13 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   CourseScheduleRecord? get selectedCourse => _selectedCourse;
   String? get filterCampus => _filterCampus;
   bool get filterPlanOnly => _filterPlanOnly;
+  bool get filterOutOfPlanOnly => _filterOutOfPlanOnly;
   bool get filterHidePassed => _filterHidePassed;
   bool get filterHideCompletedCategory => _filterHideCompletedCategory;
   int? get selectedDay => _selectedDay;
   int? get selectedSession => _selectedSession;
+  bool get usingClassCurriculum => _usingClassCurriculum;
+  String? get classCurriculumName => _classCurriculumName;
 
   /// 开课数据刷新时间
   DateTime? get courseDataRefreshTime => _selectionData?.courseDataRefreshTime;
@@ -191,6 +203,8 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     _selectedCourse = null;
     _selectedDay = null;
     _selectedSession = null;
+    _usingClassCurriculum = false;
+    _classCurriculumName = null;
     _planCourseCodes.clear();
     _courseCodeToPlanPath.clear();
     _courseCodeToPassed.clear();
@@ -224,12 +238,25 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     try {
       LoggerService.info('🎯 初始化智能排课数据 (用户: $userId)...');
 
-      // 1. 加载学期列表
-      final termResponse = await jwcService.term.getAllTerms();
+      // 1. 加载智能选课学期列表
+      // 使用“本学期课程安排”页面的 select#zxjxjhh，确保学期代码与开课查询接口一致。
+      final termResponse = await jwcService.courseSchedule.getScheduleTerms();
       if (!termResponse.success || termResponse.data == null) {
         throw Exception(termResponse.error ?? '获取学期列表失败');
       }
-      _termList = termResponse.data;
+      _termList = termResponse.data!
+          .map((term) => TermItem(
+                termCode: term.termCode,
+                termName: term.termName,
+                isCurrent: term.isSelected,
+              ))
+          .toList();
+      if (_termList!.length <= 1) {
+        final classTermResponse = await jwcService.classCurriculum.getTerms();
+        if (classTermResponse.success && classTermResponse.data != null) {
+          _termList = classTermResponse.data;
+        }
+      }
       LoggerService.info('📅 获取到 ${_termList!.length} 个学期');
 
       // 2. 加载持久化数据
@@ -237,7 +264,14 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
 
       // 3. 如果没有选中学期，默认选择第一个（当前学期）
       if (_selectedTermCode == null && _termList!.isNotEmpty) {
-        _selectedTermCode = _termList!.first.termCode;
+        TermItem? currentTerm;
+        for (final term in _termList!) {
+          if (term.isCurrent) {
+            currentTerm = term;
+            break;
+          }
+        }
+        _selectedTermCode = (currentTerm ?? _termList!.first).termCode;
       }
 
       // 4. 加载培养方案（使用 Service 层缓存，不强制刷新）
@@ -567,6 +601,8 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
         availableCourses: allCourses,
         courseDataRefreshTime: DateTime.now(),
       );
+      _usingClassCurriculum = false;
+      _classCurriculumName = null;
 
       await _savePersistedData(userId);
       LoggerService.info('✅ 开课数据刷新完成');
@@ -591,6 +627,62 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
       _state = SmartCourseSelectionState.error;
       _errorMessage = '刷新开课数据失败: $e';
       _isRetryable = true;
+    }
+
+    notifyListeners();
+  }
+
+  /// 使用班级课表作为当前可选课程数据源
+  Future<void> useClassCurriculum({
+    required String userId,
+    required String planCode,
+    required String classCode,
+    required String className,
+  }) async {
+    _state = SmartCourseSelectionState.loading;
+    _loadingProgressCompleted = 0;
+    _loadingProgressTotal = 0;
+    _loadingProgressRecords = 0;
+    _loadingMessage = '正在获取班级课表...';
+    notifyListeners();
+
+    try {
+      final response = await jwcService.classCurriculum.queryClassCurriculum(
+        planCode: planCode,
+        classCode: classCode,
+      );
+      if (!response.success || response.data == null) {
+        throw Exception(response.error ?? '获取班级课表失败');
+      }
+
+      final courses = response.data!;
+      _loadingProgressRecords = courses.length;
+      _loadingMessage = '正在保存班级课表...';
+      notifyListeners();
+
+      if (_selectionData == null || _selectionData!.userId != userId) {
+        _selectionData = SmartCourseSelectionData.empty(userId, planCode);
+      }
+      _selectionData = _selectionData!.copyWith(
+        termCode: planCode,
+        availableCourses: courses,
+        courseDataRefreshTime: DateTime.now(),
+      );
+      _selectedTermCode = planCode;
+      _usingClassCurriculum = true;
+      _classCurriculumName = className;
+      _selectedCourse = null;
+      _selectedDay = null;
+      _selectedSession = null;
+
+      await _savePersistedData(userId);
+      _state = SmartCourseSelectionState.loaded;
+      LoggerService.info('✅ 已切换为班级课表数据源: $classCode，共 ${courses.length} 条');
+    } catch (e) {
+      _state = SmartCourseSelectionState.error;
+      _errorMessage = '获取班级课表失败: $e';
+      _isRetryable = true;
+      LoggerService.error('❌ 获取班级课表失败', error: e);
     }
 
     notifyListeners();
@@ -724,15 +816,25 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   void setFilter({
     String? campus,
     bool? planOnly,
+    bool? outOfPlanOnly,
     bool? hidePassed,
     bool? hideCompletedCategory,
   }) {
     if (campus != null) {
       _filterCampus = campus.isEmpty ? null : campus;
     }
-    if (planOnly != null) _filterPlanOnly = planOnly;
+    if (planOnly != null) {
+      _filterPlanOnly = planOnly;
+      if (planOnly) _filterOutOfPlanOnly = false;
+    }
+    if (outOfPlanOnly != null) {
+      _filterOutOfPlanOnly = outOfPlanOnly;
+      if (outOfPlanOnly) _filterPlanOnly = false;
+    }
     if (hidePassed != null) _filterHidePassed = hidePassed;
-    if (hideCompletedCategory != null) _filterHideCompletedCategory = hideCompletedCategory;
+    if (hideCompletedCategory != null) {
+      _filterHideCompletedCategory = hideCompletedCategory;
+    }
     notifyListeners();
   }
 
@@ -740,6 +842,7 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   void clearFilter() {
     _filterCampus = null;
     _filterPlanOnly = true;
+    _filterOutOfPlanOnly = false;
     _filterHidePassed = true;
     _filterHideCompletedCategory = true;
     notifyListeners();
@@ -816,9 +919,15 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     void indexCategory(PlanCategory category, String path, bool parentCompleted) {
       final currentPath = path.isEmpty ? category.categoryName : '$path > ${category.categoryName}';
 
-      // 检查当前分类是否已完成（所有课程都通过）
+      // 检查当前分类是否已完成：
+      // 1. 任一父分类已完成，则子树内课程都属于已完成分类
+      // 2. 当前分类有最低学分要求且已达标
+      // 3. 无学分要求的叶子课程组，所有直接课程都已通过
       final isCategoryCompleted = parentCompleted ||
-          (category.courses.isNotEmpty && category.courses.every((c) => c.isPassed));
+          (category.minCredits > 0 && category.completedCredits >= category.minCredits) ||
+          (category.courses.isNotEmpty &&
+              category.subcategories.isEmpty &&
+              category.courses.every((c) => c.isPassed));
 
       for (final course in category.courses) {
         if (course.courseCode.isNotEmpty) {
@@ -826,7 +935,9 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
           _courseCodeToPlanPath[course.courseCode] = currentPath;
           _courseCodeToPassed[course.courseCode] = course.isPassed;
           _courseCodeToScore[course.courseCode] = course.score;
-          _courseCodeToCategoryCompleted[course.courseCode] = isCategoryCompleted;
+          _courseCodeToCategoryCompleted[course.courseCode] =
+              (_courseCodeToCategoryCompleted[course.courseCode] ?? false) ||
+                  isCategoryCompleted;
         }
       }
 
@@ -870,13 +981,18 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     return _courseCodeToScore[courseCode];
   }
 
-  /// 获取筛选后的可用课程（只包含培养方案内的课程）
+  /// 获取筛选后的可用课程
   List<CourseScheduleRecord> get filteredAvailableCourses {
     var courses = availableCourses;
 
     // 只显示培养方案内的课程
     if (_filterPlanOnly) {
       courses = courses.where((c) => isCourseInPlan(c.kch)).toList();
+    }
+
+    // 只显示不在培养方案内的课程
+    if (_filterOutOfPlanOnly) {
+      courses = courses.where((c) => !isCourseInPlan(c.kch)).toList();
     }
 
     // 隐藏已修课程
