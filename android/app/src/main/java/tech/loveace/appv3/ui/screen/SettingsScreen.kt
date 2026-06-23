@@ -105,7 +105,7 @@ fun SettingsScreen(
                     Modifier.padding(20.dp).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.wrapContentSize()) {
+                    Box(Modifier.size(68.dp)) {
                         // 头像
                         Box(
                             Modifier.size(64.dp).clip(CircleShape)
@@ -130,7 +130,7 @@ fun SettingsScreen(
                         }
                         // 相机图标 - 置于头像右下外侧
                         Box(
-                            Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 4.dp).size(22.dp)
+                            Modifier.align(Alignment.BottomEnd).size(22.dp)
                                 .background(MaterialTheme.colorScheme.primary, CircleShape)
                                 .clickable { avatarPicker.launch("image/*") },
                             contentAlignment = Alignment.Center,

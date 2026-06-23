@@ -91,7 +91,7 @@ fun LandscapeSettingsScreen(
                         Modifier.padding(24.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Box(Modifier.wrapContentSize()) {
+                        Box(Modifier.size(102.dp)) {
                             // 大头像
                             Box(
                                 Modifier.size(96.dp).clip(CircleShape).clickable { avatarPicker.launch("image/*") },
@@ -104,7 +104,7 @@ fun LandscapeSettingsScreen(
                                 }
                             }
                             // 相机图标 - 置于头像右下外侧
-                            Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 6.dp).size(28.dp).background(MaterialTheme.colorScheme.primary, CircleShape).clickable { avatarPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
+                            Box(Modifier.align(Alignment.BottomEnd).size(28.dp).background(MaterialTheme.colorScheme.primary, CircleShape).clickable { avatarPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
                                 Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
