@@ -105,30 +105,34 @@ fun SettingsScreen(
                     Modifier.padding(20.dp).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 头像
-                    Box(
-                        Modifier.size(64.dp).clip(CircleShape)
-                            .clickable { avatarPicker.launch("image/*") },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (profile.avatarUri != null) {
-                            AsyncImage(
-                                model = profile.avatarUri,
-                                contentDescription = "头像",
-                                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                            )
-                        } else {
-                            Image(
-                                painter = painterResource(R.drawable.logo),
-                                contentDescription = "头像",
-                                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                                contentScale = ContentScale.Crop,
-                            )
+                    Box(Modifier.size(68.dp)) {
+                        // 头像
+                        Box(
+                            Modifier.size(64.dp).clip(CircleShape)
+                                .clickable { avatarPicker.launch("image/*") },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (profile.avatarUri != null) {
+                                AsyncImage(
+                                    model = profile.avatarUri,
+                                    contentDescription = "头像",
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            } else {
+                                Image(
+                                    painter = painterResource(R.drawable.logo),
+                                    contentDescription = "头像",
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            }
                         }
+                        // 相机图标 - 置于头像右下外侧
                         Box(
                             Modifier.align(Alignment.BottomEnd).size(22.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .clickable { avatarPicker.launch("image/*") },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(12.dp),
