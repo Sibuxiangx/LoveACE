@@ -43,7 +43,10 @@ final class ScheduleViewModel {
             if result.success, let data = result.data {
                 courses = data.courses; totalUnits = data.allUnits
                 scheduleStore.saveCourses(data.courses)
-                Self.syncToWidget(data.courses)
+                let shouldSyncWidget = terms.first { $0.termCode == termCode }?.isCurrent == true
+                if shouldSyncWidget {
+                    Self.syncToWidget(data.courses)
+                }
             } else { error = result.error }
             isLoading = false
         }

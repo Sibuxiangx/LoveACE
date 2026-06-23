@@ -67,14 +67,24 @@ actor JWCService {
                 throw ServiceError.parseError("未找到学期选择框")
             }
             let options = try select.select("option")
-            var terms: [TermItem] = []
-            for (index, option) in options.array().enumerated() {
+            var parsedTerms: [TermItem] = []
+            for option in options.array() {
                 let code = try option.attr("value")
                 guard !code.isEmpty else { continue }
-                let name = try option.text().trimmingCharacters(in: .whitespaces)
+                let rawName = try option.text().trimmingCharacters(in: .whitespaces)
+                let name = rawName
                     .replacingOccurrences(of: "春", with: "下")
                     .replacingOccurrences(of: "秋", with: "上")
-                terms.append(TermItem(termCode: code, termName: name, isCurrent: index == 0))
+                let isCurrent = option.hasAttr("selected") || rawName.contains("当前")
+                parsedTerms.append(TermItem(termCode: code, termName: name, isCurrent: isCurrent))
+            }
+            let terms: [TermItem]
+            if parsedTerms.contains(where: { $0.isCurrent }) {
+                terms = parsedTerms
+            } else {
+                terms = parsedTerms.enumerated().map { index, term in
+                    TermItem(termCode: term.termCode, termName: term.termName, isCurrent: index == 0)
+                }
             }
             let result: UniResponse<[TermItem]> = .success(terms)
             cachedTerms = result
