@@ -21,9 +21,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -131,21 +132,24 @@ fun TeacherEvaluationContent(
                     evaluatedCount = state.evaluatedCount,
                     taskTotal = state.tasks.size,
                     finished = state.tasks.count { it.status.isTerminal() },
+                    failed = state.tasks.count { it.status == TeacherEvaluationTaskStatus.Failed },
                     onStart = onStart,
                     onStop = onStop,
                 )
             }
 
+            if (state.tasks.isNotEmpty()) {
+                item {
+                    SectionHeader("任务状态（${state.tasks.count { it.status.isTerminal() }} / ${state.tasks.size}）")
+                }
+                items(state.tasks, key = { "task_${it.course.displayId}" }) { task -> TaskCard(task) }
+            }
+
             if (state.courses.isEmpty()) {
                 item { InfoCard("暂无评教课程", "如果评教已开启，可以稍后刷新重试。") }
             } else {
-                item { SectionHeader("课程列表") }
+                item { SectionHeader("课程列表（待评 ${state.pendingCourses.size} / 总计 ${state.courses.size}）") }
                 items(state.courses, key = { it.displayId }) { course -> CourseCard(course) }
-            }
-
-            if (state.tasks.isNotEmpty()) {
-                item { SectionHeader("任务状态") }
-                items(state.tasks, key = { "task_${it.course.displayId}" }) { task -> TaskCard(task) }
             }
 
             if (state.logs.isNotEmpty()) {
@@ -159,6 +163,7 @@ fun TeacherEvaluationContent(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 private fun NoticeCard(
     isRunning: Boolean,
     totalCourses: Int,
@@ -166,29 +171,79 @@ private fun NoticeCard(
     evaluatedCount: Int,
     taskTotal: Int,
     finished: Int,
+    failed: Int,
     onStart: () -> Unit,
     onStop: () -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("批量自动评教", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "仅处理待评课程。任务会交错并发执行：每 6 秒启动一门，等待 140 秒后提交。请保持 App 前台，停止不会撤回已提交评价。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text("课程 $totalCourses 门 · 待评 $pendingCount 门 · 已评 $evaluatedCount 门", style = MaterialTheme.typography.bodySmall)
-            if (taskTotal > 0) {
-                LinearProgressIndicator(
-                    progress = { finished.toFloat() / taskTotal.coerceAtLeast(1) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text("任务进度 $finished / $taskTotal", style = MaterialTheme.typography.bodySmall)
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("批量自动评教", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isRunning) "正在执行任务，请保持 App 前台" else "仅处理待评课程，已提交评价无法撤回",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                    )
+                }
+                StatusPill(if (isRunning) "运行中" else if (pendingCount == 0) "已完成" else "待开始")
             }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SummaryStat("总课程", totalCourses.toString(), Modifier.weight(1f))
+                SummaryStat("待评", pendingCount.toString(), Modifier.weight(1f))
+                SummaryStat("已评", evaluatedCount.toString(), Modifier.weight(1f))
+            }
+
+            if (taskTotal > 0) {
+                LinearWavyProgressIndicator(
+                    progress = { finished.toFloat() / taskTotal.coerceAtLeast(1) },
+                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f),
+                )
+                Text(
+                    "任务进度 $finished / $taskTotal${if (failed > 0) " · 失败 $failed" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            Text(
+                "任务每 6 秒启动一门，准备表单后等待 140 秒提交；停止只会取消未提交任务。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onStart, enabled = !isRunning && pendingCount > 0) { Text("开始批量评教") }
                 OutlinedButton(onClick = onStop, enabled = isRunning) { Text("停止") }
             }
         }
+    }
+}
+
+@Composable
+private fun SummaryStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun StatusPill(text: String) {
+    Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = MaterialTheme.shapes.medium) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
