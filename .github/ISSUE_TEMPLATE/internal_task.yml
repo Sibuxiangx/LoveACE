@@ -1,0 +1,68 @@
+name: 内部使用
+description: 维护者记录问题、待办功能、技术债或改进项
+title: "[内部] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个模板主要给维护者内部使用，用来记录待处理问题、计划功能、技术债和改进项。
+
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: 类型
+      options:
+        - Bug / 问题
+        - Feature / 新功能
+        - Improvement / 改进
+        - Refactor / 重构
+        - Release / 发版
+        - Maintenance / 维护
+        - Research / 调研
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 内容
+      description: 记录要处理的问题、目标或背景。
+      placeholder: 简要说明这个事项是什么、为什么要做。
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完成标准
+      description: 写清楚做到什么程度可以关闭这个 issue。
+      placeholder: |
+        - [ ] ……
+        - [ ] ……
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及范围
+      multiple: true
+      options:
+        - Android
+        - iOS
+        - Desktop
+        - Backend / Worker
+        - Release / CI
+        - Docs
+        - Product / UX
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 备注
+      description: 可记录链接、上下文、风险或后续想法。
+    validations:
+      required: false

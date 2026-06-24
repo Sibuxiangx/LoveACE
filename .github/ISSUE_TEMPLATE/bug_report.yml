@@ -1,0 +1,80 @@
+name: 问题反馈
+description: 反馈崩溃、异常、无法使用或体验问题
+title: "[问题反馈] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈问题。请尽量填写可复现的信息，方便定位。
+
+        ⚠️ 请不要在 issue 中提交账号、密码、Cookie、Token、身份证号、手机号等敏感信息。
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 使用平台
+      description: 问题出现在哪个平台？
+      options:
+        - Android
+        - iOS
+        - macOS
+        - Windows
+        - Web
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App 版本
+      description: 可在应用设置页或下载页面查看。
+      placeholder: 例如：1.1.16 / 1.1.10
+    validations:
+      required: false
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 简要说明遇到的问题。
+      placeholder: 例如：打开课程表时一直加载，无法显示当前学期课程。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 如果可以稳定复现，请写出具体步骤。
+      placeholder: |
+        1. 打开 App
+        2. 进入「课程表」
+        3. 点击……
+        4. 出现……
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      placeholder: 例如：应显示当前学期课程。
+    validations:
+      required: false
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      placeholder: 例如：页面一直显示加载中，或出现错误提示。
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 截图或日志
+      description: 可粘贴截图、错误提示或相关日志；请先打码敏感信息。
+    validations:
+      required: false

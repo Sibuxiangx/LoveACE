@@ -1,0 +1,59 @@
+name: 功能建议
+description: 提出新功能、体验优化或改进建议
+title: "[功能建议] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提供建议。请尽量说明使用场景和预期收益，方便评估优先级。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 需求背景
+      description: 这个建议想解决什么问题或改进什么体验？
+      placeholder: 例如：现在查看某类信息需要多次点击，希望能更快进入。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 你希望 LoveACE 怎么实现或呈现这个功能？
+      placeholder: 例如：在首页增加一个入口，点击后直接打开……
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 相关平台
+      description: 这个建议主要影响哪些平台？
+      multiple: true
+      options:
+        - Android
+        - iOS
+        - macOS
+        - Windows
+        - Web
+        - 全平台
+        - 不确定
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案
+      description: 如果有其他可接受的实现方式，也可以写在这里。
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 可以添加截图、参考链接或其他说明。
+    validations:
+      required: false
