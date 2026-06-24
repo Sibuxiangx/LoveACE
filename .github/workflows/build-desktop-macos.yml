@@ -154,50 +154,29 @@ jobs:
         run: |
           APP_PATH="build/macos/Build/Products/Release/loveace.app"
           ENTITLEMENTS="macos/Runner/Release.entitlements"
-          PROCESSED_ENTITLEMENTS="build/macos/Release.processed.entitlements"
-          APPLE_TEAM_ID="${{ secrets.APPLE_TEAM_ID }}"
-
-          export APP_PATH ENTITLEMENTS PROCESSED_ENTITLEMENTS APPLE_TEAM_ID
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          team_id = os.environ['APPLE_TEAM_ID'].strip()
-          if not team_id:
-              raise SystemExit('APPLE_TEAM_ID is empty')
-
-          source = Path(os.environ['ENTITLEMENTS'])
-          output = Path(os.environ['PROCESSED_ENTITLEMENTS'])
-          output.parent.mkdir(parents=True, exist_ok=True)
-
-          text = source.read_text()
-          text = text.replace('$(AppIdentifierPrefix)', f'{team_id}.')
-          if '$(' in text:
-              raise SystemExit('Unexpanded build setting remains in entitlements')
-          output.write_text(text)
-          PY
-          plutil -lint "$PROCESSED_ENTITLEMENTS"
+          export APP_PATH ENTITLEMENTS
+          plutil -lint "$ENTITLEMENTS"
+          if plutil -extract keychain-access-groups raw -o - "$ENTITLEMENTS" >/dev/null 2>&1; then
+            echo "Release entitlements must not contain keychain-access-groups for Developer ID builds" >&2
+            exit 1
+          fi
 
           while IFS= read -r item; do
             codesign --force --timestamp --options runtime --sign "$CERT_IDENTITY" "$item"
           done < <(find "$APP_PATH" \( -name "*.framework" -o -name "*.dylib" \))
-          codesign --force --timestamp --options runtime --entitlements "$PROCESSED_ENTITLEMENTS" --sign "$CERT_IDENTITY" "$APP_PATH"
+          codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" --sign "$CERT_IDENTITY" "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           python3 - <<'PY'
           import os
           import subprocess
 
           app_path = os.environ['APP_PATH']
-          team_id = os.environ['APPLE_TEAM_ID'].strip()
-          expected_group = f'{team_id}.cn.linota.loveace.desktop'
           entitlements = subprocess.check_output(
               ['codesign', '-d', '--entitlements', ':-', app_path],
               stderr=subprocess.DEVNULL,
           ).decode('utf-8', errors='replace')
-          if '$(' in entitlements:
-              raise SystemExit('Signed app still contains unexpanded entitlements')
-          if expected_group not in entitlements:
-              raise SystemExit('Signed app is missing expected keychain access group')
+          if 'keychain-access-groups' in entitlements:
+              raise SystemExit('Signed Developer ID app must not contain keychain-access-groups')
           PY
 
       - name: Notarize and staple app

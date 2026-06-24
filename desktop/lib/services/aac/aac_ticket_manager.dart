@@ -1,11 +1,10 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../logger_service.dart';
+import '../secure_value_store.dart';
 
 /// AAC Ticket管理器
 ///
 /// 负责管理用户的AAC系统ticket，支持多账户隔离存储
 class AACTicketManager {
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _keyPrefix = 'aac_ticket_';
 
   /// 获取用户的AAC ticket
@@ -15,7 +14,7 @@ class AACTicketManager {
   static Future<String?> getTicket(String userId) async {
     try {
       final key = _getKey(userId);
-      final encryptedTicket = await _storage.read(key: key);
+      final encryptedTicket = await SecureValueStore.read(key: key);
 
       if (encryptedTicket == null) {
         LoggerService.info('📭 用户 $userId 的AAC ticket不存在');
@@ -39,7 +38,7 @@ class AACTicketManager {
   static Future<void> saveTicket(String userId, String ticket) async {
     try {
       final key = _getKey(userId);
-      await _storage.write(key: key, value: ticket);
+      await SecureValueStore.write(key: key, value: ticket);
       LoggerService.info('💾 成功保存用户 $userId 的AAC ticket');
     } catch (e) {
       LoggerService.error('❌ 保存AAC ticket失败', error: e);
@@ -53,7 +52,7 @@ class AACTicketManager {
   static Future<void> deleteTicket(String userId) async {
     try {
       final key = _getKey(userId);
-      await _storage.delete(key: key);
+      await SecureValueStore.delete(key: key);
       LoggerService.info('🗑️ 成功删除用户 $userId 的AAC ticket');
     } catch (e) {
       LoggerService.error('❌ 删除AAC ticket失败', error: e);
@@ -77,10 +76,10 @@ class AACTicketManager {
   /// 清除所有AAC tickets（用于调试或重置）
   static Future<void> clearAllTickets() async {
     try {
-      final allKeys = await _storage.readAll();
+      final allKeys = await SecureValueStore.readAll();
       for (final key in allKeys.keys) {
         if (key.startsWith(_keyPrefix)) {
-          await _storage.delete(key: key);
+          await SecureValueStore.delete(key: key);
         }
       }
       LoggerService.info('🗑️ 已清除所有AAC tickets');
