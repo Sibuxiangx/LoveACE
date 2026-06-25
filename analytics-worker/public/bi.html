@@ -65,7 +65,7 @@
     .trend-tooltip strong { display: block; margin-bottom: 4px; font-size: 12px; }
     .bar-list { display: grid; gap: 12px; }
     .bar-row { display: grid; grid-template-columns: minmax(92px, 1fr) 96px 54px; align-items: center; gap: 10px; }
-    .usage-row { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(64px, .72fr) repeat(3, 34px); align-items: center; gap: 8px; }
+    .usage-row { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(64px, .72fr) repeat(4, 34px); align-items: center; gap: 8px; }
     .usage-head { color: var(--muted); font: 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
     .usage-head > div:nth-child(n+3) { text-align: right; }
     .usage-stat { text-align: right; color: var(--muted); font: 12px/1 var(--mono); font-variant-numeric: tabular-nums; }
@@ -81,7 +81,7 @@
     .privacy { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #ddd6ce; color: var(--muted); font: 11px/1.45 var(--mono); overflow-wrap: anywhere; }
     @media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } .lower { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 900px) { .shell { width: min(100vw - 20px, 760px); margin: 10px auto; } .workspace { padding: 12px; } .metrics, .main, .lower { grid-template-columns: 1fr; } .topbar, .notice { align-items: flex-start; flex-direction: column; } .range-tabs { flex-wrap: wrap; padding-inline: 0; } .trend { height: 300px; } }
-    @media (max-width: 560px) { .topbar { padding: 14px; } .workspace { padding: 10px; } .notice { padding-inline: 4px; } .metrics { grid-template-columns: 1fr; } .panel { padding: 14px; } .panel-head { align-items: flex-start; flex-direction: column; gap: 8px; } .trend { height: 260px; } .bar-row { grid-template-columns: minmax(0, 1fr) 72px 46px; gap: 8px; } .usage-row { grid-template-columns: minmax(0, 1fr) repeat(3, 34px); gap: 8px; } .usage-row .bar-track { grid-column: 1 / -1; grid-row: 2; } .usage-head > div:nth-child(2) { display: none; } .version-row { grid-template-columns: auto minmax(0, 1fr); } .version-row .bar-count { text-align: left; } .value { font-size: 30px; } }
+    @media (max-width: 560px) { .topbar { padding: 14px; } .workspace { padding: 10px; } .notice { padding-inline: 4px; } .metrics { grid-template-columns: 1fr; } .panel { padding: 14px; } .panel-head { align-items: flex-start; flex-direction: column; gap: 8px; } .trend { height: 260px; } .bar-row { grid-template-columns: minmax(0, 1fr) 72px 46px; gap: 8px; } .usage-row { grid-template-columns: minmax(0, 1fr) repeat(4, 34px); gap: 8px; } .usage-row .bar-track { grid-column: 1 / -1; grid-row: 2; } .usage-head > div:nth-child(2) { display: none; } .version-row { grid-template-columns: auto minmax(0, 1fr); } .version-row .bar-count { text-align: left; } .value { font-size: 30px; } }
   </style>
 </head>
 <body>
@@ -108,7 +108,7 @@
       <section class="grid metrics" id="metrics"></section>
       <section class="grid main">
         <article class="card panel trend-panel"><div class="panel-head"><h2>区间事件趋势</h2><span class="stamp" id="trend-stamp">BUCKET: HOUR</span></div><div class="trend" id="trend"></div></article>
-        <article class="card panel"><div class="panel-head"><h2>归一化功能排行</h2><span class="stamp">NORMALIZED_USAGE</span></div><div id="usage"></div><div class="privacy">DATA_RULE: screen/feature aliases normalized; users=COUNT(DISTINCT student_hash); A/I=Android/iOS events</div></article>
+        <article class="card panel"><div class="panel-head"><h2>归一化功能排行</h2><span class="stamp">NORMALIZED_USAGE</span></div><div id="usage"></div>    <div class="privacy">DATA_RULE: screen/feature aliases normalized; users=COUNT(DISTINCT student_hash); A/I/D=Android/iOS/Desktop events</div></article>
       </section>
       <section class="grid lower">
         <article class="card panel"><div class="panel-head"><h2>事件分布</h2><span class="stamp">EVENT_NAME</span></div><div id="events"></div></article>
@@ -189,13 +189,13 @@
     function usageRows(rows) {
       if (!rows.length) return `<div class="hint">--- NO_NORMALIZED_USAGE ---</div>`;
       const max = Math.max(1, ...rows.map((row) => Number(row.users) || 0));
-      const header = `<div class="usage-row usage-head"><div></div><div></div><div>U</div><div>A</div><div>I</div></div>`;
+      const header = `<div class="usage-row usage-head"><div></div><div></div><div>U</div><div>A</div><div>I</div><div>D</div></div>`;
       return `<div class="bar-list">${header}${rows.map((row, index) => {
         const users = Number(row.users) || 0;
         const width = Math.max(4, Math.round((users / max) * 100));
         const fillClass = index === 0 ? "bar-fill hot" : "bar-fill";
         const label = row.label || "未标记";
-        return `<div class="usage-row"><div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div><div class="bar-track"><div class="${fillClass}" style="width:${width}%"></div></div><div class="usage-stat">${formatNumber(users)}</div><div class="usage-stat">${formatNumber(row.android)}</div><div class="usage-stat">${formatNumber(row.ios)}</div></div>`;
+        return `<div class="usage-row"><div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div><div class="bar-track"><div class="${fillClass}" style="width:${width}%"></div></div><div class="usage-stat">${formatNumber(users)}</div><div class="usage-stat">${formatNumber(row.android)}</div><div class="usage-stat">${formatNumber(row.ios)}</div><div class="usage-stat">${formatNumber(row.desktop)}</div></div>`;
       }).join("")}</div>`;
     }
 

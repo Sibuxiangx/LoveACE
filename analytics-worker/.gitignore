@@ -1,0 +1,4 @@
+.dev.vars
+*.log
+node_modules/
+.wrangler/
