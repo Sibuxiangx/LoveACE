@@ -44,6 +44,7 @@ fun LaborClubScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDetailSheet by remember { mutableStateOf<LaborClubActivity?>(null) }
+    var showAddClubDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(authViewModel.laborClubService) {
         authViewModel.laborClubService?.let { vm.init(it); vm.loadAll() }
@@ -58,6 +59,12 @@ fun LaborClubScreen(
         state.applyResult?.let {
             snackbarHostState.showSnackbar(it)
             vm.clearApplyResult()
+        }
+    }
+    LaunchedEffect(state.addClubResult) {
+        state.addClubResult?.let {
+            snackbarHostState.showSnackbar(it)
+            vm.clearAddClubResult()
         }
     }
 
@@ -87,7 +94,7 @@ fun LaborClubScreen(
 
                 // 俱乐部信息
                 if (state.clubs.isNotEmpty()) {
-                    item { ClubsSection(state.clubs) }
+                    item { ClubsSection(state.clubs, onAddClick = { showAddClubDialog = true }) }
                 }
 
                 // Tab 切换
@@ -108,6 +115,17 @@ fun LaborClubScreen(
     // 活动详情 BottomSheet
     showDetailSheet?.let { activity ->
         ActivityDetailSheet(activity, state, vm) { showDetailSheet = null }
+    }
+
+    // 添加俱乐部对话框
+    if (showAddClubDialog) {
+        AddClubDialog(
+            onDismiss = { showAddClubDialog = false },
+            onConfirm = { name, clubId, typeName, note ->
+                vm.addClub(name, clubId, typeName, note)
+                showAddClubDialog = false
+            }
+        )
     }
 }
 
@@ -182,7 +200,7 @@ private fun ProgressCard(progress: LaborClubProgressInfo) {
 
 // ── 俱乐部信息 ──
 @Composable
-private fun ClubsSection(clubs: List<LaborClubInfo>) {
+private fun ClubsSection(clubs: List<LaborClubInfo>, onAddClick: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Card(
         Modifier.fillMaxWidth().animateContentSize(),
@@ -200,8 +218,13 @@ private fun ClubsSection(clubs: List<LaborClubInfo>) {
                     }
                 },
                 trailingContent = {
-                    Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
-                        tint = MaterialTheme.colorScheme.primary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onAddClick) {
+                            Icon(Icons.Default.AddCircle, "添加俱乐部", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null,
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
                 },
                 modifier = Modifier.clickable { expanded = !expanded },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -618,6 +641,83 @@ private fun formatTimeRange(start: String, end: String): String {
         java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm").format(dt)
     } catch (_: Exception) { s }
     return "${fmt(start)} ~ ${fmt(end)}"
+}
+
+// ── 添加俱乐部对话框 ──
+@Composable
+private fun AddClubDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String?, String?) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var clubId by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    val typeOptions = listOf("学术", "文体", "公益", "实践", "其他")
+    val isValid = name.isNotBlank() && clubId.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("添加俱乐部") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("俱乐部名称 *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = clubId,
+                    onValueChange = { clubId = it },
+                    label = { Text("俱乐部 ID *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = type ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("所属类型") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                    ) {
+                        typeOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = { type = option; expanded = false },
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("备注") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name, clubId, type, note) },
+                enabled = isValid,
+            ) { Text("添加") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 // 需要 import for LazyListScope

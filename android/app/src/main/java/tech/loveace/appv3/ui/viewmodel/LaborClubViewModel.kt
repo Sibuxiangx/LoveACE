@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import tech.loveace.appv3.data.local.UserClubStore
 import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.data.service.LaborClubService
 import java.time.LocalDateTime
@@ -23,6 +24,7 @@ data class LaborClubUiState(
     val applyResult: String? = null,
     val error: String? = null,
     val activityDetail: ActivityDetail? = null,
+    val addClubResult: String? = null,
     val detailLoading: Boolean = false,
     // 预计算的分类列表，避免每次 UI 读取时重复解析时间
     val ongoingActivities: List<LaborClubActivity> = emptyList(),
@@ -104,17 +106,22 @@ class LaborClubViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                // 并发获取进度、已加入活动、俱乐部列表
+                // 并发获取进度、已加入活动、服务器俱乐部列表、本地手动俱乐部
                 val progressDef = async { svc.getProgress() }
                 val joinedDef = async { svc.getJoinedActivities() }
                 val clubsDef = async { svc.getJoinedClubs() }
+                val manualDef = async { UserClubStore.getAll() }
 
                 val progressResult = progressDef.await()
                 val joinedResult = joinedDef.await()
                 val clubsResult = clubsDef.await()
+                val manualClubs = manualDef.await()
 
                 val joinedActivities = joinedResult.data ?: emptyList()
-                val clubs = clubsResult.data ?: emptyList()
+                val serverClubs = clubsResult.data ?: emptyList()
+
+                // 合并服务器俱乐部和手动添加的俱乐部
+                val mergedClubs = mergeClubs(serverClubs, manualClubs)
 
                 // 并发获取每个已加入活动的签到列表
                 if (joinedActivities.isNotEmpty()) {
@@ -129,9 +136,9 @@ class LaborClubViewModel : ViewModel() {
                     signJobs.awaitAll()
                 }
 
-                // 获取所有俱乐部的活动列表
+                // 获取所有俱乐部（包括手动添加的）的活动列表
                 val allActivities = mutableListOf<LaborClubActivity>()
-                for (club in clubs) {
+                for (club in mergedClubs) {
                     val clubActivitiesResult = svc.getClubActivities(club.id)
                     if (clubActivitiesResult.success) {
                         allActivities.addAll(clubActivitiesResult.data ?: emptyList())
@@ -145,7 +152,7 @@ class LaborClubViewModel : ViewModel() {
                         progress = progressResult.data,
                         joinedActivities = joinedActivities,
                         allActivities = allActivities,
-                        clubs = clubs,
+                        clubs = mergedClubs,
                         error = progressResult.error ?: joinedResult.error,
                         ongoingActivities = cats.ongoing,
                         finishedActivities = cats.finished,
@@ -160,6 +167,49 @@ class LaborClubViewModel : ViewModel() {
             }
         }
     }
+
+    /** 合并服务器俱乐部和手动添加的俱乐部，以服务器为准去重 */
+    private fun mergeClubs(
+        server: List<LaborClubInfo>,
+        manual: List<tech.loveace.appv3.data.model.UserClub>
+    ): List<LaborClubInfo> {
+        val serverIds = server.map { it.id }.toSet()
+        val manualAsInfo = manual
+            .filter { !serverIds.contains(it.clubId) }
+            .map { tech.loveace.appv3.data.model.UserClub.toLaborClubInfo(it) }
+        return server + manualAsInfo
+    }
+
+    /** 添加手动俱乐部 */
+    fun addClub(name: String, clubId: String, typeName: String?, note: String?) {
+        val trimmedId = clubId.trim()
+        val trimmedName = name.trim()
+        if (trimmedId.isEmpty() || trimmedName.isEmpty()) {
+            _uiState.value = _uiState.value.copy(addClubResult = "俱乐部名称和ID不能为空")
+            return
+        }
+        val club = tech.loveace.appv3.data.model.UserClub(
+            clubId = trimmedId,
+            name = trimmedName,
+            typeName = typeName?.trim()?.takeIf { it.isNotEmpty() },
+            source = tech.loveace.appv3.data.model.ClubSource.MANUAL,
+            status = tech.loveace.appv3.data.model.ClubStatus.ACTIVE,
+            note = note?.trim()?.takeIf { it.isNotEmpty() }
+        )
+        val success = UserClubStore.addClub(club)
+        _uiState.value = _uiState.value.copy(
+            addClubResult = if (success) "添加成功" else "该俱乐部已存在"
+        )
+        if (success) loadAll()
+    }
+
+    /** 移除手动添加的俱乐部 */
+    fun removeManualClub(clubId: String) {
+        UserClubStore.removeClub(clubId)
+        loadAll()
+    }
+
+    fun clearAddClubResult() { _uiState.value = _uiState.value.copy(addClubResult = null) }
 
     fun applyActivity(activityId: String) {
         val svc = service ?: return

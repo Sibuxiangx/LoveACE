@@ -30,6 +30,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import tech.loveace.appv3.analytics.Analytics
+import tech.loveace.appv3.data.local.UserClubStore
 import tech.loveace.appv3.ui.navigation.*
 import tech.loveace.appv3.ui.screen.*
 import tech.loveace.appv3.ui.screen.landscape.LandscapeLoginScreen
@@ -49,6 +50,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        UserClubStore.init(this)
         AppLogger.init(this)
         Analytics.init(this)
         Analytics.trackAppStart(if (intent?.getStringExtra("navigate_to") != null) "widget" else "launcher")

@@ -6,6 +6,7 @@ struct LaborClubView: View {
     @State private var selectedTab = 0
     @State private var selectedActivity: LaborClubActivity?
     @State private var showScanner = false
+    @State private var showAddClubSheet = false
 
     var body: some View {
         NavigationStack {
@@ -45,6 +46,19 @@ struct LaborClubView: View {
                 Button("确定") { vm.clearSignInResult() }
             } message: {
                 if let r = vm.signInResult { Text(r.isSuccess ? "签到成功" : r.msg) }
+            }
+            .alert("添加结果", isPresented: Binding(get: { vm.addClubResult != nil }, set: { _ in vm.clearAddClubResult() })) {
+                Button("确定") { vm.clearAddClubResult() }
+            } message: { Text(vm.addClubResult ?? "") }
+            .sheet(isPresented: $showAddClubSheet) {
+                AddClubSheet { club in
+                    vm.addClub(
+                        name: club.name,
+                        clubId: club.clubId,
+                        typeName: club.typeName,
+                        note: club.note
+                    )
+                }
             }
             .onAppear {
                 if let svc = authVM.laborClubService { vm.initialize(service: svc); vm.loadAll() }
@@ -119,6 +133,10 @@ struct LaborClubView: View {
                     Text("已加入俱乐部").fontWeight(.medium)
                     Spacer()
                     Text("\(vm.clubs.count) 个").font(.caption).foregroundStyle(.secondary)
+                    Button { showAddClubSheet = true } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(.blue)
+                    }
                 }
             }
         }
@@ -448,6 +466,61 @@ struct QRScannerView: UIViewControllerRepresentable {
                     handled = true
                     onCodeScanned(value)
                     return
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Add Club Sheet
+
+struct AddClubSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var clubId = ""
+    @State private var type: String? = nil
+    @State private var note = ""
+    let onAdd: (UserClub) -> Void
+
+    private let typeOptions = ["学术", "文体", "公益", "实践", "其他"]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("基本信息") {
+                    TextField("俱乐部名称 *", text: $name)
+                    TextField("俱乐部 ID *", text: $clubId)
+                        .keyboardType(.asciiCapable)
+                    Picker("所属类型", selection: $type) {
+                        Text("未选择").tag(nil as String?)
+                        ForEach(typeOptions, id: \.self) { option in
+                            Text(option).tag(option as String?)
+                        }
+                    }
+                }
+                Section("备注") {
+                    TextField("添加备注...", text: $note, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+            }
+            .navigationTitle("添加俱乐部")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("添加") {
+                        let club = UserClub(
+                            clubId: clubId.trimmingCharacters(in: .whitespaces),
+                            name: name.trimmingCharacters(in: .whitespaces),
+                            typeName: type?.trimmingCharacters(in: .whitespaces),
+                            note: note.isEmpty ? nil : note
+                        )
+                        onAdd(club)
+                        dismiss()
+                    }
+                    .disabled(name.isEmpty || clubId.isEmpty)
                 }
             }
         }
