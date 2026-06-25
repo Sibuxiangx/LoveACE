@@ -444,10 +444,10 @@ class _WinUISmartCourseSelectionPageState
     // 获取新增选课列表
     final addedCourses = <_CourseInfo>[];
     for (final key in provider.currentSelectedCourses) {
-      final course = provider.availableCourses.firstWhere(
-        (c) => '${c.kch}_${c.kxh}' == key,
-        orElse: () => CourseScheduleRecord(),
-      );
+      final records = provider.getAvailableCourseRecordsByKey(key);
+      final course = records.isNotEmpty
+          ? records.first
+          : CourseScheduleRecord();
       if (course.kch != null) {
         addedCourses.add(
           _CourseInfo(
@@ -456,7 +456,10 @@ class _WinUISmartCourseSelectionPageState
             courseName: course.kcm ?? '未知课程',
             teacher: course.skjs ?? '',
             credits: (course.xf ?? 0).toDouble(),
-            schedule: course.scheduleDescription,
+            schedule: records
+                .map((record) => record.scheduleDescription)
+                .where((description) => description.isNotEmpty)
+                .join('；'),
           ),
         );
       }
@@ -1081,10 +1084,10 @@ class _WinUISmartCourseSelectionPageState
   double _calculateSimulatedCredits(SmartCourseSelectionProvider provider) {
     double credits = 0;
     for (final key in provider.currentSelectedCourses) {
-      final course = provider.availableCourses.firstWhere(
-        (c) => '${c.kch}_${c.kxh}' == key,
-        orElse: () => CourseScheduleRecord(),
-      );
+      final records = provider.getAvailableCourseRecordsByKey(key);
+      final course = records.isNotEmpty
+          ? records.first
+          : CourseScheduleRecord();
       credits += course.xf ?? 0;
     }
     return credits;
@@ -1320,27 +1323,24 @@ class _WinUISmartCourseSelectionPageState
 
     // 模拟选课（新增的课程）
     for (final key in provider.currentSelectedCourses) {
-      final course = provider.availableCourses.firstWhere(
-        (c) => '${c.kch}_${c.kxh}' == key,
-        orElse: () => CourseScheduleRecord(),
-      );
+      for (final course in provider.getAvailableCourseRecordsByKey(key)) {
+        if (course.skxq == null || course.skjc == null) continue;
 
-      if (course.skxq == null || course.skjc == null) continue;
+        final left = sessionColumnWidth + (course.skxq! - 1) * cellWidth;
+        final top = headerHeight + (course.skjc! - 1) * cellHeight;
+        final continuingSession = course.cxjc ?? 1;
+        final height = continuingSession * cellHeight;
 
-      final left = sessionColumnWidth + (course.skxq! - 1) * cellWidth;
-      final top = headerHeight + (course.skjc! - 1) * cellHeight;
-      final continuingSession = course.cxjc ?? 1;
-      final height = continuingSession * cellHeight;
-
-      cards.add(
-        Positioned(
-          left: left + 2,
-          top: top + 2,
-          width: cellWidth - 4,
-          height: height - 4,
-          child: _buildSimulatedCourseCard(context, course, provider),
-        ),
-      );
+        cards.add(
+          Positioned(
+            left: left + 2,
+            top: top + 2,
+            width: cellWidth - 4,
+            height: height - 4,
+            child: _buildSimulatedCourseCard(context, course, provider),
+          ),
+        );
+      }
     }
 
     return cards;

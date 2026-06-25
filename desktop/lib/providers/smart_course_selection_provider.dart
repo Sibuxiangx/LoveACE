@@ -805,6 +805,28 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     return '${course.kch}_${course.kxh}';
   }
 
+  /// 获取同一选课键下的所有开课时间段记录。
+  List<CourseScheduleRecord> getAvailableCourseRecordsByKey(String courseKey) {
+    return availableCourses
+        .where((course) => _courseKeyFromRecord(course) == courseKey)
+        .toList();
+  }
+
+  CourseTimeSlot? _timeSlotFromRecord(
+    CourseScheduleRecord course,
+    String courseKey,
+  ) {
+    if (course.skxq == null || course.skjc == null) return null;
+    return CourseTimeSlot(
+      weekday: course.skxq ?? 0,
+      startSession: course.skjc ?? 0,
+      endSession: (course.skjc ?? 0) + (course.cxjc ?? 1) - 1,
+      classWeek: course.skzc ?? '',
+      courseKey: courseKey,
+      courseName: course.kcm ?? '',
+    );
+  }
+
   bool _isClassCurriculumCourse(String courseKey) {
     return _usingClassCurriculum &&
         classCurriculumCourses.any((course) {
@@ -1321,39 +1343,28 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
 
     // 添加新增选课的时间槽
     for (final selectedKey in currentSelectedCourses) {
-      final selectedCourse = availableCourses.firstWhere(
-        (c) => '${c.kch}_${c.kxh}' == selectedKey,
-        orElse: () => CourseScheduleRecord(),
-      );
-
-      if (selectedCourse.skxq == null) continue;
-
-      existingSlots.add(
-        CourseTimeSlot(
-          weekday: selectedCourse.skxq ?? 0,
-          startSession: selectedCourse.skjc ?? 0,
-          endSession:
-              (selectedCourse.skjc ?? 0) + (selectedCourse.cxjc ?? 1) - 1,
-          classWeek: selectedCourse.skzc ?? '',
-          courseKey: selectedKey,
-          courseName: selectedCourse.kcm ?? '',
-        ),
-      );
+      for (final selectedCourse in getAvailableCourseRecordsByKey(
+        selectedKey,
+      )) {
+        final slot = _timeSlotFromRecord(selectedCourse, selectedKey);
+        if (slot != null) existingSlots.add(slot);
+      }
     }
 
-    // 检查新课程是否冲突
-    final newSlot = CourseTimeSlot(
-      weekday: course.skxq ?? 0,
-      startSession: course.skjc ?? 0,
-      endSession: (course.skjc ?? 0) + (course.cxjc ?? 1) - 1,
-      classWeek: course.skzc ?? '',
-      courseKey: '${course.kch}_${course.kxh}',
-      courseName: course.kcm ?? '',
-    );
+    // 检查新课程是否冲突。同一课程号_课序号可能有多条时间段记录，需作为同一门课整体检查。
+    final newCourseKey = _courseKeyFromRecord(course);
+    final newCourseRecords = getAvailableCourseRecordsByKey(newCourseKey);
+    final newSlots = (newCourseRecords.isEmpty ? [course] : newCourseRecords)
+        .map((record) => _timeSlotFromRecord(record, newCourseKey))
+        .whereType<CourseTimeSlot>()
+        .toList();
 
-    for (final slot in existingSlots) {
-      if (slot.courseKey != newSlot.courseKey && slot.conflictsWith(newSlot)) {
-        return true;
+    for (final newSlot in newSlots) {
+      for (final slot in existingSlots) {
+        if (slot.courseKey != newSlot.courseKey &&
+            slot.conflictsWith(newSlot)) {
+          return true;
+        }
       }
     }
 
