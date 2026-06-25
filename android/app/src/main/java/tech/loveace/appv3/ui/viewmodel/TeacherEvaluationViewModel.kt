@@ -33,6 +33,7 @@ data class TeacherEvaluationUiState(
     val tasks: List<TeacherEvaluationTaskState> = emptyList(),
     val logs: List<String> = emptyList(),
     val error: String? = null,
+    val evaluationStrategy: EvaluationStrategy = EvaluationStrategy.Smart,
 ) {
     val pendingCourses: List<TeacherEvaluationCourse>
         get() = courses.filter { !it.isEvaluated }
@@ -152,6 +153,11 @@ class TeacherEvaluationViewModel : ViewModel() {
         }
     }
 
+    fun setStrategy(strategy: EvaluationStrategy) {
+        if (_uiState.value.isRunning) return
+        _uiState.update { it.copy(evaluationStrategy = strategy) }
+    }
+
     private suspend fun runTask(
         service: TeacherEvaluationService,
         course: TeacherEvaluationCourse,
@@ -160,7 +166,7 @@ class TeacherEvaluationViewModel : ViewModel() {
     ) {
         try {
             updateTask(course, TeacherEvaluationTaskStatus.Preparing, "正在访问评价页并生成表单")
-            val prepare = service.prepareEvaluation(course, pendingCount, indexToken)
+            val prepare = service.prepareEvaluation(course, pendingCount, indexToken, state.evaluationStrategy)
             val prepared = prepare.data
             if (!prepare.success || prepared == null) {
                 failTask(course, prepare.error ?: "准备评价表单失败")

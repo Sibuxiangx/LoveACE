@@ -110,6 +110,13 @@ struct TeacherEvaluationView: View {
                 miniStat("已评", value: vm.evaluatedCount, tint: .green)
             }
 
+            Toggle("一键全选非常满意", isOn: Binding(
+                get: { vm.evaluationStrategy == .alwaysHighest },
+                set: { vm.evaluationStrategy = $0 ? .alwaysHighest : .smart }
+            ))
+            .tint(.purple)
+            .disabled(vm.isEvaluating)
+
             Button {
                 showStartConfirmation = true
             } label: {

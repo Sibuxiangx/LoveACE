@@ -1,19 +1,6 @@
 package tech.loveace.appv3.ui.screen
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -22,6 +9,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
@@ -45,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import tech.loveace.appv3.data.service.EvaluationStrategy
 import tech.loveace.appv3.data.model.TeacherEvaluationCourse
 import tech.loveace.appv3.ui.components.EmptyScreen
 import tech.loveace.appv3.ui.components.ErrorScreen
@@ -54,6 +43,20 @@ import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationTaskState
 import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationTaskStatus
 import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationUiState
 import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,6 +106,7 @@ fun TeacherEvaluationScreen(
             onStart = { showConfirm = true },
             onStop = { vm.stop() },
             onRetry = { vm.load() },
+            onStrategyChange = { vm.setStrategy(it) },
         )
     }
 }
@@ -113,6 +117,7 @@ fun TeacherEvaluationContent(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRetry: () -> Unit,
+    onStrategyChange: (EvaluationStrategy) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when {
@@ -133,8 +138,10 @@ fun TeacherEvaluationContent(
                     taskTotal = state.tasks.size,
                     finished = state.tasks.count { it.status.isTerminal() },
                     failed = state.tasks.count { it.status == TeacherEvaluationTaskStatus.Failed },
+                    evaluationStrategy = state.evaluationStrategy,
                     onStart = onStart,
                     onStop = onStop,
+                    onStrategyChange = onStrategyChange,
                 )
             }
 
@@ -172,8 +179,10 @@ private fun NoticeCard(
     taskTotal: Int,
     finished: Int,
     failed: Int,
+    evaluationStrategy: EvaluationStrategy,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onStrategyChange: (EvaluationStrategy) -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -212,6 +221,24 @@ private fun NoticeCard(
                 "任务每 6 秒启动一门，准备表单后等待 140 秒提交；停止只会取消未提交任务。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+            )
+            FilterChip(
+                selected = evaluationStrategy == EvaluationStrategy.AlwaysHighest,
+                onClick = {
+                    onStrategyChange(
+                        if (evaluationStrategy == EvaluationStrategy.AlwaysHighest)
+                            EvaluationStrategy.Smart
+                        else
+                            EvaluationStrategy.AlwaysHighest
+                    )
+                },
+                label = { Text("一键非常满意") },
+                leadingIcon = {
+                    if (evaluationStrategy == EvaluationStrategy.AlwaysHighest) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                },
+                enabled = !isRunning,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onStart, enabled = !isRunning && pendingCount > 0) { Text("开始批量评教") }

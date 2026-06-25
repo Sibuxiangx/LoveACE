@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/jwc/teacher_evaluation.dart';
 import '../../providers/teacher_evaluation_provider.dart';
+import '../../services/jwc/teacher_evaluation_service.dart';
 import '../widgets/winui_card.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_loading.dart';
@@ -167,6 +168,30 @@ class _WinUITeacherEvaluationPageState extends State<WinUITeacherEvaluationPage>
               const SizedBox(height: 18),
               _buildSafetyNotice(),
               const SizedBox(height: 18),
+              ToggleButton(
+                checked: provider.strategy == EvaluationStrategy.alwaysHighest,
+                onChanged: provider.isRunning
+                    ? null
+                    : (v) {
+                        provider.setStrategy(
+                          v ? EvaluationStrategy.alwaysHighest : EvaluationStrategy.smart,
+                        );
+                      },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      provider.strategy == EvaluationStrategy.alwaysHighest
+                          ? FluentIcons.check_mark
+                          : FluentIcons.checkbox,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('一键全选非常满意'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(

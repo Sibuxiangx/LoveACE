@@ -1596,6 +1596,7 @@ class _WinUISmartCourseSelectionPageState
     }
 
     final courseKey = '${course.kch}_${course.kxh}';
+    final allRecords = provider.getAvailableCourseRecordsByKey(courseKey);
     final isNewlySelected = provider.currentSelectedCourses.contains(courseKey);
     final isFromOriginalSchedule = provider.isCourseFromOriginalSchedule(
       courseKey,
@@ -1694,7 +1695,23 @@ class _WinUISmartCourseSelectionPageState
             '教室',
             '${course.jxlm ?? ''} ${course.jasm ?? ''}',
           ),
-          _buildDetailRow(context, '时间', course.scheduleDescription),
+          // 时间（显示所有上课时间）
+          ...(() {
+            final times = allRecords
+                .map((r) => r.scheduleDescription)
+                .where((d) => d.isNotEmpty)
+                .toList();
+            if (times.isEmpty) {
+              return [_buildDetailRow(context, '时间', course.scheduleDescription)];
+            }
+            return times.asMap().entries.map((entry) {
+              return _buildDetailRow(
+                context,
+                entry.key == 0 ? '时间' : '  ',
+                '${entry.key == 0 ? "" : "· "}${entry.value}',
+              );
+            });
+          })(),
           _buildDetailRow(
             context,
             '容量',
@@ -2773,102 +2790,127 @@ class _WinUISmartCourseSelectionPageState
         ),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: scheduleRecords.map((record) {
-            final isSelected = provider.currentSelectedCourses.contains(
-              '${record.kch}_${record.kxh}',
-            );
-            final hasConflict = provider.checkConflict(record);
+          children: () {
+            // 按 kch_kxh 分组，合并同一课序号的多个时间段
+            final grouped = <String, List<CourseScheduleRecord>>{};
+            for (final r in scheduleRecords) {
+              final key = '${r.kch}_${r.kxh}';
+              grouped.putIfAbsent(key, () => []).add(r);
+            }
+            return grouped.values.map((records) {
+              records.sort((a, b) {
+                final aDay = a.skxq ?? 7;
+                final bDay = b.skxq ?? 7;
+                if (aDay != bDay) return aDay.compareTo(bDay);
+                return (a.skjc ?? 0).compareTo(b.skjc ?? 0);
+              });
+              final first = records.first;
+              final courseKey = '${first.kch}_${first.kxh}';
+              final isSelected = provider.currentSelectedCourses.contains(
+                courseKey,
+              );
+              final hasConflict = records.any((r) => provider.checkConflict(r));
 
-            return GestureDetector(
-              onTap: () => provider.selectCourse(record),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.green.withValues(alpha: 0.15)
-                      : (hasConflict
-                            ? Colors.orange.withValues(alpha: 0.1)
-                            : theme.resources.subtleFillColorSecondary),
-                  borderRadius: BorderRadius.circular(4),
-                  border: isSelected
-                      ? Border.all(color: Colors.green, width: 1)
-                      : null,
-                ),
-                child: Row(
-                  children: [
-                    // 状态指示器
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isSelected
-                            ? Colors.green
-                            : (hasConflict ? Colors.orange : theme.accentColor),
+              return GestureDetector(
+                onTap: () => provider.selectCourse(first),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.green.withValues(alpha: 0.15)
+                        : (hasConflict
+                              ? Colors.orange.withValues(alpha: 0.1)
+                              : theme.resources.subtleFillColorSecondary),
+                    borderRadius: BorderRadius.circular(4),
+                    border: isSelected
+                        ? Border.all(color: Colors.green, width: 1)
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      // 状态指示器
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected
+                              ? Colors.green
+                              : (hasConflict ? Colors.orange : theme.accentColor),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    // 班级信息
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                '${record.kxh ?? ""}班',
-                                style: theme.typography.caption?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  record.skjs ?? '',
+                      const SizedBox(width: 8),
+                      // 班级信息
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  '${first.kxh ?? ""}班',
                                   style: theme.typography.caption?.copyWith(
-                                    color: theme.inactiveColor,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${record.xqm ?? ""} | ${record.scheduleDescription}',
-                            style: theme.typography.caption?.copyWith(
-                              fontSize: 10,
-                              color: theme.inactiveColor,
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    first.skjs ?? '',
+                                    style: theme.typography.caption?.copyWith(
+                                      color: theme.inactiveColor,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                            const SizedBox(height: 2),
+                            // 显示所有上课时间
+                            ...records.map((r) {
+                              final desc = r.scheduleDescription;
+                              return desc.isNotEmpty
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        '${r.xqm ?? ""} · $desc',
+                                        style: theme.typography.caption?.copyWith(
+                                          fontSize: 10,
+                                          color: theme.inactiveColor,
+                                          height: 1.3,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    )
+                                  : const SizedBox.shrink();
+                            }),
+                          ],
+                        ),
                       ),
-                    ),
-                    // 余量
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (isSelected)
-                          Icon(
-                            FluentIcons.check_mark,
-                            size: 12,
-                            color: Colors.green,
-                          )
-                        else if (hasConflict)
-                          Icon(
-                            FluentIcons.warning,
-                            size: 12,
-                            color: Colors.orange,
-                          ),
-                        Text(
-                          '余${_getActualCapacity(record)}',
-                          style: theme.typography.caption?.copyWith(
-                            fontSize: 9,
-                            color: _getActualCapacityInt(record) > 0
-                                ? (isDark ? Colors.green.light : Colors.green)
-                                : Colors.red,
+                      // 余量
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (isSelected)
+                            Icon(
+                              FluentIcons.check_mark,
+                              size: 12,
+                              color: Colors.green,
+                            )
+                          else if (hasConflict)
+                            Icon(
+                              FluentIcons.warning,
+                              size: 12,
+                              color: Colors.orange,
+                            ),
+                          Text(
+                            '余${_getActualCapacity(first)}',
+                            style: theme.typography.caption?.copyWith(
+                              fontSize: 9,
+                              color: _getActualCapacityInt(first) > 0
+                                  ? (isDark ? Colors.green.light : Colors.green)
+                                  : Colors.red,
                           ),
                         ),
                       ],
@@ -2877,9 +2919,10 @@ class _WinUISmartCourseSelectionPageState
                 ),
               ),
             );
-          }).toList(),
-        ),
+          }).toList();
+        }(),
       ),
+    ),
     );
   }
 

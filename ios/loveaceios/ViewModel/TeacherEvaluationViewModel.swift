@@ -10,6 +10,7 @@ final class TeacherEvaluationViewModel {
     var error: String?
     var isEvaluationClosed = false
     var lastResult: TeacherEvaluationBatchResult?
+    var evaluationStrategy: EvaluationStrategy = .smart
 
     private var service: TeacherEvaluationService?
     private var launcherTask: Task<Void, Never>?
@@ -176,7 +177,7 @@ final class TeacherEvaluationViewModel {
 
         if Task.isCancelled { return failTask(taskId, course: course, message: "已取消") }
 
-        let prepared = await service.prepareEvaluation(course: course, totalCourses: tasks.count)
+        let prepared = await service.prepareEvaluation(course: course, totalCourses: tasks.count, strategy: evaluationStrategy)
         guard prepared.success, let formData = prepared.data else {
             return failTask(taskId, course: course, message: prepared.error ?? "无法访问评价页面")
         }
