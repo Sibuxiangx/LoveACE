@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import tech.loveace.appv3.ui.components.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,7 +37,7 @@ import tech.loveace.appv3.ui.viewmodel.AuthUiState
 /**
  * 横屏登录页：左侧品牌区 + 右侧表单/快速登录区
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeLoginScreen(
     uiState: AuthUiState,
@@ -98,7 +99,7 @@ fun LandscapeLoginScreen(
                         Spacer(Modifier.height(16.dp))
 
                         if (isLoading) {
-                            CircularWavyProgressIndicator(modifier = Modifier.size(64.dp))
+                            AppCircularProgressIndicator(modifier = Modifier.size(64.dp))
                             Spacer(Modifier.height(20.dp))
                             Text("快速登录中...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
@@ -136,7 +137,7 @@ fun LandscapeLoginScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LandscapeManualLoginForm(
     uiState: AuthUiState,
@@ -211,7 +212,7 @@ private fun LandscapeManualLoginForm(
             shape = MaterialTheme.shapes.extraLarge, enabled = canLogin,
         ) {
             if (isLoading) {
-                CircularWavyProgressIndicator(modifier = Modifier.size(20.dp))
+                AppCircularProgressIndicator(modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text("登录中...")
             } else {

@@ -201,7 +201,7 @@ private fun LandscapeBindView(
 
 // ==================== 横屏 IC 卡 + 操作面板 ====================
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun LandscapePassContent(
     state: DoorCardUiState,

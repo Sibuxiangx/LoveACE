@@ -44,7 +44,7 @@ import tech.loveace.appv3.ui.viewmodel.*
  * 左栏：学业数据 + 一卡通/爱安财
  * 右栏：用户自选图片展示器（整栏）
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeHomeScreen(
     authViewModel: AuthViewModel,
@@ -154,7 +154,7 @@ fun LandscapeHomeScreen(
                     }
                 } else if (academicState.isLoading) {
                     Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                        CircularWavyProgressIndicator()
+                        AppCircularProgressIndicator()
                     }
                 }
 
@@ -189,7 +189,7 @@ fun LandscapeHomeScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                             } else if (yktState.isLoading) {
-                                CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                                AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
                             } else {
                                 Text("--", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -225,14 +225,14 @@ fun LandscapeHomeScreen(
                                     Text(" / 10", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Spacer(Modifier.height(4.dp))
-                                LinearWavyProgressIndicator(
+                                AppLinearProgressIndicator(
                                     progress = { (aacInfo.totalScore / 10.0).toFloat().coerceIn(0f, 1f) },
                                     modifier = Modifier.fillMaxWidth().height(6.dp),
                                     color = if (aacInfo.isTypeAdopt) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
                                     trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 )
                             } else if (aacState.isLoading) {
-                                CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                                AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
                             } else {
                                 Text("--", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -252,7 +252,7 @@ fun LandscapeHomeScreen(
                         when (semStatus) {
                             is SemesterStatus.Loading -> {
                                 Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                                    CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                                    AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 }
                             }
                             is SemesterStatus.Vacation -> {
@@ -307,7 +307,7 @@ fun LandscapeHomeScreen(
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
-                                LinearWavyProgressIndicator(
+                                AppLinearProgressIndicator(
                                     progress = { (semStatus.currentWeek.toFloat() / semStatus.totalWeeks).coerceIn(0f, 1f) },
                                     modifier = Modifier.fillMaxWidth().height(4.dp),
                                     color = if (semStatus.isEnding) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
@@ -413,14 +413,14 @@ fun LandscapeHomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun LandscapeAcademicOverviewCard(info: AcademicInfo) {
     ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(contentAlignment = Alignment.Center) {
-                    CircularWavyProgressIndicator(
+                    AppCircularProgressIndicator(
                         progress = { (info.gpa / 5.0).toFloat().coerceIn(0f, 1f) },
                         modifier = Modifier.size(82.dp),
                         color = MaterialTheme.colorScheme.primary,
@@ -453,12 +453,12 @@ private fun LandscapeAcademicOverviewCard(info: AcademicInfo) {
                 )
             }
 
-            LinearWavyProgressIndicator(
+            AppLinearProgressIndicator(
                 progress = {
                     if (info.hasAverageRank) info.averageRankProgress
                     else (info.averageScore / 100.0).toFloat().coerceIn(0f, 1f)
                 },
-                modifier = Modifier.fillMaxWidth().height(7.dp),
+                modifier = Modifier.fillMaxWidth().height(5.dp),
                 color = MaterialTheme.colorScheme.secondary,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )

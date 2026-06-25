@@ -63,7 +63,7 @@ sealed class CropShape {
  * @param onCropped 裁切完成回调
  * @param onDismiss 取消回调
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 fun ImageCropDialog(
     imageUri: Uri,
@@ -118,7 +118,7 @@ fun ImageCropDialog(
                         shape = RoundedCornerShape(50),
                     ) {
                         if (isSaving) {
-                            CircularWavyProgressIndicator(modifier = Modifier.size(18.dp))
+                            AppCircularProgressIndicator(modifier = Modifier.size(18.dp))
                         } else {
                             Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -186,7 +186,7 @@ fun ImageCropDialog(
                             drawCropOverlay(cw, ch, cropRect, cropShape)
                         }
                     } else {
-                        CircularWavyProgressIndicator(color = Color.White)
+                        AppCircularProgressIndicator(color = Color.White)
                     }
                 }
 

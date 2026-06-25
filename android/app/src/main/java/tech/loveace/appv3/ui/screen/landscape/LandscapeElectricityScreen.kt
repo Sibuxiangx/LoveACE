@@ -32,7 +32,7 @@ import tech.loveace.appv3.ui.viewmodel.ElectricityViewModel
 /**
  * 横屏电费查询：左栏余额+房间信息 | 右栏用电/充值记录
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeElectricityScreen(
     authViewModel: AuthViewModel,
@@ -209,7 +209,7 @@ private fun LandscapeBalanceChip(label: String, value: Double, color: Color, mod
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LandscapeRoomSelectionSheet(vm: ElectricityViewModel, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -225,7 +225,7 @@ private fun LandscapeRoomSelectionSheet(vm: ElectricityViewModel, onDismiss: () 
             }
             Spacer(Modifier.height(12.dp))
             LandscapeRoomDropdown("房间", state.rooms, state.selectedRoom?.let { mapOf("code" to it.code, "name" to it.name) }, state.selectedFloor != null && state.rooms.isNotEmpty(), Modifier.fillMaxWidth()) { vm.selectRoom(it["code"]!!, it["name"]!!) }
-            if (state.isLoading) { Spacer(Modifier.height(16.dp)); Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularWavyProgressIndicator(modifier = Modifier.size(32.dp)) } }
+            if (state.isLoading) { Spacer(Modifier.height(16.dp)); Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { AppCircularProgressIndicator(modifier = Modifier.size(32.dp)) } }
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text("取消") }

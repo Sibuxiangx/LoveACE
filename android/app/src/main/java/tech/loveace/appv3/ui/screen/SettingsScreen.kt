@@ -34,6 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import tech.loveace.appv3.R
 import tech.loveace.appv3.ui.components.SectionTitle
+import tech.loveace.appv3.ui.components.AppLinearProgressIndicator
 import tech.loveace.appv3.ui.theme.*
 import tech.loveace.appv3.service.CourseNotificationService
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
@@ -233,6 +234,28 @@ fun SettingsScreen(
                 }
             }
 
+            // 进度条风格
+            Card(
+                Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("进度条风格", style = MaterialTheme.typography.titleSmall)
+                    Text("切换波浪进度条与标准 Material 风格", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        val styles = listOf(ProgressBarStyle.WAVY to "波浪", ProgressBarStyle.STANDARD to "标准")
+                        styles.forEachIndexed { index, (style, label) ->
+                            SegmentedButton(
+                                selected = themeConfig.progressBarStyle == style,
+                                onClick = { themeViewModel.setProgressBarStyle(style) },
+                                shape = SegmentedButtonDefaults.itemShape(index, styles.size),
+                            ) { Text(label) }
+                        }
+                    }
+                }
+            }
+
             // 常驻通知
             SectionTitle("功能")
             val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -388,7 +411,7 @@ fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 fun UpdateDialog(info: tech.loveace.appv3.service.UpdateInfo, vm: OtaViewModel) {
     val otaState by vm.state.collectAsStateWithLifecycle()
@@ -434,7 +457,7 @@ fun UpdateDialog(info: tech.loveace.appv3.service.UpdateInfo, vm: OtaViewModel) 
                     }
                     OtaDialogMode.DOWNLOADING -> {
                         Spacer(Modifier.height(8.dp))
-                        LinearWavyProgressIndicator(
+                        AppLinearProgressIndicator(
                             progress = { otaState.downloadProgress },
                             modifier = Modifier.fillMaxWidth().height(8.dp),
                         )

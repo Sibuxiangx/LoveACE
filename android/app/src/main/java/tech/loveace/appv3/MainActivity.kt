@@ -8,11 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularWavyProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import tech.loveace.appv3.ui.components.AppCircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -196,8 +196,7 @@ fun RibbonApp(
                         modifier = Modifier.size(80.dp),
                     )
                     Spacer(Modifier.height(24.dp))
-                    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-                    CircularWavyProgressIndicator(
+                    AppCircularProgressIndicator(
                         modifier = Modifier.size(48.dp),
                         color = MaterialTheme.colorScheme.primary,
                     )

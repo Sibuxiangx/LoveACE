@@ -27,7 +27,7 @@ import tech.loveace.appv3.ui.components.*
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.CompetitionViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompetitionScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: CompetitionViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -86,7 +86,7 @@ fun CompetitionScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Comp
 
 // ── 学分汇总卡片 ──
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun CreditsSummaryCard(summary: CreditsSummary) {
     ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {

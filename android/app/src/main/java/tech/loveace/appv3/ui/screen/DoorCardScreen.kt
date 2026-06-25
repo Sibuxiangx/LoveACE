@@ -248,7 +248,7 @@ private fun DoorCardBindView(
 
 // ==================== IC 卡通行证视图 ====================
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun DoorCardPassView(
     state: DoorCardUiState,

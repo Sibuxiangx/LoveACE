@@ -28,7 +28,7 @@ import tech.loveace.appv3.ui.viewmodel.SemesterStatus
 import tech.loveace.appv3.ui.viewmodel.SemesterUiState
 import tech.loveace.appv3.ui.viewmodel.YKTViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     authViewModel: AuthViewModel,
@@ -150,7 +150,7 @@ fun HomeScreen(
                                             )
                                         }
                                         Spacer(Modifier.height(12.dp))
-                                        LinearWavyProgressIndicator(
+                                        AppLinearProgressIndicator(
                                             progress = { (semStatus.currentWeek.toFloat() / semStatus.totalWeeks).coerceIn(0f, 1f) },
                                             modifier = Modifier.fillMaxWidth().height(6.dp),
                                             color = if (semStatus.isEnding) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
@@ -174,7 +174,7 @@ fun HomeScreen(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                         ) {
                             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                                CircularWavyProgressIndicator(modifier = Modifier.size(28.dp))
+                                AppCircularProgressIndicator(modifier = Modifier.size(28.dp))
                             }
                         }
                     }
@@ -288,7 +288,7 @@ fun HomeScreen(
             } else if (academicState.isLoading) {
                 item {
                     Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                        CircularWavyProgressIndicator()
+                        AppCircularProgressIndicator()
                     }
                 }
             }
@@ -340,7 +340,7 @@ fun HomeScreen(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                         ) {
                             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                                CircularWavyProgressIndicator(modifier = Modifier.size(28.dp))
+                                AppCircularProgressIndicator(modifier = Modifier.size(28.dp))
                             }
                         }
                     }
@@ -392,7 +392,7 @@ fun HomeScreen(
                                     )
                                 }
                                 // 进度条
-                                LinearWavyProgressIndicator(
+                                AppLinearProgressIndicator(
                                     progress = { (aacInfo.totalScore / 10.0).toFloat().coerceIn(0f, 1f) },
                                     modifier = Modifier.fillMaxWidth().height(8.dp),
                                     color = if (aacInfo.isTypeAdopt) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
@@ -413,7 +413,7 @@ fun HomeScreen(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                         ) {
                             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                                CircularWavyProgressIndicator(modifier = Modifier.size(28.dp))
+                                AppCircularProgressIndicator(modifier = Modifier.size(28.dp))
                             }
                         }
                     }
@@ -423,7 +423,7 @@ fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun AcademicOverviewCard(info: AcademicInfo, modifier: Modifier = Modifier) {
     ElevatedCard(
@@ -433,7 +433,7 @@ private fun AcademicOverviewCard(info: AcademicInfo, modifier: Modifier = Modifi
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(contentAlignment = Alignment.Center) {
-                    CircularWavyProgressIndicator(
+                    AppCircularProgressIndicator(
                         progress = { (info.gpa / 5.0).toFloat().coerceIn(0f, 1f) },
                         modifier = Modifier.size(78.dp),
                         color = MaterialTheme.colorScheme.primary,
@@ -490,17 +490,17 @@ private fun AcademicOverviewCard(info: AcademicInfo, modifier: Modifier = Modifi
 
             if (info.averageScore > 0.0 || info.hasAverageRank) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LinearWavyProgressIndicator(
+                    AppLinearProgressIndicator(
                         progress = {
                             if (info.hasAverageRank) info.averageRankProgress
                             else (info.averageScore / 100.0).toFloat().coerceIn(0f, 1f)
                         },
-                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(5.dp),
                         color = MaterialTheme.colorScheme.secondary,
                         trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     )
                     Text(
-                        if (info.hasAverageRank) "均分排名越靠前，波纹越接近满格" else "均分进度",
+                        if (info.hasAverageRank) "均分排名越靠前，进度条越接近满格" else "均分进度",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

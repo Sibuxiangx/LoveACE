@@ -58,7 +58,7 @@ private fun calcLaborScore(categories: List<AACCreditCategory>): Double {
         .sumOf { it.totalScore }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AACScreen(authViewModel: AuthViewModel, vm: AACViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -124,7 +124,7 @@ fun AACScreen(authViewModel: AuthViewModel, vm: AACViewModel = viewModel()) {
 }
 
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun GraduationProgressCard(
     totalScore: Double,
@@ -192,13 +192,13 @@ private fun GraduationProgressCard(
 
             // 进度条：溢出用 indeterminate 波浪动画，未满用确定进度
             if (isOverflow) {
-                LinearWavyProgressIndicator(
+                AppLinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(12.dp),
                     color = MaterialTheme.colorScheme.tertiary,
                     trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 )
             } else {
-                LinearWavyProgressIndicator(
+                AppLinearProgressIndicator(
                     progress = { (effectiveTotal / GRADUATION_TOTAL).toFloat().coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth().height(12.dp),
                     color = MaterialTheme.colorScheme.primary,
@@ -243,7 +243,7 @@ private fun GraduationProgressCard(
 
 
 /** 带 wavy ring 的指标卡片 */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun RequirementWavyCard(label: String, current: Double, required: Double, modifier: Modifier = Modifier) {
     val met = current >= required
@@ -264,13 +264,13 @@ private fun RequirementWavyCard(label: String, current: Double, required: Double
             // Wavy ring
             Box(contentAlignment = Alignment.Center) {
                 if (met) {
-                    CircularWavyProgressIndicator(
+                    AppCircularProgressIndicator(
                         modifier = Modifier.size(40.dp),
                         color = color,
                         trackColor = color.copy(alpha = 0.3f),
                     )
                 } else {
-                    CircularWavyProgressIndicator(
+                    AppCircularProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.size(40.dp),
                         color = color,
@@ -295,7 +295,7 @@ private fun RequirementWavyCard(label: String, current: Double, required: Double
 }
 
 /** 分类卡片 - M3E 风格 */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun CategoryCard(category: AACCreditCategory, index: Int = 0) {
     var expanded by remember { mutableStateOf(false) }

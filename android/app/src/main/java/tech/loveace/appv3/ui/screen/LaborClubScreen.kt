@@ -32,7 +32,7 @@ import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.LaborClubUiState
 import tech.loveace.appv3.ui.viewmodel.LaborClubViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LaborClubScreen(
     authViewModel: AuthViewModel,
@@ -129,7 +129,7 @@ private fun TabRow(selectedTab: Int, state: LaborClubUiState, onTabSelected: (In
 }
 
 // ── 进度卡片 ──
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun ProgressCard(progress: LaborClubProgressInfo) {
     val isCompleted = progress.isCompleted
@@ -155,7 +155,7 @@ private fun ProgressCard(progress: LaborClubProgressInfo) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
             }
             Spacer(Modifier.height(12.dp))
-            LinearWavyProgressIndicator(
+            AppLinearProgressIndicator(
                 progress = { (progress.progress / 100.0).coerceIn(0.0, 1.0).toFloat() },
                 modifier = Modifier.fillMaxWidth().height(8.dp),
             )

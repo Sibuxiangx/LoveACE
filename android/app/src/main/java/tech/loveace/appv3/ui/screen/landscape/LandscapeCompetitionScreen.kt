@@ -30,7 +30,7 @@ import tech.loveace.appv3.ui.viewmodel.CompetitionViewModel
 /**
  * 横屏竞赛信息：左栏学分汇总 | 右栏获奖项目列表
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeCompetitionScreen(
     authViewModel: AuthViewModel,

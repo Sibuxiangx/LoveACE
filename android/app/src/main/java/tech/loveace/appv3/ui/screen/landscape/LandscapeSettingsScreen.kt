@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import tech.loveace.appv3.R
 import tech.loveace.appv3.ui.components.SectionTitle
+import tech.loveace.appv3.ui.components.AppLinearProgressIndicator
 import tech.loveace.appv3.ui.theme.*
 import tech.loveace.appv3.service.CourseNotificationService
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
@@ -253,6 +254,21 @@ fun LandscapeSettingsScreen(
                                 Text("使用系统壁纸颜色（部分ROM不支持）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(checked = themeConfig.useDynamicColor, onCheckedChange = { themeViewModel.setDynamicColor(it) })
+                        }
+                    }
+                }
+
+                // 进度条风格
+                Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("进度条风格", style = MaterialTheme.typography.titleSmall)
+                        Text("切换波浪进度条与标准 Material 风格", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            val styles = listOf(ProgressBarStyle.WAVY to "波浪", ProgressBarStyle.STANDARD to "标准")
+                            styles.forEachIndexed { index, (style, label) ->
+                                SegmentedButton(selected = themeConfig.progressBarStyle == style, onClick = { themeViewModel.setProgressBarStyle(style) }, shape = SegmentedButtonDefaults.itemShape(index, styles.size)) { Text(label) }
+                            }
                         }
                     }
                 }

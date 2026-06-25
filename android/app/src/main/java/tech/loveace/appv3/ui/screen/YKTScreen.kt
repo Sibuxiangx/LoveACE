@@ -27,7 +27,7 @@ import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.YKTUiState
 import tech.loveace.appv3.ui.viewmodel.YKTViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun YKTScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: YKTViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -450,7 +450,7 @@ private fun PurchaseHistorySection(history: ElectricPurchaseQueryResult) {
 
 // ── 交易记录加载中 ──
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun TransactionLoadingIndicator() {
     Card(
@@ -463,7 +463,7 @@ private fun TransactionLoadingIndicator() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+            AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(12.dp))
             Text("消费记录加载中，请稍候...", style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
