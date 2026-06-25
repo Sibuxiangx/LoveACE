@@ -686,22 +686,13 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
         forceRefresh: true,
       );
 
-      _selectionData = _selectionData!.copyWith(
-        classCurriculumCourses: const [],
-        usingClassCurriculum: false,
-        classCurriculumName: null,
-        classCurriculumCode: null,
-        currentSelectedCourses: [],
-        removedCourses: [],
-      );
-      _usingClassCurriculum = false;
-      _classCurriculumName = null;
-
-      await _loadStudentSchedule(_selectedTermCode!, userId);
-      if (_selectionData != null &&
-          _selectionData!.baseScheduleSnapshot.isEmpty &&
-          _studentSchedule != null) {
-        await initializeScheduleSnapshot(userId);
+      if (!_usingClassCurriculum) {
+        await _loadStudentSchedule(_selectedTermCode!, userId);
+        if (_selectionData != null &&
+            _selectionData!.baseScheduleSnapshot.isEmpty &&
+            _studentSchedule != null) {
+          await initializeScheduleSnapshot(userId);
+        }
       }
 
       await _savePersistedData(userId);
@@ -727,6 +718,66 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
       _state = SmartCourseSelectionState.error;
       _errorMessage = '刷新开课数据失败: $e';
       _isRetryable = true;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> _switchToPersonalScheduleInternal(String userId) async {
+    if (_selectedTermCode == null) return;
+
+    await _ensureAvailableCoursesForTerm(
+      userId,
+      _selectedTermCode!,
+      forceRefresh: true,
+    );
+
+    _selectionData = _selectionData!.copyWith(
+      classCurriculumCourses: const [],
+      usingClassCurriculum: false,
+      classCurriculumName: null,
+      classCurriculumCode: null,
+      currentSelectedCourses: const [],
+      removedCourses: const [],
+    );
+    _usingClassCurriculum = false;
+    _classCurriculumName = null;
+    _selectedCourse = null;
+    _selectedDay = null;
+    _selectedSession = null;
+
+    await _loadStudentSchedule(_selectedTermCode!, userId);
+    if (_selectionData != null &&
+        _selectionData!.baseScheduleSnapshot.isEmpty &&
+        _studentSchedule != null) {
+      await initializeScheduleSnapshot(userId);
+    }
+
+    await _savePersistedData(userId);
+  }
+
+  /// 切换回个人课表作为基准课表。
+  ///
+  /// 这会改变模拟选课的基准，因此需要清除基于班级课表产生的模拟选课/退课记录。
+  Future<void> switchToPersonalSchedule(String userId) async {
+    if (_selectedTermCode == null) return;
+
+    _state = SmartCourseSelectionState.loading;
+    _loadingProgressCompleted = 0;
+    _loadingProgressTotal = 0;
+    _loadingProgressRecords = 0;
+    _loadingMessage = '正在切换到个人课表...';
+    notifyListeners();
+
+    try {
+      await _switchToPersonalScheduleInternal(userId);
+      _state = SmartCourseSelectionState.loaded;
+      LoggerService.info('✅ 已切换为个人课表基准');
+    } catch (e) {
+      _state = SmartCourseSelectionState.error;
+      _errorMessage = '切换个人课表失败: $e';
+      _isRetryable = true;
+      LoggerService.error('❌ 切换个人课表失败', error: e);
     }
 
     notifyListeners();
