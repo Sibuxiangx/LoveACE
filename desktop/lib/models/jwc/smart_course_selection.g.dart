@@ -87,9 +87,13 @@ Map<String, dynamic> _$SmartCourseSelectionDataToJson(
   'user_id': instance.userId,
   'term_code': instance.termCode,
   'course_data_refresh_time': instance.courseDataRefreshTime?.toIso8601String(),
-  'available_courses': instance.availableCourses,
-  'class_curriculum_courses': instance.classCurriculumCourses,
-  'presets': instance.presets,
+  'available_courses': instance.availableCourses
+      .map((e) => e.toJson())
+      .toList(),
+  'class_curriculum_courses': instance.classCurriculumCourses
+      .map((e) => e.toJson())
+      .toList(),
+  'presets': instance.presets.map((e) => e.toJson()).toList(),
   'current_preset_id': instance.currentPresetId,
   'current_selected_courses': instance.currentSelectedCourses,
   'removed_courses': instance.removedCourses,
