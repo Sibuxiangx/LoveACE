@@ -46,6 +46,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   List<TeacherEvaluationCourse> _courses = [];
   List<TeacherEvaluationTaskState> _tasks = [];
   List<String> _logs = [];
+  EvaluationStrategy _strategy = EvaluationStrategy.smart;
 
   TeacherEvaluationProvider(this.service);
 
@@ -58,6 +59,13 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   List<String> get logs => _logs;
   List<TeacherEvaluationCourse> get pendingCourses => _courses.where((course) => !course.isEvaluated).toList();
   int get evaluatedCount => _courses.where((course) => course.isEvaluated).length;
+  EvaluationStrategy get strategy => _strategy;
+
+  void setStrategy(EvaluationStrategy strategy) {
+    if (_isRunning) return;
+    _strategy = strategy;
+    notifyListeners();
+  }
 
   Future<void> load() async {
     stop(resetRunning: false);
@@ -152,7 +160,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   ) async {
     if (!_isCurrentRun(runId)) return;
     _updateTask(course, TeacherEvaluationTaskStatus.preparing, '正在访问评价页并生成表单');
-    final prepare = await service.prepareEvaluation(course, pendingCount, indexToken);
+    final prepare = await service.prepareEvaluation(course, pendingCount, indexToken, strategy: _strategy);
     final prepared = prepare.data;
     if (!_isCurrentRun(runId)) return;
     if (!prepare.success || prepared == null) {

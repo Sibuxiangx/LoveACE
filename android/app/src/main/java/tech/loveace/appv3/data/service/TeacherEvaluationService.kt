@@ -28,6 +28,11 @@ import tech.loveace.appv3.data.model.UniResponse
 import tech.loveace.appv3.data.network.AUFEConnection
 import kotlin.random.Random
 
+enum class EvaluationStrategy {
+    Smart,
+    AlwaysHighest
+}
+
 class TeacherEvaluationService(private val connection: AUFEConnection) {
 
     suspend fun loadCourses(): UniResponse<TeacherEvaluationCourseList> = withContext(Dispatchers.IO) {
@@ -60,6 +65,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
         course: TeacherEvaluationCourse,
         pendingCount: Int,
         indexToken: String,
+        strategy: EvaluationStrategy = EvaluationStrategy.Smart,
     ): UniResponse<TeacherEvaluationPreparedForm> = withContext(Dispatchers.IO) {
         try {
             if (indexToken.isBlank()) throw Exception("首页 token 为空")
@@ -88,7 +94,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             )
 
             questionnaire.radioQuestions.forEach { question ->
-                form[question.key] = chooseOption(question).value
+                form[question.key] = chooseOption(question, strategy).value
             }
             questionnaire.textQuestions.forEach { question ->
                 form[question.key] = randomText(question.type)
@@ -286,8 +292,16 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
         }
     }
 
-    private fun chooseOption(question: TeacherEvaluationRadioQuestion): TeacherEvaluationOption {
+    private fun chooseOption(question: TeacherEvaluationRadioQuestion, strategy: EvaluationStrategy): TeacherEvaluationOption {
         val options = question.options.sortedByDescending { it.weight }
+        // 一键非常满意：强制选最高权重
+        if (strategy == EvaluationStrategy.AlwaysHighest) {
+            val fullWeightOptions = options.filter { it.weight == 1.0 }
+            if (fullWeightOptions.isNotEmpty()) {
+                return fullWeightOptions.random()
+            }
+            return options.first()
+        }
         val fullWeightOptions = options.filter { it.weight == 1.0 }
         if (fullWeightOptions.isNotEmpty() && Random.nextDouble() < 0.8) {
             return fullWeightOptions.random()

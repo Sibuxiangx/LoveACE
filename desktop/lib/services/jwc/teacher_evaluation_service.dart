@@ -10,6 +10,8 @@ import '../../models/jwc/teacher_evaluation.dart';
 import '../../services/aufe/connector.dart';
 import '../../services/logger_service.dart';
 
+enum EvaluationStrategy { smart, alwaysHighest }
+
 class TeacherEvaluationService {
   final AUFEConnection connection;
   final Random _random = Random();
@@ -45,8 +47,9 @@ class TeacherEvaluationService {
   Future<UniResponse<TeacherEvaluationPreparedForm>> prepareEvaluation(
     TeacherEvaluationCourse course,
     int pendingCount,
-    String indexToken,
-  ) async {
+    String indexToken, {
+    EvaluationStrategy strategy = EvaluationStrategy.smart,
+  }) async {
     try {
       if (indexToken.isEmpty) throw Exception('首页 token 为空');
       final response = await connection.client.post(
@@ -74,7 +77,7 @@ class TeacherEvaluationService {
       };
 
       for (final question in questionnaire.radioQuestions) {
-        form[question.key] = _chooseOption(question).value;
+        form[question.key] = _chooseOption(question, strategy: strategy).value;
       }
       for (final question in questionnaire.textQuestions) {
         form[question.key] = _randomText(question.type);
@@ -286,8 +289,21 @@ class TeacherEvaluationService {
     }).whereType<TeacherEvaluationTextQuestion>().toList();
   }
 
-  TeacherEvaluationOption _chooseOption(TeacherEvaluationRadioQuestion question) {
+  TeacherEvaluationOption _chooseOption(
+    TeacherEvaluationRadioQuestion question, {
+    EvaluationStrategy strategy = EvaluationStrategy.smart,
+  }) {
     final options = [...question.options]..sort((a, b) => b.weight.compareTo(a.weight));
+
+    // 一键非常满意：强制选最高权重
+    if (strategy == EvaluationStrategy.alwaysHighest) {
+      final fullWeightOptions = options.where((option) => option.weight == 1.0).toList();
+      if (fullWeightOptions.isNotEmpty) {
+        return fullWeightOptions[_random.nextInt(fullWeightOptions.length)];
+      }
+      return options.first;
+    }
+
     final fullWeightOptions = options.where((option) => option.weight == 1.0).toList();
     if (fullWeightOptions.isNotEmpty && _random.nextDouble() < 0.8) {
       return fullWeightOptions[_random.nextInt(fullWeightOptions.length)];

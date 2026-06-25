@@ -4,6 +4,11 @@ import os
 
 private let teacherEvaluationLogger = Logger(subsystem: "tech.loveace.loveaceios", category: "TeacherEvaluationService")
 
+enum EvaluationStrategy {
+    case smart
+    case alwaysHighest
+}
+
 actor TeacherEvaluationService {
     private let connection: AUFEConnection
     private var token: String?
@@ -65,7 +70,7 @@ actor TeacherEvaluationService {
 
     // MARK: - Evaluation Flow
 
-    func prepareEvaluation(course: TeacherEvaluationCourse, totalCourses: Int) async -> UniResponse<[String: String]> {
+    func prepareEvaluation(course: TeacherEvaluationCourse, totalCourses: Int, strategy: EvaluationStrategy = .smart) async -> UniResponse<[String: String]> {
         do {
             guard let html = try await accessEvaluationPage(course: course, totalCourses: totalCourses) else {
                 throw ServiceError.parseError("无法访问评价页面")
@@ -251,7 +256,7 @@ actor TeacherEvaluationService {
         ]
 
         for question in questionnaire.radioQuestions {
-            guard let selected = selectBestOption(question.options) else { continue }
+            guard let selected = selectBestOption(question.options, strategy: strategy) else { continue }
             formData[question.key] = selected.value
         }
 
@@ -262,9 +267,17 @@ actor TeacherEvaluationService {
         return formData
     }
 
-    private func selectBestOption(_ options: [TeacherRadioOption]) -> TeacherRadioOption? {
+    private func selectBestOption(_ options: [TeacherRadioOption], strategy: EvaluationStrategy) -> TeacherRadioOption? {
         guard !options.isEmpty else { return nil }
         let sorted = options.sorted { $0.weight > $1.weight }
+        // 一键非常满意：强制选最高权重
+        if strategy == .alwaysHighest {
+            let fullWeightOptions = sorted.filter { $0.weight == 1.0 }
+            if !fullWeightOptions.isEmpty {
+                return fullWeightOptions.randomElement()
+            }
+            return sorted.first
+        }
         let fullWeightOptions = sorted.filter { $0.weight == 1.0 }
         if !fullWeightOptions.isEmpty, Double.random(in: 0..<1) < 0.8 {
             return fullWeightOptions.randomElement()
