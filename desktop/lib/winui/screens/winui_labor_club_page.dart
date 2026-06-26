@@ -10,6 +10,7 @@ import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的劳动俱乐部页面
 ///
@@ -22,7 +23,15 @@ class WinUILaborClubPage extends StatefulWidget {
   State<WinUILaborClubPage> createState() => _WinUILaborClubPageState();
 }
 
-class _WinUILaborClubPageState extends State<WinUILaborClubPage> {
+class _WinUILaborClubPageState extends State<WinUILaborClubPage>
+    with UserScopeDataLoader<WinUILaborClubPage> {
+  @override
+  bool get isUserScopeReady =>
+      Provider.of<LaborClubProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _loadData();
+
   /// 当前选中的活动
   LaborClubActivity? _selectedActivity;
 
@@ -31,14 +40,6 @@ class _WinUILaborClubPageState extends State<WinUILaborClubPage> {
 
   /// 是否正在加载详情
   bool _loadingDetail = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     final provider = Provider.of<LaborClubProvider?>(context, listen: false);

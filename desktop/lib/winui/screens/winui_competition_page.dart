@@ -7,6 +7,7 @@ import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的学科竞赛页面
 ///
@@ -20,17 +21,17 @@ class WinUICompetitionPage extends StatefulWidget {
   State<WinUICompetitionPage> createState() => _WinUICompetitionPageState();
 }
 
-class _WinUICompetitionPageState extends State<WinUICompetitionPage> {
-  /// 当前选中的获奖项目
-  AwardProject? _selectedAward;
+class _WinUICompetitionPageState extends State<WinUICompetitionPage>
+    with UserScopeDataLoader<WinUICompetitionPage> {
+  @override
+  bool get isUserScopeReady =>
+      Provider.of<CompetitionProvider?>(context, listen: false) != null;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
+  void loadUserScopeData() => _loadData();
+
+  /// 当前选中的获奖项目
+  AwardProject? _selectedAward;
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     final provider = Provider.of<CompetitionProvider?>(context, listen: false);

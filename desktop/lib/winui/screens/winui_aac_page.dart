@@ -8,6 +8,7 @@ import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
 import '../widgets/winui_notification.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的爱安财页面
 ///
@@ -22,7 +23,15 @@ class WinUIAACPage extends StatefulWidget {
   State<WinUIAACPage> createState() => _WinUIAACPageState();
 }
 
-class _WinUIAACPageState extends State<WinUIAACPage> {
+class _WinUIAACPageState extends State<WinUIAACPage>
+    with UserScopeDataLoader<WinUIAACPage> {
+  @override
+  bool get isUserScopeReady =>
+      Provider.of<AACProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _loadData();
+
   /// 当前选中的分类
   AACCreditCategory? _selectedCategory;
 
@@ -46,14 +55,6 @@ class _WinUIAACPageState extends State<WinUIAACPage> {
 
   /// 是否显示筛选面板
   bool _showFilters = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
 
   @override
   void dispose() {

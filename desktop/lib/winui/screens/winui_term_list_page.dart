@@ -11,6 +11,7 @@ import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
 import '../widgets/winui_notification.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的学期成绩页面
 ///
@@ -24,7 +25,15 @@ class WinUITermListPage extends StatefulWidget {
   State<WinUITermListPage> createState() => _WinUITermListPageState();
 }
 
-class _WinUITermListPageState extends State<WinUITermListPage> {
+class _WinUITermListPageState extends State<WinUITermListPage>
+    with UserScopeDataLoader<WinUITermListPage> {
+  @override
+  bool get isUserScopeReady =>
+      Provider.of<TermProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _loadData();
+
   /// 当前选中的学期
   TermItem? _selectedTerm;
 
@@ -33,14 +42,6 @@ class _WinUITermListPageState extends State<WinUITermListPage> {
 
   /// 是否升序
   bool _sortAscending = true;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     final provider = Provider.of<TermProvider?>(context, listen: false);

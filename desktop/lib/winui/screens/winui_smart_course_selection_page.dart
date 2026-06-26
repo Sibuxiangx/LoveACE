@@ -14,6 +14,7 @@ import '../../services/jwc/class_curriculum_service.dart';
 import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// 课程信息辅助类（用于选课清单）
 class _CourseInfo {
@@ -231,16 +232,17 @@ class WinUISmartCourseSelectionPage extends StatefulWidget {
 }
 
 class _WinUISmartCourseSelectionPageState
-    extends State<WinUISmartCourseSelectionPage> {
+    extends State<WinUISmartCourseSelectionPage>
+    with UserScopeDataLoader<WinUISmartCourseSelectionPage> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeData();
-    });
-  }
+  bool get isUserScopeReady =>
+      Provider.of<SmartCourseSelectionProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _initializeData();
 
   Future<void> _initializeData() async {
+    if (!mounted) return;
     final provider = Provider.of<SmartCourseSelectionProvider?>(
       context,
       listen: false,

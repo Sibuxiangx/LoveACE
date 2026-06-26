@@ -5,6 +5,7 @@ import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的首页（学业信息）
 ///
@@ -19,16 +20,17 @@ class WinUIHomePage extends StatefulWidget {
   State<WinUIHomePage> createState() => _WinUIHomePageState();
 }
 
-class _WinUIHomePageState extends State<WinUIHomePage> {
+class _WinUIHomePageState extends State<WinUIHomePage>
+    with UserScopeDataLoader<WinUIHomePage> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
+  bool get isUserScopeReady =>
+      Provider.of<AcademicProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _loadData();
 
   Future<void> _loadData({bool forceRefresh = false}) async {
+    if (!mounted) return;
     final provider = Provider.of<AcademicProvider?>(context, listen: false);
     if (provider == null) return;
 
