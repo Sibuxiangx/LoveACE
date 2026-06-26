@@ -26,7 +26,7 @@ private enum class ExportState { Confirm, Exporting, Success, Failed }
  * 使用 BasicAlertDialog + AnimatedContent 实现状态间平滑过渡，
  * 配合 MotionScheme 动效和 Wavy 进度指示器。
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportDialog(
     title: String,
@@ -92,7 +92,7 @@ fun ExportDialog(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun ConfirmContent(title: String, description: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     Column(
@@ -139,7 +139,7 @@ private fun ConfirmContent(title: String, description: String, onDismiss: () -> 
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun ExportingContent() {
     Column(
@@ -147,7 +147,7 @@ private fun ExportingContent() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        CircularWavyProgressIndicator(
+        AppCircularProgressIndicator(
             modifier = Modifier.size(56.dp),
             color = MaterialTheme.colorScheme.primary,
             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -166,7 +166,7 @@ private fun ExportingContent() {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun ResultContent(isSuccess: Boolean, message: String, onClose: () -> Unit) {
     val containerColor = if (isSuccess)

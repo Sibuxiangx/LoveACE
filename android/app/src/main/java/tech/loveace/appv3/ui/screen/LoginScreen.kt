@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import tech.loveace.appv3.ui.components.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,7 +34,7 @@ import tech.loveace.appv3.data.model.UserCredentials
 import tech.loveace.appv3.ui.viewmodel.AuthState
 import tech.loveace.appv3.ui.viewmodel.AuthUiState
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     uiState: AuthUiState,
@@ -86,7 +87,7 @@ fun LoginScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun QuickLoginView(
     userId: String,
@@ -119,7 +120,7 @@ private fun QuickLoginView(
         Spacer(Modifier.height(16.dp))
 
         if (isLoading) {
-            CircularWavyProgressIndicator(modifier = Modifier.size(64.dp))
+            AppCircularProgressIndicator(modifier = Modifier.size(64.dp))
             Spacer(Modifier.height(20.dp))
             Text("快速登录中...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -150,7 +151,7 @@ private fun QuickLoginView(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ManualLoginView(
     uiState: AuthUiState,
@@ -237,7 +238,7 @@ private fun ManualLoginView(
             shape = MaterialTheme.shapes.extraLarge, enabled = canLogin,
         ) {
             if (isLoading) {
-                CircularWavyProgressIndicator(modifier = Modifier.size(20.dp))
+                AppCircularProgressIndicator(modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text("登录中...")
             } else {

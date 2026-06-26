@@ -28,7 +28,7 @@ import tech.loveace.appv3.ui.components.*
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.ElectricityViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ElectricityScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: ElectricityViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -133,7 +133,7 @@ fun ElectricityScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Elec
                     if (state.isLoading) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                CircularWavyProgressIndicator()
+                                AppCircularProgressIndicator()
                             }
                         }
                     }
@@ -158,7 +158,7 @@ fun ElectricityScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Elec
 
 // ── 未绑定房间提示 ──
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun UnboundRoomContent(modifier: Modifier, onBind: () -> Unit) {
     Box(modifier, contentAlignment = Alignment.Center) {
@@ -189,7 +189,7 @@ private fun UnboundRoomContent(modifier: Modifier, onBind: () -> Unit) {
 
 // ── 余额卡片 ──
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun BalanceCard(balance: ElectricityBalance) {
     ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
@@ -368,7 +368,7 @@ private fun PaymentItem(record: PaymentRecord) {
 
 // ── 房间选择 Bottom Sheet ──
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RoomSelectionSheet(
     vm: ElectricityViewModel,
@@ -427,7 +427,7 @@ private fun RoomSelectionSheet(
             if (state.isLoading) {
                 Spacer(Modifier.height(16.dp))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularWavyProgressIndicator(modifier = Modifier.size(32.dp))
+                    AppCircularProgressIndicator(modifier = Modifier.size(32.dp))
                 }
             }
 

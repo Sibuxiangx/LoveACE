@@ -21,10 +21,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearWavyProgressIndicator
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -49,6 +48,7 @@ import tech.loveace.appv3.data.model.TeacherEvaluationCourse
 import tech.loveace.appv3.ui.components.EmptyScreen
 import tech.loveace.appv3.ui.components.ErrorScreen
 import tech.loveace.appv3.ui.components.LoadingScreen
+import tech.loveace.appv3.ui.components.AppLinearProgressIndicator
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationTaskState
 import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationTaskStatus
@@ -163,7 +163,6 @@ fun TeacherEvaluationContent(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 private fun NoticeCard(
     isRunning: Boolean,
     totalCourses: Int,
@@ -196,7 +195,7 @@ private fun NoticeCard(
             }
 
             if (taskTotal > 0) {
-                LinearWavyProgressIndicator(
+                AppLinearProgressIndicator(
                     progress = { finished.toFloat() / taskTotal.coerceAtLeast(1) },
                     modifier = Modifier.fillMaxWidth().height(8.dp),
                     color = MaterialTheme.colorScheme.primary,

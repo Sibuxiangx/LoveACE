@@ -29,7 +29,7 @@ import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.PlanViewModel
 import tech.loveace.appv3.util.CsvExporter
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlanScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: PlanViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -108,7 +108,7 @@ fun PlanScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: PlanViewMod
 
 // ── 总览卡片 ──
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun PlanSummaryCard(plan: PlanCompletionInfo) {
     val totalPassedCredits = plan.categories.sumOf { it.completedCredits }
@@ -152,7 +152,7 @@ private fun PlanSummaryCard(plan: PlanCompletionInfo) {
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold, color = creditColor)
                 }
-                LinearWavyProgressIndicator(
+                AppLinearProgressIndicator(
                     progress = { creditProgress },
                     modifier = Modifier.fillMaxWidth().height(10.dp),
                     color = creditColor,
@@ -197,7 +197,7 @@ private fun InfoChip(label: String, value: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun LinearStatRow(
     label: String, value: Int, total: Int, unit: String,
@@ -216,7 +216,7 @@ private fun LinearStatRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             modifier = Modifier.widthIn(min = 48.dp))
-        LinearWavyProgressIndicator(
+        AppLinearProgressIndicator(
             progress = { progress },
             modifier = Modifier.weight(1f).height(6.dp),
             color = bar,
@@ -233,7 +233,7 @@ private fun LinearStatRow(
 
 // ── 分类卡片 ──
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun PlanCategoryCard(category: PlanCategory, depth: Int) {
     var expanded by remember { mutableStateOf(false) }
@@ -296,7 +296,7 @@ private fun PlanCategoryCard(category: PlanCategory, depth: Int) {
 
                     // 进度条 + 百分比
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        LinearWavyProgressIndicator(
+                        AppLinearProgressIndicator(
                             progress = { (category.completionPercentage / 100.0).toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.weight(1f).height(8.dp),
                             color = progressColor(category.completionPercentage),

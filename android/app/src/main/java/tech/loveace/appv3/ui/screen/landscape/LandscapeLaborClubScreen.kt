@@ -43,7 +43,7 @@ import tech.loveace.appv3.ui.viewmodel.ProfileViewModel
 /**
  * 横屏劳动俱乐部：左栏进度+俱乐部+相框 | 右栏活动列表（可点击弹出详情）
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeLaborClubScreen(
     authViewModel: AuthViewModel,
@@ -140,7 +140,7 @@ fun LandscapeLaborClubScreen(
                                         Text(" / 10 次", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Spacer(Modifier.height(12.dp))
-                                    LinearWavyProgressIndicator(progress = { (progress.progress / 100.0).coerceIn(0.0, 1.0).toFloat() }, modifier = Modifier.fillMaxWidth().height(8.dp))
+                                    AppLinearProgressIndicator(progress = { (progress.progress / 100.0).coerceIn(0.0, 1.0).toFloat() }, modifier = Modifier.fillMaxWidth().height(8.dp))
                                     Spacer(Modifier.height(4.dp))
                                     Text("${"%.0f".format(progress.progress)}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }

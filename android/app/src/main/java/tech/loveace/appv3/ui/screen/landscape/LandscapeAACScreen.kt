@@ -54,7 +54,7 @@ private fun calcLaborScore(categories: List<AACCreditCategory>): Double =
 /**
  * 横屏爱安财：左侧毕业进度 + 分类选择器，右侧分类明细
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeAACScreen(authViewModel: AuthViewModel, vm: AACViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -128,9 +128,9 @@ fun LandscapeAACScreen(authViewModel: AuthViewModel, vm: AACViewModel = viewMode
                                         Text(" / ${GRADUATION_TOTAL.toInt()} 分", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     if (effectiveTotal >= GRADUATION_TOTAL) {
-                                        LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth().height(12.dp), color = MaterialTheme.colorScheme.tertiary)
+                                        AppLinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(12.dp), color = MaterialTheme.colorScheme.tertiary)
                                     } else {
-                                        LinearWavyProgressIndicator(
+                                        AppLinearProgressIndicator(
                                             progress = { (effectiveTotal / GRADUATION_TOTAL).toFloat().coerceIn(0f, 1f) },
                                             modifier = Modifier.fillMaxWidth().height(12.dp),
                                             color = MaterialTheme.colorScheme.primary,
@@ -251,7 +251,7 @@ private fun LandscapeCategorySelectorItem(category: AACCreditCategory, index: In
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun LandscapeRequirementWavyCard(label: String, current: Double, required: Double, modifier: Modifier) {
     val met = current >= required
@@ -267,13 +267,13 @@ private fun LandscapeRequirementWavyCard(label: String, current: Double, require
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (met) {
-                    CircularWavyProgressIndicator(
+                    AppCircularProgressIndicator(
                         modifier = Modifier.size(36.dp),
                         color = color,
                         trackColor = color.copy(alpha = 0.3f),
                     )
                 } else {
-                    CircularWavyProgressIndicator(
+                    AppCircularProgressIndicator(
                         progress = { progress },
                         modifier = Modifier.size(36.dp),
                         color = color,

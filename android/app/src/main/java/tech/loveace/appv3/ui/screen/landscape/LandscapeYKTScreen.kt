@@ -31,7 +31,7 @@ import tech.loveace.appv3.ui.viewmodel.YKTViewModel
 /**
  * 横屏一卡通：左栏余额+充值 | 右栏消费记录
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -93,7 +93,7 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                             // 加载中
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    CircularWavyProgressIndicator(modifier = Modifier.size(40.dp))
+                                    AppCircularProgressIndicator(modifier = Modifier.size(40.dp))
                                     Spacer(Modifier.height(16.dp))
                                     Text("消费记录加载中，请稍候...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("一卡通消费记录加载较慢，请耐心等待", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))

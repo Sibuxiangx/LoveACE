@@ -80,7 +80,7 @@ fun MainShell(
 }
 
 /** 竖屏：浮动胶囊毛玻璃导航栏 */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun PortraitShell(
     authViewModel: AuthViewModel,

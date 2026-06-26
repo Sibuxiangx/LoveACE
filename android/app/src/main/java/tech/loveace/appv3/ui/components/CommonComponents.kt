@@ -11,18 +11,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import tech.loveace.appv3.ui.theme.LocalProgressBarStyle
+import tech.loveace.appv3.ui.theme.ProgressBarStyle
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LoadingScreen(message: String = "加载中...") {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularWavyProgressIndicator()
+            AppCircularProgressIndicator()
             Spacer(Modifier.height(20.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -89,24 +89,66 @@ fun StatCard(
     }
 }
 
-/** M3E 风格的圆角粗进度条 */
+/** 根据用户偏好选择波浪或标准风格的圆形进度指示器 */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ExpressiveLinearProgress(
+fun AppCircularProgressIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+) {
+    val style = LocalProgressBarStyle.current
+    when (style) {
+        ProgressBarStyle.WAVY -> CircularWavyProgressIndicator(modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.STANDARD -> CircularProgressIndicator(modifier = modifier, color = color)
+    }
+}
+
+/** 根据用户偏好选择波浪或标准风格的圆形进度指示器（确定进度） */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun AppCircularProgressIndicator(
     progress: () -> Float,
     modifier: Modifier = Modifier,
-    height: Dp = 12.dp,
+    color: Color = MaterialTheme.colorScheme.primary,
     trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    indicatorColor: Color = MaterialTheme.colorScheme.primary,
 ) {
-    LinearWavyProgressIndicator(
-        progress = progress,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height),
-        color = indicatorColor,
-        trackColor = trackColor,
-    )
+    val style = LocalProgressBarStyle.current
+    when (style) {
+        ProgressBarStyle.WAVY -> CircularWavyProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.STANDARD -> CircularProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
+    }
+}
+
+/** 根据用户偏好选择波浪或标准风格的线性进度条 */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun AppLinearProgressIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+) {
+    val style = LocalProgressBarStyle.current
+    when (style) {
+        ProgressBarStyle.WAVY -> LinearWavyProgressIndicator(modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.STANDARD -> LinearProgressIndicator(modifier = modifier, color = color, trackColor = trackColor)
+    }
+}
+
+/** 根据用户偏好选择波浪或标准风格的线性进度条（确定进度） */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun AppLinearProgressIndicator(
+    progress: () -> Float,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+) {
+    val style = LocalProgressBarStyle.current
+    when (style) {
+        ProgressBarStyle.WAVY -> LinearWavyProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.STANDARD -> LinearProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
+    }
 }
 
 /** 带图标背景的 Tonal 图标容器 */

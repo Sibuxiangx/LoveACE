@@ -32,7 +32,7 @@ import tech.loveace.appv3.util.CsvExporter
 /**
  * 横屏培养方案：左侧总览 + 右侧分类详情列表
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -123,7 +123,7 @@ fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewMo
 
                                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        CircularWavyProgressIndicator(
+                                        AppCircularProgressIndicator(
                                             progress = { creditProgress },
                                             modifier = Modifier.size(100.dp),
                                             color = creditColor,
@@ -181,7 +181,7 @@ fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewMo
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun CircularStatRow(
     label: String, value: Int, total: Int, unit: String,
@@ -197,7 +197,7 @@ private fun CircularStatRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            CircularWavyProgressIndicator(
+            AppCircularProgressIndicator(
                 progress = { progress },
                 modifier = Modifier.size(40.dp),
                 color = ring,
@@ -218,7 +218,7 @@ private fun CircularStatRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 @Composable
 private fun LandscapePlanCategoryCard(category: PlanCategory) {
     var expanded by remember { mutableStateOf(false) }
@@ -253,7 +253,7 @@ private fun LandscapePlanCategoryCard(category: PlanCategory) {
                     }
                     val pColor = when { category.completionPercentage >= 100 -> Color(0xFF2E7D32); category.completionPercentage >= 80 -> Color(0xFF1565C0); else -> Color(0xFFE65100) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        LinearWavyProgressIndicator(
+                        AppLinearProgressIndicator(
                             progress = { (category.completionPercentage / 100.0).toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.weight(1f).height(8.dp), color = pColor, trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                         )
