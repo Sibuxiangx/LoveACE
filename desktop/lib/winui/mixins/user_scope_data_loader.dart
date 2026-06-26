@@ -20,8 +20,10 @@ mixin UserScopeDataLoader<T extends StatefulWidget> on State<T> {
     final uid = auth.credentials?.userId ?? '';
     if (uid.isNotEmpty && uid != _lastInitializedUserId) {
       _lastInitializedUserId = uid;
+      final capturedUid = uid;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        if (capturedUid != _lastInitializedUserId) return;
         loadUserScopeData();
       });
     }
