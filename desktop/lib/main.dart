@@ -95,13 +95,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, AcademicProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create AcademicProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final jwcService = JWCService(authProvider.connection!);
               return AcademicProvider(jwcService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -109,16 +108,15 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, AACProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create AACProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final aacService = AACService(
                 authProvider.connection!,
                 AACConfig(),
               );
               return AACProvider(aacService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -126,13 +124,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, TermProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create TermProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final jwcService = JWCService(authProvider.connection!);
               return TermProvider(jwcService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -140,13 +137,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, TermScoreProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create TermScoreProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final jwcService = JWCService(authProvider.connection!);
               return TermScoreProvider(jwcService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -160,13 +156,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, ExamProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create ExamProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final jwcService = JWCService(authProvider.connection!);
               return ExamProvider(jwcService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -175,10 +170,11 @@ class MyApp extends StatelessWidget {
           create: (_) => null,
           update: (context, authProvider, previous) {
             if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final service = TeacherEvaluationService(authProvider.connection!);
               return TeacherEvaluationProvider(service);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -186,13 +182,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, TrainingPlanProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create TrainingPlanProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final jwcService = JWCService(authProvider.connection!);
               return TrainingPlanProvider(jwcService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -200,13 +195,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, CourseScheduleProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create CourseScheduleProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final jwcService = JWCService(authProvider.connection!);
               return CourseScheduleProvider(jwcService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -214,16 +208,15 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, CompetitionProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create CompetitionProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final competitionService = CompetitionService(
                 authProvider.connection!,
                 CompetitionConfig(),
               );
               return CompetitionProvider(competitionService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -234,12 +227,8 @@ class MyApp extends StatelessWidget {
             // Only create ElectricityProvider when user is authenticated
             if (authProvider.isAuthenticated &&
                 authProvider.connection != null) {
-              // 如果已经有 provider 实例，直接返回
-              if (previous != null) {
-                return previous;
-              }
+              if (previous != null) return previous;
 
-              // 创建新的 provider 实例
               final isimService = ISIMService(
                 authProvider.connection!,
                 ISIMConfig(),
@@ -251,7 +240,7 @@ class MyApp extends StatelessWidget {
 
               return provider;
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -259,16 +248,15 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<AuthProvider, LaborClubProvider?>(
           create: (_) => null,
           update: (context, authProvider, previous) {
-            // Only create LaborClubProvider when user is authenticated
-            if (authProvider.isAuthenticated &&
-                authProvider.connection != null) {
+            if (authProvider.isAuthenticated && authProvider.connection != null) {
+              if (previous != null) return previous;
               final laborClubService = LaborClubService(
                 authProvider.connection!,
                 LDJLBConfig(),
               );
               return LaborClubProvider(laborClubService);
             }
-            return previous;
+            return null;
           },
         ),
 
@@ -279,16 +267,11 @@ class MyApp extends StatelessWidget {
             // Only create YKTProvider when user is authenticated
             if (authProvider.isAuthenticated &&
                 authProvider.connection != null) {
-              // 如果已经有 provider 实例，直接返回
-              if (previous != null) {
-                return previous;
-              }
+              if (previous != null) return previous;
 
-              // 创建新的 provider 实例
               final yktService = YKTService(authProvider.connection!);
               return YKTProvider(yktService);
             }
-            // 用户未认证时，清理旧实例
             return null;
           },
         ),
@@ -300,16 +283,12 @@ class MyApp extends StatelessWidget {
             // Only create SmartCourseSelectionProvider when user is authenticated
             if (authProvider.isAuthenticated &&
                 authProvider.connection != null) {
-              // 如果已经有 provider 实例，直接返回
-              if (previous != null) {
-                return previous;
-              }
+              if (previous != null) return previous;
 
-              // 创建新的 provider 实例
               final jwcService = JWCService(authProvider.connection!);
               return SmartCourseSelectionProvider(jwcService);
             }
-            return previous;
+            return null;
           },
         ),
 

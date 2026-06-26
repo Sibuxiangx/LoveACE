@@ -11,6 +11,7 @@ import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的电费查询页面
 ///
@@ -26,16 +27,17 @@ class WinUIElectricityPage extends StatefulWidget {
   State<WinUIElectricityPage> createState() => _WinUIElectricityPageState();
 }
 
-class _WinUIElectricityPageState extends State<WinUIElectricityPage> {
+class _WinUIElectricityPageState extends State<WinUIElectricityPage>
+    with UserScopeDataLoader<WinUIElectricityPage> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeData();
-    });
-  }
+  bool get isUserScopeReady =>
+      Provider.of<ElectricityProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _initializeData();
 
   Future<void> _initializeData() async {
+    if (!mounted) return;
     final provider = Provider.of<ElectricityProvider?>(context, listen: false);
     if (provider == null) return;
 
@@ -46,6 +48,7 @@ class _WinUIElectricityPageState extends State<WinUIElectricityPage> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
+    if (!mounted) return;
     final provider = Provider.of<ElectricityProvider?>(context, listen: false);
     if (provider == null || provider.boundRoomCode == null) return;
 

@@ -6,6 +6,7 @@ import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的考试信息页面
 ///
@@ -19,14 +20,14 @@ class WinUIExamPage extends StatefulWidget {
   State<WinUIExamPage> createState() => _WinUIExamPageState();
 }
 
-class _WinUIExamPageState extends State<WinUIExamPage> {
+class _WinUIExamPageState extends State<WinUIExamPage>
+    with UserScopeDataLoader<WinUIExamPage> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
+  bool get isUserScopeReady =>
+      Provider.of<ExamProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _loadData();
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     final provider = Provider.of<ExamProvider?>(context, listen: false);

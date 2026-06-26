@@ -15,6 +15,7 @@ import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
 import '../widgets/winui_notification.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// 排序选项
 enum _SortOption {
@@ -79,7 +80,15 @@ class WinUITrainingPlanPage extends StatefulWidget {
   State<WinUITrainingPlanPage> createState() => _WinUITrainingPlanPageState();
 }
 
-class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
+class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage>
+    with UserScopeDataLoader<WinUITrainingPlanPage> {
+  @override
+  bool get isUserScopeReady =>
+      Provider.of<TrainingPlanProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _loadData();
+
   /// 当前选中的分类
   PlanCategory? _selectedCategory;
 
@@ -131,16 +140,12 @@ class _WinUITrainingPlanPageState extends State<WinUITrainingPlanPage> {
     // 监听搜索框焦点变化
     _searchFocusNode.addListener(() {
       if (!_searchFocusNode.hasFocus) {
-        // 延迟关闭，以便点击建议项时能够触发
         Future.delayed(const Duration(milliseconds: 200), () {
           if (!_searchFocusNode.hasFocus) {
             _removeSearchOverlay();
           }
         });
       }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
     });
   }
 

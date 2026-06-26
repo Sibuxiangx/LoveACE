@@ -10,6 +10,7 @@ import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_dialogs.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 /// WinUI 风格的一卡通页面
 ///
@@ -22,16 +23,17 @@ class WinUIYKTPage extends StatefulWidget {
   State<WinUIYKTPage> createState() => _WinUIYKTPageState();
 }
 
-class _WinUIYKTPageState extends State<WinUIYKTPage> {
+class _WinUIYKTPageState extends State<WinUIYKTPage>
+    with UserScopeDataLoader<WinUIYKTPage> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
-  }
+  bool get isUserScopeReady =>
+      Provider.of<YKTProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _loadData();
 
   Future<void> _loadData({bool forceRefresh = false}) async {
+    if (!mounted) return;
     final provider = Provider.of<YKTProvider?>(context, listen: false);
     if (provider == null) return;
 

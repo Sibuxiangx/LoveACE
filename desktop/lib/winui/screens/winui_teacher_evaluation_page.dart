@@ -6,6 +6,7 @@ import '../../providers/teacher_evaluation_provider.dart';
 import '../widgets/winui_card.dart';
 import '../widgets/winui_empty_state.dart';
 import '../widgets/winui_loading.dart';
+import '../mixins/user_scope_data_loader.dart';
 
 class WinUITeacherEvaluationPage extends StatefulWidget {
   const WinUITeacherEvaluationPage({super.key});
@@ -14,12 +15,15 @@ class WinUITeacherEvaluationPage extends StatefulWidget {
   State<WinUITeacherEvaluationPage> createState() => _WinUITeacherEvaluationPageState();
 }
 
-class _WinUITeacherEvaluationPageState extends State<WinUITeacherEvaluationPage> {
+class _WinUITeacherEvaluationPageState
+    extends State<WinUITeacherEvaluationPage>
+    with UserScopeDataLoader<WinUITeacherEvaluationPage> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
+  bool get isUserScopeReady =>
+      Provider.of<TeacherEvaluationProvider?>(context, listen: false) != null;
+
+  @override
+  void loadUserScopeData() => _load();
 
   Future<void> _load() async {
     final provider = Provider.of<TeacherEvaluationProvider?>(context, listen: false);
