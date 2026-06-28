@@ -18,6 +18,12 @@ NONCE_TTL_SECONDS = "600"
 RATE_LIMIT_PER_MINUTE = "60"
 TIMESTAMP_SKEW_SECONDS = "300"
 BI_CACHE_TTL_SECONDS = "60"
+RAW_RETENTION_DAYS = "14"
+ARCHIVE_BATCH_SIZE = "1000"
+ARCHIVE_MAX_BATCHES = "20"
+
+[triggers]
+crons = ["17 * * * *"]
 
 [[migrations]]
 tag = "v2"
@@ -27,3 +33,7 @@ deleted_classes = ["SmartSelectSession"]
 binding = "DB"
 database_name = "loveace-analytics"
 database_id = "6a58a4ca-21af-4cc4-8c2a-6101865c7985"
+
+[[r2_buckets]]
+binding = "ANALYTICS_ARCHIVE"
+bucket_name = "loveace-analytics-archive"

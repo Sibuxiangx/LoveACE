@@ -1,9 +1,13 @@
 interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  ANALYTICS_ARCHIVE: R2Bucket;
   ANALYTICS_API_KEY: string;
   ANALYTICS_SIGNING_SECRET: string;
   ANALYTICS_IP_HASH_SALT: string;
+  ARCHIVE_BATCH_SIZE?: string;
+  ARCHIVE_MAX_BATCHES?: string;
+  RAW_RETENTION_DAYS?: string;
   MAX_BODY_BYTES?: string;
   MAX_EVENTS_PER_REQUEST?: string;
   NONCE_TTL_SECONDS?: string;
@@ -58,6 +62,24 @@ interface TrendRow {
   bucket: string;
   count: number;
   users: number;
+}
+
+interface AnalyticsEventRow {
+  id: number;
+  client_id: string;
+  platform: string;
+  app_version: string;
+  build: string | null;
+  os_version: string | null;
+  device_model: string | null;
+  grade_prefix: string | null;
+  student_hash: string | null;
+  event_name: string;
+  event_time: string;
+  properties: string;
+  ip_hash: string | null;
+  user_agent: string | null;
+  created_at: string;
 }
 
 interface PeriodInfo {
@@ -141,7 +163,57 @@ export default {
 
     return json({ ok: false, error: "not_found" }, 404);
   },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(archiveOldEvents(env));
+  },
 };
+
+async function archiveOldEvents(env: Env): Promise<void> {
+  const retentionDays = intEnv(env.RAW_RETENTION_DAYS, 14);
+  const batchSize = Math.min(intEnv(env.ARCHIVE_BATCH_SIZE, 1000), 5000);
+  const maxBatches = intEnv(env.ARCHIVE_MAX_BATCHES, 20);
+  const cutoff = sqlTimestamp(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+
+  for (let batchIndex = 0; batchIndex < maxBatches; batchIndex += 1) {
+    const result = await env.DB.prepare(`
+      SELECT
+        id, client_id, platform, app_version, build, os_version, device_model,
+        grade_prefix, student_hash, event_name, event_time, properties,
+        ip_hash, user_agent, created_at
+      FROM analytics_events
+      WHERE created_at < ?
+      ORDER BY id ASC
+      LIMIT ?
+    `).bind(cutoff, batchSize).all<AnalyticsEventRow>();
+    const rows = result.results ?? [];
+    if (rows.length === 0) return;
+
+    const firstId = rows[0].id;
+    const lastId = rows[rows.length - 1].id;
+    const createdDay = (rows[0].created_at || cutoff).slice(0, 10);
+    const key = `raw-events/created_day=${createdDay}/events_${firstId}_${lastId}.ndjson`;
+    const body = rows.map((row) => JSON.stringify(row)).join("\n") + "\n";
+
+    await env.ANALYTICS_ARCHIVE.put(key, body, {
+      httpMetadata: { contentType: "application/x-ndjson; charset=utf-8" },
+      customMetadata: {
+        first_id: String(firstId),
+        last_id: String(lastId),
+        row_count: String(rows.length),
+        cutoff,
+        archived_at: new Date().toISOString(),
+      },
+    });
+
+    await env.DB.prepare(`
+      DELETE FROM analytics_events
+      WHERE id >= ? AND id <= ? AND created_at < ?
+    `).bind(firstId, lastId, cutoff).run();
+
+    if (rows.length < batchSize) return;
+  }
+}
 
 async function loadDashboardResponse(request: Request, env: Env, range: PeriodRange): Promise<Response> {
   const ttlSeconds = intEnv(env.BI_CACHE_TTL_SECONDS, 60);
@@ -607,6 +679,10 @@ function header(request: Request, name: string): string {
 function intEnv(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sqlTimestamp(value: number): string {
+  return new Date(value).toISOString().slice(0, 19).replace("T", " ");
 }
 
 function isString(value: unknown, min: number, max: number): value is string {

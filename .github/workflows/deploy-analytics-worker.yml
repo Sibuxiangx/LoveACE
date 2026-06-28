@@ -29,6 +29,9 @@ jobs:
       - name: Type check
         run: npm run check
 
+      - name: Ensure R2 archive bucket exists
+        run: npx wrangler r2 bucket create loveace-analytics-archive || true
+
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply loveace-analytics --remote
 
