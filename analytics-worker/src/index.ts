@@ -223,9 +223,14 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runMaintenance(env));
+    ctx.waitUntil(runScheduledMaintenance(env));
   },
 };
+
+async function runScheduledMaintenance(env: Env): Promise<void> {
+  if (await getState(env.DB, "maintenance:local_backfill") === "1") return;
+  await runMaintenance(env);
+}
 
 async function runMaintenance(env: Env, options: {
   rollupBatchSize?: number;
