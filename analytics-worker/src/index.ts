@@ -9,6 +9,7 @@ interface Env {
   NONCE_TTL_SECONDS?: string;
   RATE_LIMIT_PER_MINUTE?: string;
   TIMESTAMP_SKEW_SECONDS?: string;
+  BI_CACHE_TTL_SECONDS?: string;
 }
 
 interface EventIn {
@@ -127,8 +128,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/bi/data") {
-      const data = await loadDashboardData(env.DB, parsePeriodRange(url.searchParams.get("range")));
-      return json(data, 200, { "Cache-Control": "no-store" });
+      return loadDashboardResponse(request, env, parsePeriodRange(url.searchParams.get("range")));
     }
 
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/bi")) {
@@ -142,6 +142,43 @@ export default {
     return json({ ok: false, error: "not_found" }, 404);
   },
 };
+
+async function loadDashboardResponse(request: Request, env: Env, range: PeriodRange): Promise<Response> {
+  const ttlSeconds = intEnv(env.BI_CACHE_TTL_SECONDS, 60);
+  const cacheUrl = new URL(request.url);
+  cacheUrl.search = `?range=${encodeURIComponent(range)}`;
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
+  const cache = defaultCache();
+
+  if (ttlSeconds > 0) {
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      const headers = new Headers(cached.headers);
+      headers.set("X-LoveACE-Cache", "HIT");
+      return new Response(cached.body, {
+        status: cached.status,
+        statusText: cached.statusText,
+        headers,
+      });
+    }
+  }
+
+  const startedAt = Date.now();
+  const data = await loadDashboardData(env.DB, range);
+  const response = json(data, 200, {
+    "Cache-Control": ttlSeconds > 0
+      ? `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`
+      : "no-store",
+    "Server-Timing": `bi;dur=${Date.now() - startedAt}`,
+    "X-LoveACE-Cache": "MISS",
+  });
+  if (ttlSeconds > 0) await cache.put(cacheKey, response.clone());
+  return response;
+}
+
+function defaultCache(): Cache {
+  return (caches as unknown as { default: Cache }).default;
+}
 
 async function ingestEvents(request: Request, env: Env): Promise<Response> {
   const body = await request.text();
@@ -254,8 +291,8 @@ async function loadDashboardData(db: D1Database, range: PeriodRange): Promise<An
     countRows(db, "event_name", 8, where),
     platformRows(db, 4, where),
     gradeRows(db, 8, where),
-    jsonPropertyRows(db, "screen", 8, where),
-    jsonPropertyRows(db, "feature", 8, where),
+    jsonPropertyRows(db, "screen", "screen_view", 8, where),
+    jsonPropertyRows(db, "feature", "feature_action", 8, where),
     normalizedUsageRows(db, 10, where),
     db.prepare(`
       SELECT platform, app_version, COUNT(DISTINCT client_id) AS clients, COUNT(*) AS events
@@ -338,15 +375,15 @@ function countRows(db: D1Database, column: string, limit: number, where = "1 = 1
   `).bind(limit).all<CountRow>();
 }
 
-function jsonPropertyRows(db: D1Database, key: string, limit: number, where: string): Promise<D1Result<CountRow>> {
+function jsonPropertyRows(db: D1Database, key: string, eventName: string, limit: number, where: string): Promise<D1Result<CountRow>> {
   return db.prepare(`
     SELECT json_extract(properties, ?) AS label, COUNT(*) AS count
     FROM analytics_events
-    WHERE ${where} AND json_extract(properties, ?) IS NOT NULL AND json_extract(properties, ?) != ''
+    WHERE ${where} AND event_name = ? AND json_extract(properties, ?) IS NOT NULL AND json_extract(properties, ?) != ''
     GROUP BY label
     ORDER BY count DESC, label ASC
     LIMIT ?
-  `).bind(`$.${key}`, `$.${key}`, `$.${key}`, limit).all<CountRow>();
+  `).bind(`$.${key}`, eventName, `$.${key}`, `$.${key}`, limit).all<CountRow>();
 }
 
 function normalizedUsageRows(db: D1Database, limit: number, where: string): Promise<D1Result<UsageRow>> {

@@ -137,7 +137,7 @@
     });
 
     async function syncDashboard() {
-      const response = await fetch(`/bi/data?range=${encodeURIComponent(activeRange)}`, { cache: "no-store" });
+      const response = await fetch(`/bi/data?range=${encodeURIComponent(activeRange)}`);
       if (!response.ok) throw new Error(`BI data request failed: ${response.status}`);
       render(await response.json());
     }
