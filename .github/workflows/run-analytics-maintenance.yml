@@ -1,0 +1,93 @@
+name: Run Analytics Maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: Analytics Worker origin
+        required: true
+        default: https://analyst-api.linota.cn
+      iterations:
+        description: Maximum maintenance calls
+        required: true
+        default: "20"
+      rollup_batch_size:
+        description: Events per rollup batch
+        required: true
+        default: "5000"
+      rollup_batches:
+        description: Rollup batches per call
+        required: true
+        default: "20"
+      archive_batch_size:
+        description: Events per archive object
+        required: true
+        default: "5000"
+      archive_batches:
+        description: Archive batches per call
+        required: true
+        default: "20"
+      archive_all:
+        description: Archive all rolled-up raw rows now
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run maintenance loop
+        env:
+          ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
+          ENDPOINT: ${{ inputs.endpoint }}
+          ITERATIONS: ${{ inputs.iterations }}
+          ROLLUP_BATCH_SIZE: ${{ inputs.rollup_batch_size }}
+          ROLLUP_BATCHES: ${{ inputs.rollup_batches }}
+          ARCHIVE_BATCH_SIZE: ${{ inputs.archive_batch_size }}
+          ARCHIVE_BATCHES: ${{ inputs.archive_batches }}
+          ARCHIVE_ALL: ${{ inputs.archive_all }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          endpoint="${ENDPOINT%/}"
+          query="rollup_batch_size=${ROLLUP_BATCH_SIZE}&rollup_batches=${ROLLUP_BATCHES}&archive_batch_size=${ARCHIVE_BATCH_SIZE}&archive_batches=${ARCHIVE_BATCHES}"
+          if [ "${ARCHIVE_ALL}" = "true" ]; then
+            query="${query}&archive_all=true"
+          fi
+
+          for iteration in $(seq 1 "${ITERATIONS}"); do
+            response="$(curl -fsS -X POST "${endpoint}/admin/maintenance/run?${query}" \
+              -H "Authorization: Bearer ${ANALYTICS_API_KEY}")"
+
+            python3 - "$iteration" "$response" <<'PY'
+          import json
+          import sys
+
+          iteration = int(sys.argv[1])
+          payload = json.loads(sys.argv[2])
+          if not payload.get("ok"):
+              raise SystemExit(f"maintenance call failed: {payload}")
+          print(json.dumps({
+              "iteration": iteration,
+              "rollup": payload.get("rollup"),
+              "archive": payload.get("archive"),
+          }, ensure_ascii=False))
+          PY
+
+            progress="$(python3 - "$response" <<'PY'
+          import json
+          import sys
+
+          payload = json.loads(sys.argv[1])
+          rollup = payload.get("rollup") or {}
+          archive = payload.get("archive") or {}
+          print((rollup.get("processed") or 0) + (archive.get("archivedRows") or 0))
+          PY
+          )"
+
+            if [ "${progress}" = "0" ]; then
+              break
+            fi
+          done

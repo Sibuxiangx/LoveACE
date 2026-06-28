@@ -8,6 +8,8 @@ interface Env {
   ARCHIVE_BATCH_SIZE?: string;
   ARCHIVE_MAX_BATCHES?: string;
   RAW_RETENTION_DAYS?: string;
+  ROLLUP_BATCH_SIZE?: string;
+  ROLLUP_MAX_BATCHES?: string;
   MAX_BODY_BYTES?: string;
   MAX_EVENTS_PER_REQUEST?: string;
   NONCE_TTL_SECONDS?: string;
@@ -82,6 +84,48 @@ interface AnalyticsEventRow {
   created_at: string;
 }
 
+interface MaintenanceResult {
+  rollup: RollupResult;
+  archive: ArchiveResult;
+}
+
+interface RollupResult {
+  processed: number;
+  lastId: number;
+  ready: boolean;
+}
+
+interface ArchiveResult {
+  archivedRows: number;
+  archivedObjects: number;
+}
+
+interface RollupCountValue {
+  bucketHour: string;
+  bucketDay: string;
+  metric: string;
+  label: string;
+  platform: string;
+  appVersion: string;
+  count: number;
+}
+
+interface RollupIdentityValue {
+  bucketScope: string;
+  bucketKey: string;
+  metric: string;
+  label: string;
+  platform: string;
+  appVersion: string;
+  identityType: string;
+  identityValue: string;
+}
+
+interface RollupAggregate {
+  counts: Map<string, RollupCountValue>;
+  identities: Map<string, RollupIdentityValue>;
+}
+
 interface PeriodInfo {
   range: PeriodRange;
   label: string;
@@ -153,6 +197,20 @@ export default {
       return loadDashboardResponse(request, env, parsePeriodRange(url.searchParams.get("range")));
     }
 
+    if (request.method === "POST" && url.pathname === "/admin/maintenance/run") {
+      if (!env.ANALYTICS_API_KEY || !constantTimeEqual(header(request, "Authorization"), `Bearer ${env.ANALYTICS_API_KEY}`)) {
+        return json({ ok: false, error: "unauthorized" }, 401);
+      }
+      const result = await runMaintenance(env, {
+        rollupBatchSize: parsePositiveInt(url.searchParams.get("rollup_batch_size")),
+        rollupMaxBatches: parsePositiveInt(url.searchParams.get("rollup_batches")),
+        archiveBatchSize: parsePositiveInt(url.searchParams.get("archive_batch_size")),
+        archiveMaxBatches: parsePositiveInt(url.searchParams.get("archive_batches")),
+        archiveAll: url.searchParams.get("archive_all") === "true",
+      });
+      return json({ ok: true, ...result });
+    }
+
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/bi")) {
       return serveDashboard(request, env);
     }
@@ -165,15 +223,38 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(archiveOldEvents(env));
+    ctx.waitUntil(runMaintenance(env));
   },
 };
 
-async function archiveOldEvents(env: Env): Promise<void> {
-  const retentionDays = intEnv(env.RAW_RETENTION_DAYS, 14);
-  const batchSize = Math.min(intEnv(env.ARCHIVE_BATCH_SIZE, 1000), 5000);
-  const maxBatches = intEnv(env.ARCHIVE_MAX_BATCHES, 20);
-  const cutoff = sqlTimestamp(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+async function runMaintenance(env: Env, options: {
+  rollupBatchSize?: number;
+  rollupMaxBatches?: number;
+  archiveBatchSize?: number;
+  archiveMaxBatches?: number;
+  archiveAll?: boolean;
+} = {}): Promise<MaintenanceResult> {
+  const rollup = await rollupEvents(env, {
+    batchSize: options.rollupBatchSize,
+    maxBatches: options.rollupMaxBatches,
+  });
+  const archive = await archiveOldEvents(env, {
+    batchSize: options.archiveBatchSize,
+    maxBatches: options.archiveMaxBatches,
+    retentionDays: options.archiveAll ? 0 : undefined,
+  });
+  return { rollup, archive };
+}
+
+async function rollupEvents(env: Env, options: {
+  batchSize?: number;
+  maxBatches?: number;
+} = {}): Promise<RollupResult> {
+  const batchSize = Math.min(options.batchSize ?? intEnv(env.ROLLUP_BATCH_SIZE, 5000), 5000);
+  const maxBatches = options.maxBatches ?? intEnv(env.ROLLUP_MAX_BATCHES, 10);
+  let lastId = await getNumberState(env.DB, "rollup:last_event_id", 0);
+  let processed = 0;
+  let ready = false;
 
   for (let batchIndex = 0; batchIndex < maxBatches; batchIndex += 1) {
     const result = await env.DB.prepare(`
@@ -182,12 +263,184 @@ async function archiveOldEvents(env: Env): Promise<void> {
         grade_prefix, student_hash, event_name, event_time, properties,
         ip_hash, user_agent, created_at
       FROM analytics_events
-      WHERE created_at < ?
+      WHERE id > ?
       ORDER BY id ASC
       LIMIT ?
-    `).bind(cutoff, batchSize).all<AnalyticsEventRow>();
+    `).bind(lastId, batchSize).all<AnalyticsEventRow>();
     const rows = result.results ?? [];
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      await setState(env.DB, "rollup:ready", "1");
+      return { processed, lastId, ready: true };
+    }
+
+    const aggregate = aggregateRollupRows(rows);
+    await writeRollupAggregate(env.DB, aggregate);
+
+    lastId = rows[rows.length - 1].id;
+    processed += rows.length;
+    await setState(env.DB, "rollup:last_event_id", String(lastId));
+    await setState(env.DB, "rollup:last_event_at", maxString(rows.map((row) => row.created_at)) ?? "");
+
+    if (rows.length < batchSize) {
+      await setState(env.DB, "rollup:ready", "1");
+      ready = true;
+      break;
+    }
+  }
+
+  return { processed, lastId, ready };
+}
+
+function aggregateRollupRows(rows: AnalyticsEventRow[]): RollupAggregate {
+  const counts = new Map<string, RollupCountValue>();
+  const identities = new Map<string, RollupIdentityValue>();
+
+  for (const row of rows) {
+    const bucket = shanghaiBuckets(row.created_at);
+    const platform = cleanLabel(row.platform);
+    const appVersion = cleanLabel(row.app_version);
+    const eventName = cleanLabel(row.event_name);
+    const properties = parsePropertiesJson(row.properties);
+    const screen = stringProperty(properties, "screen");
+    const feature = stringProperty(properties, "feature");
+    const action = stringProperty(properties, "action");
+    const normalized = normalizedUsageLabel(row.event_name, screen, feature, action);
+
+    addCount(counts, bucket, "total", "", "", "", 1);
+    addCount(counts, bucket, "event", eventName, "", "", 1);
+    addCount(counts, bucket, "version", "", platform, appVersion, 1);
+    if (screen) addCount(counts, bucket, "screen", screen, "", "", 1);
+    if (feature) addCount(counts, bucket, "feature", feature, "", "", 1);
+    if (normalized) addCount(counts, bucket, "normalized", normalized, platform, "", 1);
+    if (isAuthEvent(eventName)) addCount(counts, bucket, "auth", eventName, "", "", 1);
+    if (isOtaEvent(eventName)) addCount(counts, bucket, "ota", eventName, "", "", 1);
+
+    if (row.client_id) {
+      addIdentity(identities, "day", bucket.day, "total", "", "", "", "client", row.client_id);
+      addIdentity(identities, "day", bucket.day, "version", "", platform, appVersion, "client", row.client_id);
+    }
+
+    if (row.student_hash) {
+      addIdentity(identities, "day", bucket.day, "total", "", "", "", "user", row.student_hash);
+      addIdentity(identities, "hour", bucket.hour, "trend", "", "", "", "user", row.student_hash);
+      addIdentity(identities, "day", bucket.day, "platform", platform, platform, "", "user", row.student_hash);
+      if (row.grade_prefix) {
+        addIdentity(identities, "day", bucket.day, "grade", cleanLabel(row.grade_prefix), "", "", "user", row.student_hash);
+      }
+      if (normalized) {
+        addIdentity(identities, "day", bucket.day, "normalized", normalized, platform, "", "user", row.student_hash);
+      }
+    }
+  }
+
+  return { counts, identities };
+}
+
+async function writeRollupAggregate(
+  db: D1Database,
+  aggregate: RollupAggregate,
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [];
+  for (const item of aggregate.counts.values()) {
+    statements.push(db.prepare(`
+      INSERT INTO analytics_rollup_counts (
+        bucket_hour, bucket_day, metric, label, platform, app_version, count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(bucket_hour, metric, label, platform, app_version)
+      DO UPDATE SET count = count + excluded.count
+    `).bind(
+      item.bucketHour,
+      item.bucketDay,
+      item.metric,
+      item.label,
+      item.platform,
+      item.appVersion,
+      item.count,
+    ));
+  }
+  for (const item of aggregate.identities.values()) {
+    statements.push(db.prepare(`
+      INSERT OR IGNORE INTO analytics_rollup_identities (
+        bucket_scope, bucket_key, metric, label, platform, app_version,
+        identity_type, identity_value
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      item.bucketScope,
+      item.bucketKey,
+      item.metric,
+      item.label,
+      item.platform,
+      item.appVersion,
+      item.identityType,
+      item.identityValue,
+    ));
+  }
+
+  for (let index = 0; index < statements.length; index += 50) {
+    await db.batch(statements.slice(index, index + 50));
+  }
+}
+
+function addCount(
+  counts: Map<string, RollupCountValue>,
+  bucket: { day: string; hour: string },
+  metric: string,
+  label: string,
+  platform: string,
+  appVersion: string,
+  count: number,
+): void {
+  const key = [bucket.hour, metric, label, platform, appVersion].join("\u001f");
+  const current = counts.get(key);
+  if (current) current.count += count;
+  else counts.set(key, { bucketHour: bucket.hour, bucketDay: bucket.day, metric, label, platform, appVersion, count });
+}
+
+function addIdentity(
+  identities: Map<string, RollupIdentityValue>,
+  bucketScope: string,
+  bucketKey: string,
+  metric: string,
+  label: string,
+  platform: string,
+  appVersion: string,
+  identityType: string,
+  identityValue: string,
+): void {
+  const cleanValue = cleanLabel(identityValue);
+  if (!cleanValue) return;
+  const key = [bucketScope, bucketKey, metric, label, platform, appVersion, identityType, cleanValue].join("\u001f");
+  identities.set(key, { bucketScope, bucketKey, metric, label, platform, appVersion, identityType, identityValue: cleanValue });
+}
+
+async function archiveOldEvents(env: Env, options: {
+  batchSize?: number;
+  maxBatches?: number;
+  retentionDays?: number;
+} = {}): Promise<ArchiveResult> {
+  if (await getState(env.DB, "rollup:ready") !== "1") return { archivedRows: 0, archivedObjects: 0 };
+  const retentionDays = options.retentionDays ?? intEnv(env.RAW_RETENTION_DAYS, 1);
+  const batchSize = Math.min(options.batchSize ?? intEnv(env.ARCHIVE_BATCH_SIZE, 5000), 5000);
+  const maxBatches = options.maxBatches ?? intEnv(env.ARCHIVE_MAX_BATCHES, 10);
+  const lastRollupId = await getNumberState(env.DB, "rollup:last_event_id", 0);
+  if (lastRollupId <= 0) return { archivedRows: 0, archivedObjects: 0 };
+  const cutoff = sqlTimestamp(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  let archivedRows = 0;
+  let archivedObjects = 0;
+
+  for (let batchIndex = 0; batchIndex < maxBatches; batchIndex += 1) {
+    const result = await env.DB.prepare(`
+      SELECT
+        id, client_id, platform, app_version, build, os_version, device_model,
+        grade_prefix, student_hash, event_name, event_time, properties,
+        ip_hash, user_agent, created_at
+      FROM analytics_events
+      WHERE created_at < ? AND id <= ?
+      ORDER BY id ASC
+      LIMIT ?
+    `).bind(cutoff, lastRollupId, batchSize).all<AnalyticsEventRow>();
+    const rows = result.results ?? [];
+    if (rows.length === 0) return { archivedRows, archivedObjects };
 
     const firstId = rows[0].id;
     const lastId = rows[rows.length - 1].id;
@@ -208,11 +461,15 @@ async function archiveOldEvents(env: Env): Promise<void> {
 
     await env.DB.prepare(`
       DELETE FROM analytics_events
-      WHERE id >= ? AND id <= ? AND created_at < ?
-    `).bind(firstId, lastId, cutoff).run();
+      WHERE id >= ? AND id <= ? AND created_at < ? AND id <= ?
+    `).bind(firstId, lastId, cutoff, lastRollupId).run();
 
-    if (rows.length < batchSize) return;
+    archivedRows += rows.length;
+    archivedObjects += 1;
+
+    if (rows.length < batchSize) return { archivedRows, archivedObjects };
   }
+  return { archivedRows, archivedObjects };
 }
 
 async function loadDashboardResponse(request: Request, env: Env, range: PeriodRange): Promise<Response> {
@@ -330,6 +587,286 @@ async function serveDashboard(request: Request, env: Env): Promise<Response> {
 }
 
 async function loadDashboardData(db: D1Database, range: PeriodRange): Promise<AnalyticsDashboardData> {
+  const rollupReady = await getState(db, "rollup:ready") === "1";
+  if (rollupReady) return loadRollupDashboardData(db, range);
+  return loadRawDashboardData(db, range);
+}
+
+async function loadRollupDashboardData(db: D1Database, range: PeriodRange): Promise<AnalyticsDashboardData> {
+  const period = periodInfo(range);
+  const startDay = shanghaiPeriodStartDay(range);
+  const dayStart = shanghaiPeriodStartDay("day");
+  const weekStart = shanghaiPeriodStartDay("week");
+  const monthStart = shanghaiPeriodStartDay("month");
+  const last24Hour = shanghaiHourOffset(-23);
+  const lastEventAtUtc = await getState(db, "rollup:last_event_at");
+
+  const [
+    totalEvents,
+    clients,
+    users,
+    events24h,
+    events7d,
+    dau,
+    wau,
+    mau,
+    eventDistribution,
+    platformDistribution,
+    gradeDistribution,
+    screenDistribution,
+    featureDistribution,
+    normalizedUsage,
+    versions,
+    authStats,
+    otaStats,
+    trend,
+  ] = await Promise.all([
+    rollupCountSum(db, "total", startDay),
+    rollupIdentityDistinct(db, "total", "client", startDay),
+    rollupIdentityDistinct(db, "total", "user", startDay),
+    rollupHourlyCountSum(db, "total", last24Hour),
+    rollupCountSum(db, "total", weekStart),
+    rollupIdentityDistinct(db, "total", "user", dayStart),
+    rollupIdentityDistinct(db, "total", "user", weekStart),
+    rollupIdentityDistinct(db, "total", "user", monthStart),
+    rollupCountRows(db, "event", 8, startDay),
+    rollupIdentityRows(db, "platform", 4, startDay),
+    rollupIdentityRows(db, "grade", 8, startDay),
+    rollupCountRows(db, "screen", 8, startDay),
+    rollupCountRows(db, "feature", 8, startDay),
+    rollupNormalizedUsageRows(db, 10, startDay),
+    rollupVersionRows(db, 6, startDay),
+    rollupCountRows(db, "auth", 8, startDay),
+    rollupCountRows(db, "ota", 8, startDay),
+    rollupTrendRows(db, range, startDay),
+  ]);
+
+  return {
+    period,
+    summary: {
+      total_events: totalEvents,
+      clients,
+      users,
+      events_24h: events24h,
+      events_7d: events7d,
+      dau,
+      wau,
+      mau,
+      last_event_at: lastEventAtUtc ? utcSqlToShanghai(lastEventAtUtc) : null,
+    },
+    eventDistribution,
+    platformDistribution,
+    gradeDistribution,
+    screenDistribution,
+    featureDistribution,
+    normalizedUsage,
+    versions,
+    authStats,
+    otaStats,
+    trend,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+async function rollupCountSum(db: D1Database, metric: string, startDay: string): Promise<number> {
+  const row = await db.prepare(`
+    SELECT COALESCE(SUM(count), 0) AS count
+    FROM analytics_rollup_counts
+    WHERE metric = ? AND bucket_day >= ?
+  `).bind(metric, startDay).first<{ count: number }>();
+  return Number(row?.count ?? 0);
+}
+
+async function rollupHourlyCountSum(db: D1Database, metric: string, startHour: string): Promise<number> {
+  const row = await db.prepare(`
+    SELECT COALESCE(SUM(count), 0) AS count
+    FROM analytics_rollup_counts
+    WHERE metric = ? AND bucket_hour >= ?
+  `).bind(metric, startHour).first<{ count: number }>();
+  return Number(row?.count ?? 0);
+}
+
+async function rollupIdentityDistinct(
+  db: D1Database,
+  metric: string,
+  identityType: string,
+  startDay: string,
+): Promise<number> {
+  const row = await db.prepare(`
+    SELECT COUNT(DISTINCT identity_value) AS count
+    FROM analytics_rollup_identities
+    WHERE bucket_scope = 'day'
+      AND metric = ?
+      AND identity_type = ?
+      AND bucket_key >= ?
+  `).bind(metric, identityType, startDay).first<{ count: number }>();
+  return Number(row?.count ?? 0);
+}
+
+async function rollupCountRows(
+  db: D1Database,
+  metric: string,
+  limit: number,
+  startDay: string,
+): Promise<CountRow[]> {
+  const result = await db.prepare(`
+    SELECT NULLIF(label, '') AS label, SUM(count) AS count
+    FROM analytics_rollup_counts
+    WHERE metric = ? AND bucket_day >= ? AND label != ''
+    GROUP BY label
+    ORDER BY count DESC, label ASC
+    LIMIT ?
+  `).bind(metric, startDay, limit).all<CountRow>();
+  return result.results ?? [];
+}
+
+async function rollupIdentityRows(
+  db: D1Database,
+  metric: string,
+  limit: number,
+  startDay: string,
+): Promise<CountRow[]> {
+  const result = await db.prepare(`
+    SELECT NULLIF(label, '') AS label, COUNT(DISTINCT identity_value) AS count
+    FROM analytics_rollup_identities
+    WHERE bucket_scope = 'day'
+      AND metric = ?
+      AND identity_type = 'user'
+      AND bucket_key >= ?
+      AND label != ''
+    GROUP BY label
+    ORDER BY count DESC, label ASC
+    LIMIT ?
+  `).bind(metric, startDay, limit).all<CountRow>();
+  return result.results ?? [];
+}
+
+async function rollupVersionRows(
+  db: D1Database,
+  limit: number,
+  startDay: string,
+): Promise<VersionRow[]> {
+  const result = await db.prepare(`
+    WITH events AS (
+      SELECT platform, app_version, SUM(count) AS events
+      FROM analytics_rollup_counts
+      WHERE metric = 'version' AND bucket_day >= ?
+      GROUP BY platform, app_version
+    ), clients AS (
+      SELECT platform, app_version, COUNT(DISTINCT identity_value) AS clients
+      FROM analytics_rollup_identities
+      WHERE bucket_scope = 'day'
+        AND metric = 'version'
+        AND identity_type = 'client'
+        AND bucket_key >= ?
+      GROUP BY platform, app_version
+    )
+    SELECT
+      events.platform,
+      events.app_version,
+      COALESCE(clients.clients, 0) AS clients,
+      events.events
+    FROM events
+    LEFT JOIN clients
+      ON clients.platform = events.platform
+      AND clients.app_version = events.app_version
+    ORDER BY events.events DESC, events.platform ASC, events.app_version DESC
+    LIMIT ?
+  `).bind(startDay, startDay, limit).all<VersionRow>();
+  return result.results ?? [];
+}
+
+async function rollupNormalizedUsageRows(
+  db: D1Database,
+  limit: number,
+  startDay: string,
+): Promise<UsageRow[]> {
+  const result = await db.prepare(`
+    WITH events AS (
+      SELECT
+        label,
+        SUM(count) AS count,
+        SUM(CASE WHEN platform = 'android' THEN count ELSE 0 END) AS android,
+        SUM(CASE WHEN platform = 'ios' THEN count ELSE 0 END) AS ios,
+        SUM(CASE WHEN platform IN ('windows', 'macos', 'linux', 'desktop') THEN count ELSE 0 END) AS desktop
+      FROM analytics_rollup_counts
+      WHERE metric = 'normalized' AND bucket_day >= ? AND label != ''
+      GROUP BY label
+    ), users AS (
+      SELECT label, COUNT(DISTINCT identity_value) AS users
+      FROM analytics_rollup_identities
+      WHERE bucket_scope = 'day'
+        AND metric = 'normalized'
+        AND identity_type = 'user'
+        AND bucket_key >= ?
+        AND label != ''
+      GROUP BY label
+    )
+    SELECT
+      NULLIF(events.label, '') AS label,
+      events.count,
+      COALESCE(users.users, 0) AS users,
+      events.android,
+      events.ios,
+      events.desktop
+    FROM events
+    LEFT JOIN users ON users.label = events.label
+    ORDER BY users DESC, count DESC, label ASC
+    LIMIT ?
+  `).bind(startDay, startDay, limit).all<UsageRow>();
+  return result.results ?? [];
+}
+
+async function rollupTrendRows(db: D1Database, range: PeriodRange, startDay: string): Promise<TrendRow[]> {
+  if (range === "day") {
+    const startHour = `${startDay} 00`;
+    const result = await db.prepare(`
+      WITH events AS (
+        SELECT bucket_hour AS bucket_key, substr(bucket_hour, 12, 2) || ':00' AS bucket, SUM(count) AS count
+        FROM analytics_rollup_counts
+        WHERE metric = 'total' AND bucket_hour >= ?
+        GROUP BY bucket_hour
+      ), users AS (
+        SELECT bucket_key, COUNT(DISTINCT identity_value) AS users
+        FROM analytics_rollup_identities
+        WHERE bucket_scope = 'hour'
+          AND metric = 'trend'
+          AND identity_type = 'user'
+          AND bucket_key >= ?
+        GROUP BY bucket_key
+      )
+      SELECT events.bucket, events.count, COALESCE(users.users, 0) AS users
+      FROM events
+      LEFT JOIN users ON users.bucket_key = events.bucket_key
+      ORDER BY events.bucket_key ASC
+    `).bind(startHour, startHour).all<TrendRow>();
+    return result.results ?? [];
+  }
+
+  const result = await db.prepare(`
+    WITH events AS (
+      SELECT bucket_day AS bucket, SUM(count) AS count
+      FROM analytics_rollup_counts
+      WHERE metric = 'total' AND bucket_day >= ?
+      GROUP BY bucket_day
+    ), users AS (
+      SELECT bucket_key AS bucket, COUNT(DISTINCT identity_value) AS users
+      FROM analytics_rollup_identities
+      WHERE bucket_scope = 'day'
+        AND metric = 'total'
+        AND identity_type = 'user'
+        AND bucket_key >= ?
+      GROUP BY bucket_key
+    )
+    SELECT events.bucket, events.count, COALESCE(users.users, 0) AS users
+    FROM events
+    LEFT JOIN users ON users.bucket = events.bucket
+    ORDER BY events.bucket ASC
+  `).bind(startDay, startDay).all<TrendRow>();
+  return result.results ?? [];
+}
+
+async function loadRawDashboardData(db: D1Database, range: PeriodRange): Promise<AnalyticsDashboardData> {
   const period = periodInfo(range);
   const where = periodWhere(range);
   const trendBucket = trendBucketExpression(range);
@@ -681,8 +1218,201 @@ function intEnv(value: string | undefined, fallback: number): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parsePositiveInt(value: string | null): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+async function getState(db: D1Database, key: string): Promise<string | null> {
+  const row = await db.prepare("SELECT value FROM analytics_rollup_state WHERE key = ?")
+    .bind(key)
+    .first<{ value: string }>();
+  return row?.value ?? null;
+}
+
+async function getNumberState(db: D1Database, key: string, fallback: number): Promise<number> {
+  const value = await getState(db, key);
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+async function setState(db: D1Database, key: string, value: string): Promise<void> {
+  await db.prepare(`
+    INSERT INTO analytics_rollup_state (key, value, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `).bind(key, value).run();
+}
+
 function sqlTimestamp(value: number): string {
   return new Date(value).toISOString().slice(0, 19).replace("T", " ");
+}
+
+function shanghaiBuckets(value: string): { day: string; hour: string } {
+  const shifted = parseUtcTimestamp(value) + 8 * 60 * 60 * 1000;
+  const iso = new Date(shifted).toISOString();
+  return {
+    day: iso.slice(0, 10),
+    hour: iso.slice(0, 13).replace("T", " "),
+  };
+}
+
+function shanghaiPeriodStartDay(range: PeriodRange): string {
+  if (range === "week") return shanghaiDayOffset(-6);
+  if (range === "month") return shanghaiMonthStartDay();
+  return shanghaiDayOffset(0);
+}
+
+function shanghaiDayOffset(offsetDays: number): string {
+  return shiftedShanghaiIso(Date.now() + offsetDays * 24 * 60 * 60 * 1000).slice(0, 10);
+}
+
+function shanghaiHourOffset(offsetHours: number): string {
+  return shiftedShanghaiIso(Date.now() + offsetHours * 60 * 60 * 1000).slice(0, 13).replace("T", " ");
+}
+
+function shanghaiMonthStartDay(): string {
+  const shifted = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}-01`;
+}
+
+function shiftedShanghaiIso(utcMs: number): string {
+  return new Date(utcMs + 8 * 60 * 60 * 1000).toISOString();
+}
+
+function parseUtcTimestamp(value: string): number {
+  if (value.includes("T")) {
+    const parsed = Date.parse(value.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(value) ? value : `${value}Z`);
+    return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return Date.now();
+  return Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6]),
+  );
+}
+
+function utcSqlToShanghai(value: string): string {
+  return sqlTimestamp(parseUtcTimestamp(value) + 8 * 60 * 60 * 1000);
+}
+
+function maxString(values: string[]): string | null {
+  let current: string | null = null;
+  for (const value of values) {
+    if (!current || value > current) current = value;
+  }
+  return current;
+}
+
+function cleanLabel(value: string | null | undefined): string {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\u001f/g, "").slice(0, 128);
+}
+
+function parsePropertiesJson(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isPlainObject(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function stringProperty(properties: Record<string, unknown>, key: string): string {
+  const value = properties[key];
+  return typeof value === "string" ? cleanLabel(value) : "";
+}
+
+function isAuthEvent(eventName: string): boolean {
+  return [
+    "login_success",
+    "login_failed",
+    "session_expired",
+    "session_reconnect_success",
+    "session_reconnect_failed",
+  ].includes(eventName);
+}
+
+function isOtaEvent(eventName: string): boolean {
+  return eventName === "ota_check" || eventName === "ota_update_click";
+}
+
+function normalizedUsageLabel(eventName: string, screen: string, feature: string, action: string): string {
+  if (eventName === "screen_view") {
+    if (!screen) return "";
+    const screenLabels: Record<string, string> = {
+      HomeRoute: "查看首页",
+      首页: "查看首页",
+      AACRoute: "查看爱安财",
+      爱安财: "查看爱安财",
+      MoreRoute: "查看更多",
+      更多: "查看更多",
+      SettingsRoute: "查看我的",
+      我的: "查看我的",
+      设置: "查看我的",
+      成绩查询: "查看成绩查询",
+      学期成绩: "查看成绩查询",
+      考试安排: "查看考试安排",
+      课表查询: "查看课表查询",
+      课程表: "查看课表查询",
+      学期课表: "查看课表查询",
+      培养方案: "查看培养方案",
+      自动教师评价: "查看教师评价",
+      教师评价: "查看教师评价",
+      自动评教: "查看教师评价",
+      一卡通: "查看一卡通",
+      电费查询: "查看电费查询",
+      宿舍电费: "查看电费查询",
+      零星维修: "查看零星维修",
+      报修: "查看零星维修",
+      宿舍门卡: "查看宿舍门卡",
+      门卡: "查看宿舍门卡",
+      竞赛信息: "查看竞赛信息",
+      竞赛获奖: "查看竞赛信息",
+      劳动俱乐部: "查看劳动俱乐部",
+    };
+    return screenLabels[screen] ?? `查看${screen}`;
+  }
+
+  if (eventName === "feature_action") {
+    if (feature === "auth" && action === "logout") return "退出登录";
+    if (!feature) return "";
+    const featureLabels: Record<string, string> = {
+      成绩查询: "成绩查询",
+      学期成绩: "成绩查询",
+      考试安排: "考试安排",
+      课表查询: "课表查询",
+      课程表: "课表查询",
+      学期课表: "课表查询",
+      培养方案: "培养方案",
+      自动教师评价: "教师评价",
+      教师评价: "教师评价",
+      自动评教: "教师评价",
+      一卡通: "一卡通",
+      电费查询: "电费查询",
+      宿舍电费: "电费查询",
+      零星维修: "零星维修",
+      报修: "零星维修",
+      宿舍门卡: "宿舍门卡",
+      门卡: "宿舍门卡",
+      竞赛信息: "竞赛信息",
+      竞赛获奖: "竞赛信息",
+      劳动俱乐部: "劳动俱乐部",
+      学业分析: "学业分析",
+    };
+    return featureLabels[feature] ?? feature;
+  }
+
+  return "";
 }
 
 function isString(value: unknown, min: number, max: number): value is string {
