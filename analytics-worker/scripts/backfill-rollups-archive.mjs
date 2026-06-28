@@ -316,6 +316,7 @@ async function uploadR2Object(key, file) {
     "object",
     "put",
     `${bucket}/${key}`,
+    "--remote",
     "--file",
     file,
     "--content-type",
