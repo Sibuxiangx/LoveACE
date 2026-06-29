@@ -266,6 +266,18 @@ class _WinUISmartCourseSelectionPageState
     await provider.refreshCourseData(userId);
   }
 
+  Future<void> _switchToPersonalSchedule() async {
+    final provider = Provider.of<SmartCourseSelectionProvider?>(
+      context,
+      listen: false,
+    );
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (provider == null) return;
+
+    final userId = authProvider.credentials?.userId ?? '';
+    await provider.switchToPersonalSchedule(userId);
+  }
+
   String _formatRefreshTime(DateTime? time) {
     if (time == null) return '从未刷新';
     return DateFormat('MM-dd HH:mm').format(time);
@@ -347,7 +359,7 @@ class _WinUISmartCourseSelectionPageState
             ? null
             : () async {
                 if (provider.usingClassCurriculum) {
-                  await _refreshCourseData();
+                  await _switchToPersonalSchedule();
                 } else {
                   await _showClassCurriculumDialog(context, provider);
                 }

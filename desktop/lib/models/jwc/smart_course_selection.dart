@@ -78,7 +78,7 @@ class CourseSelectionPreset {
 }
 
 /// 智能排课数据（持久化存储）
-@JsonSerializable()
+@JsonSerializable(explicitToJson: true)
 class SmartCourseSelectionData {
   /// 用户ID
   @JsonKey(name: 'user_id')
