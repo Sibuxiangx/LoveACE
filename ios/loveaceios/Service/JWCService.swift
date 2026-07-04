@@ -189,9 +189,8 @@ actor JWCService {
             var otherExams: [UnifiedExamInfo] = []
             if let otherBody = String(data: otherData, encoding: .utf8),
                let jsonData = otherBody.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-               let list = json["list"] as? [String: Any],
-               let records = list["records"] as? [[Any]] {
+               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                let records = otherExamRecords(from: json)
                 otherExams = records.compactMap { parseOtherExam($0) }
             }
 
@@ -215,12 +214,42 @@ actor JWCService {
         )
     }
 
-    private func parseOtherExam(_ arr: [Any]) -> UnifiedExamInfo? {
+    private func otherExamRecords(from json: [String: Any]) -> [Any] {
+        if let records = json["records"] as? [Any] { return records }
+        if let list = json["list"] as? [String: Any],
+           let records = list["records"] as? [Any] {
+            return records
+        }
+        return []
+    }
+
+    private func parseOtherExam(_ record: Any) -> UnifiedExamInfo? {
+        if let arr = record as? [Any] { return parseOtherExamArray(arr) }
+        if let obj = record as? [String: Any] { return parseOtherExamObject(obj) }
+        return nil
+    }
+
+    private func parseOtherExamArray(_ arr: [Any]) -> UnifiedExamInfo? {
         guard arr.count >= 8 else { return nil }
         func str(_ i: Int) -> String { "\(arr[i])" == "<null>" ? "" : "\(arr[i])" }
         return UnifiedExamInfo(
             courseName: str(2), examDate: str(4), examTime: str(5),
             examLocation: str(6), examType: "其他考试", note: str(7)
+        )
+    }
+
+    private func parseOtherExamObject(_ obj: [String: Any]) -> UnifiedExamInfo? {
+        let courseName = stringValue(obj["KCM"])
+        let examDate = stringValue(obj["KSRQ"])
+        let examTime = stringValue(obj["KSSJ"])
+        guard !courseName.isEmpty || !examDate.isEmpty || !examTime.isEmpty else { return nil }
+        return UnifiedExamInfo(
+            courseName: courseName,
+            examDate: examDate,
+            examTime: examTime,
+            examLocation: stringValue(obj["KSDD"]),
+            examType: "其他考试",
+            note: stringValue(obj["BZ"])
         )
     }
 

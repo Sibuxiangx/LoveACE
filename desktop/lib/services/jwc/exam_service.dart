@@ -7,7 +7,6 @@ import '../../models/jwc/exam_info.dart';
 import '../../models/jwc/exam_info_response.dart';
 import '../../models/jwc/exam_schedule_item.dart';
 import '../../models/jwc/other_exam_record.dart';
-import '../../models/jwc/other_exam_response.dart';
 import '../../models/jwc/seat_info.dart';
 import '../../utils/error_handler.dart';
 import '../../utils/retry_handler.dart';
@@ -254,11 +253,7 @@ class ExamService {
         throw Exception('响应数据格式错误：期望对象格式，实际类型: ${data.runtimeType}');
       }
 
-      // 解析为 OtherExamResponse
-      final examResponse = OtherExamResponse.fromJson(data);
-
-      // 提取 records 字段
-      final records = examResponse.records ?? [];
+      final records = _parseOtherExamRecords(data);
 
       LoggerService.info('✅ 获取其他考试信息成功，共 ${records.length} 条记录');
       return records;
@@ -266,6 +261,92 @@ class ExamService {
       LoggerService.error('❌ 获取其他考试信息失败（网络错误）', error: e);
       rethrow;
     }
+  }
+
+  List<OtherExamRecord> _parseOtherExamRecords(Map<String, dynamic> data) {
+    final rawRecords = _extractOtherExamRecords(data);
+    return rawRecords
+        .map(_parseOtherExamRecord)
+        .whereType<OtherExamRecord>()
+        .toList();
+  }
+
+  List<dynamic> _extractOtherExamRecords(Map<String, dynamic> data) {
+    final records = data['records'];
+    if (records is List) return records;
+
+    final list = data['list'];
+    if (list is Map) {
+      final nestedRecords = list['records'];
+      if (nestedRecords is List) return nestedRecords;
+    }
+
+    return [];
+  }
+
+  OtherExamRecord? _parseOtherExamRecord(dynamic record) {
+    if (record is Map<String, dynamic>) {
+      return _parseOtherExamObject(record);
+    }
+    if (record is Map) {
+      return _parseOtherExamObject(Map<String, dynamic>.from(record));
+    }
+    if (record is List) {
+      return _parseOtherExamArray(record);
+    }
+    return null;
+  }
+
+  OtherExamRecord? _parseOtherExamObject(Map<String, dynamic> record) {
+    final courseName = _recordString(record, 'KCM');
+    final examDate = _recordString(record, 'KSRQ');
+    final examTime = _recordString(record, 'KSSJ');
+    if (courseName.isEmpty && examDate.isEmpty && examTime.isEmpty) return null;
+
+    return OtherExamRecord(
+      termCode: _recordString(record, 'ZXJXJHH'),
+      termName: _recordString(record, 'ZXJXJHM'),
+      examName: _recordString(record, 'KSMC'),
+      courseCode: _recordString(record, 'KCH'),
+      courseName: courseName,
+      classNumber: _recordString(record, 'KXH'),
+      studentId: _recordString(record, 'XH'),
+      studentName: _recordString(record, 'XM'),
+      examLocation: _recordString(record, 'KSDD'),
+      examDate: examDate,
+      examTime: examTime,
+      note: _recordString(record, 'BZ'),
+      rowNumber: _recordString(record, 'RN'),
+    );
+  }
+
+  OtherExamRecord? _parseOtherExamArray(List<dynamic> record) {
+    if (record.length < 8) return null;
+    return OtherExamRecord(
+      termCode: '',
+      termName: '',
+      examName: '',
+      courseCode: '',
+      courseName: _recordAt(record, 2),
+      classNumber: '',
+      studentId: '',
+      studentName: '',
+      examLocation: _recordAt(record, 6),
+      examDate: _recordAt(record, 4),
+      examTime: _recordAt(record, 5),
+      note: _recordAt(record, 7),
+      rowNumber: _recordAt(record, 0),
+    );
+  }
+
+  String _recordString(Map<String, dynamic> record, String key) {
+    final value = record[key];
+    return value == null ? '' : value.toString();
+  }
+
+  String _recordAt(List<dynamic> record, int index) {
+    final value = index < record.length ? record[index] : null;
+    return value == null ? '' : value.toString();
   }
 
   /// 将校统考数据转换为统一格式

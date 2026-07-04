@@ -189,8 +189,10 @@ class JWCService(private val connection: AUFEConnection) {
             val otherBody = otherResp.body?.string() ?: "{}"
             val otherExams = try {
                 val json = Json.parseToJsonElement(otherBody).jsonObject
-                val records = json["list"]?.jsonObject?.get("records")?.jsonArray ?: JsonArray(emptyList())
-                records.mapNotNull { parseOtherExam(it.jsonArray) }
+                val records = json["records"]?.jsonArray
+                    ?: json["list"]?.jsonObject?.get("records")?.jsonArray
+                    ?: JsonArray(emptyList())
+                records.mapNotNull { parseOtherExam(it) }
             } catch (_: Exception) { emptyList() }
 
             val all = (schoolExams + otherExams).sortedWith(compareBy({ it.examDate }, { it.examTime }))
@@ -213,7 +215,13 @@ class JWCService(private val connection: AUFEConnection) {
         )
     }
 
-    private fun parseOtherExam(arr: JsonArray): UnifiedExamInfo? {
+    private fun parseOtherExam(element: JsonElement): UnifiedExamInfo? = when (element) {
+        is JsonArray -> parseOtherExamArray(element)
+        is JsonObject -> parseOtherExamObject(element)
+        else -> null
+    }
+
+    private fun parseOtherExamArray(arr: JsonArray): UnifiedExamInfo? {
         if (arr.size < 8) return null
         return UnifiedExamInfo(
             courseName = arr[2].jsonPrimitive.contentOrNull ?: "",
@@ -222,6 +230,21 @@ class JWCService(private val connection: AUFEConnection) {
             examLocation = arr[6].jsonPrimitive.contentOrNull ?: "",
             examType = "其他考试",
             note = arr.getOrNull(7)?.jsonPrimitive?.contentOrNull ?: "",
+        )
+    }
+
+    private fun parseOtherExamObject(obj: JsonObject): UnifiedExamInfo? {
+        val courseName = obj.string("KCM")
+        val examDate = obj.string("KSRQ")
+        val examTime = obj.string("KSSJ")
+        if (courseName.isEmpty() && examDate.isEmpty() && examTime.isEmpty()) return null
+        return UnifiedExamInfo(
+            courseName = courseName,
+            examDate = examDate,
+            examTime = examTime,
+            examLocation = obj.string("KSDD"),
+            examType = "其他考试",
+            note = obj.string("BZ"),
         )
     }
 
@@ -252,3 +275,5 @@ class JWCService(private val connection: AUFEConnection) {
         const val BASE_URL = "http://jwcxk2-aufe-edu-cn.vpn2.aufe.edu.cn:8118"
     }
 }
+
+private fun JsonObject.string(key: String): String = this[key]?.jsonPrimitive?.contentOrNull ?: ""
