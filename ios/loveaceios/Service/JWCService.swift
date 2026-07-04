@@ -165,7 +165,9 @@ actor JWCService {
 
             let client = await connection.client!
             let preUrl = "\(Self.baseURL)/student/examinationManagement/examPlan/index"
-            _ = try await client.get(preUrl)
+            let (preData, _) = try await client.get(preUrl)
+            let preHtml = String(data: preData, encoding: .utf8) ?? ""
+            let seatInfos = parseExamSeatInfo(preHtml)
 
             let ts = Int(Date().timeIntervalSince1970 * 1000)
             let examUrl = "\(Self.baseURL)/student/examinationManagement/examPlan/detail?start=\(startDate)&end=\(endDate)&_=\(ts)"
@@ -179,7 +181,7 @@ actor JWCService {
                examBody.trimmingCharacters(in: .whitespaces) != "]",
                let jsonData = examBody.data(using: .utf8),
                let arr = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]] {
-                schoolExams = arr.compactMap { parseSchoolExam($0) }
+                schoolExams = arr.compactMap { parseSchoolExam($0, seatInfos: seatInfos) }
             }
 
             let otherUrl = "\(Self.baseURL)/student/examinationManagement/othersExamPlan/queryScores?sf_request_type=ajax"
@@ -202,15 +204,63 @@ actor JWCService {
         }
     }
 
-    private func parseSchoolExam(_ obj: [String: Any]) -> UnifiedExamInfo? {
+    private struct ExamSeatInfo {
+        let courseName: String
+        let seatNumber: String
+    }
+
+    private func parseExamSeatInfo(_ html: String) -> [ExamSeatInfo] {
+        guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+
+        do {
+            let document = try SwiftSoup.parse(html)
+            let boxes = try document.select("div.widget-box")
+            var seatInfos: [ExamSeatInfo] = []
+
+            for box in boxes.array() {
+                guard let titleElement = try box.select("h5.widget-title").first(),
+                      let mainElement = try box.select("div.widget-main").first() else { continue }
+                let courseTitle = try titleElement.text().trimmingCharacters(in: .whitespacesAndNewlines)
+                let courseName = seatCourseName(from: courseTitle)
+                let mainText = try mainElement.text().trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let seatNumber = seatNumberValue(from: mainText), !seatNumber.isEmpty else { continue }
+                seatInfos.append(ExamSeatInfo(courseName: courseName, seatNumber: seatNumber))
+            }
+
+            return seatInfos
+        } catch {
+            return []
+        }
+    }
+
+    private func seatCourseName(from title: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: "[）)](.+)$"),
+              let match = regex.firstMatch(in: title, range: NSRange(title.startIndex..., in: title)),
+              match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: title) else { return title }
+        return String(title[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func seatNumberValue(from text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: "座位号[：:](.+?)(?:准考证号|$)"),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func parseSchoolExam(_ obj: [String: Any], seatInfos: [ExamSeatInfo]) -> UnifiedExamInfo? {
         guard let title = obj["title"] as? String else { return nil }
         let lines = title.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let courseName = lines.first ?? ""
+        let seatNumber = seatInfos.first { $0.courseName == courseName }?.seatNumber ?? ""
         return UnifiedExamInfo(
-            courseName: lines.first ?? "",
+            courseName: courseName,
             examDate: obj["start"] as? String ?? "",
             examTime: lines.count > 1 ? lines[1] : "",
             examLocation: lines.count > 2 ? lines.dropFirst(2).joined(separator: " ") : "",
-            examType: "校统考"
+            examType: "校统考",
+            note: seatNumber.isEmpty ? "" : "座位号: \(seatNumber)"
         )
     }
 

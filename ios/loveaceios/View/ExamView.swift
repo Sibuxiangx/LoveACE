@@ -94,6 +94,12 @@ struct ExamTimelineRow: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if !exam.note.isEmpty {
+                    Label(exam.note, systemImage: "number.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 GlassBadge(text: exam.examType, tint: .accentColor)
             }
             .padding(14)

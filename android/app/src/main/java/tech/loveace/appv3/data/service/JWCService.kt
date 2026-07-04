@@ -168,7 +168,9 @@ class JWCService(private val connection: AUFEConnection) {
 
             // Fetch school exams
             val preUrl = "$BASE_URL/student/examinationManagement/examPlan/index"
-            connection.client.get(preUrl)
+            val preResp = connection.client.get(preUrl)
+            val preHtml = preResp.body?.string() ?: ""
+            val seatInfos = parseExamSeatInfo(preHtml)
             val ts = System.currentTimeMillis()
             val examUrl = "$BASE_URL/student/examinationManagement/examPlan/detail?start=$startDate&end=$endDate&_=$ts"
             val examResp = connection.client.get(examUrl, headers = mapOf(
@@ -178,7 +180,7 @@ class JWCService(private val connection: AUFEConnection) {
             val examBody = examResp.body?.string() ?: "[]"
             val schoolExams = if (examBody.trim() == "]" || examBody.isBlank()) emptyList()
             else try {
-                Json.parseToJsonElement(examBody).jsonArray.mapNotNull { parseSchoolExam(it.jsonObject) }
+                Json.parseToJsonElement(examBody).jsonArray.mapNotNull { parseSchoolExam(it.jsonObject, seatInfos) }
             } catch (_: Exception) { emptyList() }
 
             // Fetch other exams
@@ -203,15 +205,39 @@ class JWCService(private val connection: AUFEConnection) {
         }
     }
 
-    private fun parseSchoolExam(obj: JsonObject): UnifiedExamInfo? {
+    private data class ExamSeatInfo(val courseName: String, val seatNumber: String)
+
+    private fun parseExamSeatInfo(html: String): List<ExamSeatInfo> {
+        if (html.isBlank()) return emptyList()
+        val doc = Jsoup.parse(html)
+        return doc.select("div.widget-box").mapNotNull { box ->
+            val titleElement = box.selectFirst("h5.widget-title") ?: return@mapNotNull null
+            val mainElement = box.selectFirst("div.widget-main") ?: return@mapNotNull null
+            val courseTitle = titleElement.text().trim()
+            val courseName = Regex("[）)](.+)$").find(courseTitle)?.groupValues?.get(1)?.trim() ?: courseTitle
+            val seatNumber = Regex("座位号[：:](.+?)(?:准考证号|$)")
+                .find(mainElement.text().trim())
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+                ?: return@mapNotNull null
+
+            if (seatNumber.isEmpty()) null else ExamSeatInfo(courseName, seatNumber)
+        }
+    }
+
+    private fun parseSchoolExam(obj: JsonObject, seatInfos: List<ExamSeatInfo>): UnifiedExamInfo? {
         val title = obj["title"]?.jsonPrimitive?.contentOrNull ?: return null
         val lines = title.split("\n").map { it.trim() }
+        val courseName = lines.getOrElse(0) { "" }
+        val seatNumber = seatInfos.firstOrNull { it.courseName == courseName }?.seatNumber.orEmpty()
         return UnifiedExamInfo(
-            courseName = lines.getOrElse(0) { "" },
+            courseName = courseName,
             examDate = obj["start"]?.jsonPrimitive?.contentOrNull ?: "",
             examTime = lines.getOrElse(1) { "" },
             examLocation = lines.drop(2).joinToString(" "),
             examType = "校统考",
+            note = if (seatNumber.isEmpty()) "" else "座位号: $seatNumber",
         )
     }
 
