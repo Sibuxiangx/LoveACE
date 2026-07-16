@@ -1,11 +1,13 @@
 package tech.loveace.appv3.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.ScoreRecord
+import tech.loveace.appv3.data.model.ScoreDetail
+import tech.loveace.appv3.data.model.hasPublishedScore
 import tech.loveace.appv3.ui.components.*
 import tech.loveace.appv3.ui.viewmodel.AcademicViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
@@ -33,6 +37,17 @@ fun ScoresScreen(authViewModel: AuthViewModel, onBack: (() -> Unit)? = null, vm:
 
     val context = LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
+
+    if (state.selectedScore != null) {
+        ModalBottomSheet(onDismissRequest = vm::dismissScoreDetail) {
+            ScoreDetailSheet(
+                record = state.selectedScore!!,
+                detail = state.scoreDetail,
+                isLoading = state.scoreDetailLoading,
+                error = state.scoreDetailError,
+            )
+        }
+    }
 
     if (showExportDialog && state.scores != null && state.selectedTerm != null) {
         val records = state.scores!!.records
@@ -89,7 +104,13 @@ fun ScoresScreen(authViewModel: AuthViewModel, onBack: (() -> Unit)? = null, vm:
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(state.scores!!.records, key = { "${it.termId}_${it.courseCode}_${it.courseClass}_${it.sequence}" }) { record -> ScoreCard(record) }
+                    items(state.scores!!.records, key = { "${it.termId}_${it.courseCode}_${it.courseClass}_${it.sequence}" }) { record ->
+                        ScoreCard(record, onClick = if (state.selectedTerm?.isCurrent == true && record.hasPublishedScore) {
+                            { vm.loadScoreDetail(record) }
+                        } else {
+                            null
+                        })
+                    }
                 }
             }
         }
@@ -97,10 +118,12 @@ fun ScoresScreen(authViewModel: AuthViewModel, onBack: (() -> Unit)? = null, vm:
 }
 
 @Composable
-fun ScoreCard(record: ScoreRecord) {
+fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
     val scoreNum = record.score.toDoubleOrNull()
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
@@ -108,17 +131,80 @@ fun ScoreCard(record: ScoreRecord) {
             Column(Modifier.weight(1f)) {
                 Text(record.courseNameCn, style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(4.dp))
-                Text("${record.credits}学分 · ${record.courseType ?: ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "${record.credits} 学分",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    record.courseType?.takeIf { it.isNotBlank() }?.let { type ->
+                        AssistChip(onClick = {}, enabled = false, label = { Text(type) })
+                    }
+                    record.examType?.takeIf { it.isNotBlank() }?.let { type ->
+                        AssistChip(onClick = {}, enabled = false, label = { Text(type) })
+                    }
+                }
+                if (record.courseNameEn.isNotBlank()) {
+                    Text(
+                        record.courseNameEn,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
             }
-            Text(
-                record.score,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = scoreGradientColor(scoreNum),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        record.score.ifBlank { "暂无成绩" },
+                        style = if (record.hasPublishedScore) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (record.hasPublishedScore) scoreGradientColor(scoreNum) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (record.hasPublishedScore) {
+                        Text("分", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (onClick != null) {
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "查看成绩明细")
+                }
+            }
         }
+    }
+}
+
+@Composable
+fun ScoreDetailSheet(record: ScoreRecord, detail: ScoreDetail?, isLoading: Boolean, error: String?) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(record.courseNameCn, style = MaterialTheme.typography.titleLarge)
+        Text("成绩明细", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when {
+            isLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+            error != null -> Text(error, color = MaterialTheme.colorScheme.error)
+            detail == null || detail.items.isEmpty -> Text("暂无成绩明细", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else -> detail.items.forEach { item ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(item.scoreType, style = MaterialTheme.typography.titleSmall)
+                    DetailScoreRow("平时", item.usualScore)
+                    DetailScoreRow("期中", item.midtermScore)
+                    DetailScoreRow("期末", item.finalScore)
+                    DetailScoreRow("分类总成绩", item.categoryScore)
+                    if (item.remark.isNotBlank()) DetailScoreRow("备注", item.remark)
+                }
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailScoreRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value.ifBlank { "-" }, fontWeight = FontWeight.Medium)
     }
 }
 

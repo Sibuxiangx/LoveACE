@@ -148,6 +148,108 @@ actor JWCService {
         )
     }
 
+    func getThisTermScores() async -> UniResponse<TermScoreResponse> {
+        do {
+            let client = await connection.client!
+            let preUrl = "\(Self.baseURL)/student/integratedQuery/scoreQuery/thisTermScores/index"
+            let (preData, _) = try await client.get(preUrl)
+            let preHtml = String(data: preData, encoding: .utf8) ?? ""
+            guard let dynamicPath = scorePath(in: preHtml, pattern: "/([A-Za-z0-9]+)/thisTermScores/data") else {
+                throw ServiceError.parseError("未能提取本学期成绩路径")
+            }
+            let scoreUrl = "\(Self.baseURL)/student/integratedQuery/scoreQuery/\(dynamicPath)/thisTermScores/data?sf_request_type=ajax"
+            let (scoreData, _) = try await client.get(scoreUrl, headers: [
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Referer": preUrl,
+                "X-Requested-With": "XMLHttpRequest"
+            ])
+            guard let payload = try JSONSerialization.jsonObject(with: scoreData) as? [[String: Any]],
+                  let records = payload.first?["list"] as? [[String: Any]] else {
+                return .success(TermScoreResponse())
+            }
+            let scores = records.map(parseThisTermScoreRecord)
+            return .success(TermScoreResponse(totalCount: scores.count, records: scores))
+        } catch {
+            logger.error("getThisTermScores failed: \(error.localizedDescription)")
+            return .failure(error.localizedDescription, retryable: true)
+        }
+    }
+
+    func getScoreDetail(record: ScoreRecord) async -> UniResponse<ScoreDetail> {
+        do {
+            let client = await connection.client!
+            let preUrl = "\(Self.baseURL)/student/integratedQuery/scoreQuery/thisTermScores/index"
+            let (preData, _) = try await client.get(preUrl)
+            let preHtml = String(data: preData, encoding: .utf8) ?? ""
+            guard let dynamicPath = scorePath(in: preHtml, pattern: "/([A-Za-z0-9]+)/thisterm/coursePropertyScores/serchScoreDetail") else {
+                throw ServiceError.parseError("未能提取成绩明细路径")
+            }
+            let detailUrl = "\(Self.baseURL)/student/integratedQuery/scoreQuery/\(dynamicPath)/thisterm/coursePropertyScores/serchScoreDetail?sf_request_type=ajax"
+            let (detailData, _) = try await client.post(detailUrl, formData: [
+                "zxjxjhh": record.termId,
+                "kch": record.courseCode,
+                "kssj": record.examTime,
+                "kxh": record.courseClass
+            ], headers: [
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Referer": preUrl,
+                "X-Requested-With": "XMLHttpRequest"
+            ])
+            guard let payload = try JSONSerialization.jsonObject(with: detailData) as? [String: Any],
+                  let records = payload["mx"] as? [[String: Any]] else {
+                return .success(ScoreDetail())
+            }
+            let items = records.map { item in
+                let scoreTypeCode = stringValue((item["id"] as? [String: Any])?["scoreTypeCode"])
+                return ScoreDetailItem(
+                    scoreType: scoreTypeName(scoreTypeCode),
+                    usualScore: stringValue(item["pscj"]),
+                    midtermScore: stringValue(item["qzcj"]),
+                    finalScore: stringValue(item["qmcj"]),
+                    categoryScore: stringValue(item["zcj"]),
+                    remark: stringValue(item["remark"])
+                )
+            }
+            return .success(ScoreDetail(items: items))
+        } catch {
+            logger.error("getScoreDetail failed: \(error.localizedDescription)")
+            return .failure(error.localizedDescription, retryable: true)
+        }
+    }
+
+    private func scorePath(in html: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+              let range = Range(match.range(at: 1), in: html) else { return nil }
+        return String(html[range])
+    }
+
+    private func parseThisTermScoreRecord(_ item: [String: Any]) -> ScoreRecord {
+        let id = item["id"] as? [String: Any] ?? [:]
+        return ScoreRecord(
+            termId: stringValue(id["executiveEducationPlanNumber"]),
+            courseCode: stringValue(id["courseNumber"]),
+            courseClass: stringValue(item["coureSequenceNumber"]),
+            courseNameCn: stringValue(item["courseName"]),
+            courseNameEn: stringValue(item["englishCourseName"]),
+            credits: stringValue(item["credit"]),
+            hours: intValue(item["studyHour"]) ?? 0,
+            courseType: optionalString(item["coursePropertyName"]),
+            examType: optionalString(item["examTypeName"]),
+            score: stringValue(item["courseScore"]).trimmingCharacters(in: .whitespacesAndNewlines),
+            examTime: stringValue(id["examtime"])
+        )
+    }
+
+    private func scoreTypeName(_ code: String) -> String {
+        switch code {
+        case "001": return "课堂成绩"
+        case "002": return "实验成绩"
+        case "003": return "实践成绩"
+        default: return "成绩分类"
+        }
+    }
+
     // MARK: - Exams
 
     func getExamInfo() async -> UniResponse<[UnifiedExamInfo]> {
@@ -343,6 +445,11 @@ actor JWCService {
 private func stringValue(_ value: Any?, fallback: String = "") -> String {
     guard let value, !(value is NSNull) else { return fallback }
     return String(describing: value)
+}
+
+private func optionalString(_ value: Any?) -> String? {
+    let string = stringValue(value).trimmingCharacters(in: .whitespacesAndNewlines)
+    return string.isEmpty ? nil : string
 }
 
 private func intValue(_ value: Any?) -> Int? {

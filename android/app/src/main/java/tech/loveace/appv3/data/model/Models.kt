@@ -59,6 +59,25 @@ data class ScoreRecord(
     val score: String = "",
     val retakeScore: String? = null,
     val makeupScore: String? = null,
+    val examTime: String = "",
+)
+
+val ScoreRecord.hasPublishedScore: Boolean
+    get() = score.isNotBlank()
+
+@Serializable
+data class ScoreDetailItem(
+    val scoreType: String = "",
+    val usualScore: String = "",
+    val midtermScore: String = "",
+    val finalScore: String = "",
+    val categoryScore: String = "",
+    val remark: String = "",
+)
+
+@Serializable
+data class ScoreDetail(
+    val items: List<ScoreDetailItem> = emptyList(),
 )
 
 @Serializable

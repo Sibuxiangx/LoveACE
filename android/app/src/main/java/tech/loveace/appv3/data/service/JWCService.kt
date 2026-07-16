@@ -156,6 +156,107 @@ class JWCService(private val connection: AUFEConnection) {
         )
     }
 
+    suspend fun getThisTermScores(): UniResponse<TermScoreResponse> = withContext(Dispatchers.IO) {
+        try {
+            val client = connection.client
+            val preUrl = "$BASE_URL/student/integratedQuery/scoreQuery/thisTermScores/index"
+            val preHtml = client.get(preUrl).body?.string() ?: throw Exception("页面为空")
+            val dynamicPath = Regex("/([A-Za-z0-9]+)/thisTermScores/data").find(preHtml)
+                ?.groupValues
+                ?.get(1)
+                ?: throw Exception("未能提取本学期成绩路径")
+            val scoreUrl = "$BASE_URL/student/integratedQuery/scoreQuery/$dynamicPath/thisTermScores/data?sf_request_type=ajax"
+            val body = client.get(scoreUrl, headers = mapOf(
+                "Accept" to "application/json, text/javascript, */*; q=0.01",
+                "Referer" to preUrl,
+                "X-Requested-With" to "XMLHttpRequest",
+            )).body?.string() ?: throw Exception("成绩数据为空")
+            val list = Json.parseToJsonElement(body).jsonArray
+                .firstOrNull()
+                ?.jsonObject
+                ?.get("list")
+                ?.jsonArray
+                ?: JsonArray(emptyList())
+            val records = list.mapNotNull { element ->
+                val item = element as? JsonObject ?: return@mapNotNull null
+                parseThisTermScoreRecord(item)
+            }
+            UniResponse.success(TermScoreResponse(records.size, records))
+        } catch (e: Exception) {
+            Log.e(TAG, "getThisTermScores failed", e)
+            UniResponse.failure(e.message ?: "获取本学期成绩失败", retryable = true)
+        }
+    }
+
+    suspend fun getScoreDetail(record: ScoreRecord): UniResponse<ScoreDetail> = withContext(Dispatchers.IO) {
+        try {
+            val client = connection.client
+            val preUrl = "$BASE_URL/student/integratedQuery/scoreQuery/thisTermScores/index"
+            val preHtml = client.get(preUrl).body?.string() ?: throw Exception("页面为空")
+            val dynamicPath = Regex("/([A-Za-z0-9]+)/thisterm/coursePropertyScores/serchScoreDetail")
+                .find(preHtml)
+                ?.groupValues
+                ?.get(1)
+                ?: throw Exception("未能提取成绩明细路径")
+            val detailUrl = "$BASE_URL/student/integratedQuery/scoreQuery/$dynamicPath/thisterm/coursePropertyScores/serchScoreDetail?sf_request_type=ajax"
+            val body = client.post(
+                detailUrl,
+                formData = mapOf(
+                    "zxjxjhh" to record.termId,
+                    "kch" to record.courseCode,
+                    "kssj" to record.examTime,
+                    "kxh" to record.courseClass,
+                ),
+                headers = mapOf(
+                    "Accept" to "application/json, text/javascript, */*; q=0.01",
+                    "Referer" to preUrl,
+                    "X-Requested-With" to "XMLHttpRequest",
+                ),
+            ).body?.string() ?: throw Exception("成绩明细为空")
+            val details = Json.parseToJsonElement(body).jsonObject["mx"]?.jsonArray.orEmpty()
+                .mapNotNull { element ->
+                    val item = element as? JsonObject ?: return@mapNotNull null
+                    val scoreType = item["id"]?.jsonObject?.string("scoreTypeCode").orEmpty()
+                    ScoreDetailItem(
+                        scoreType = scoreTypeName(scoreType),
+                        usualScore = item.string("pscj"),
+                        midtermScore = item.string("qzcj"),
+                        finalScore = item.string("qmcj"),
+                        categoryScore = item.string("zcj"),
+                        remark = item.string("remark"),
+                    )
+                }
+            UniResponse.success(ScoreDetail(details))
+        } catch (e: Exception) {
+            Log.e(TAG, "getScoreDetail failed", e)
+            UniResponse.failure(e.message ?: "获取成绩明细失败", retryable = true)
+        }
+    }
+
+    private fun parseThisTermScoreRecord(item: JsonObject): ScoreRecord {
+        val id = item["id"]?.jsonObject
+        return ScoreRecord(
+            termId = id?.string("executiveEducationPlanNumber").orEmpty(),
+            courseCode = id?.string("courseNumber").orEmpty(),
+            courseClass = item.string("coureSequenceNumber"),
+            courseNameCn = item.string("courseName"),
+            courseNameEn = item.string("englishCourseName"),
+            credits = item.string("credit"),
+            hours = item["studyHour"]?.jsonPrimitive?.intOrNull ?: 0,
+            courseType = item.string("coursePropertyName").ifEmpty { null },
+            examType = item.string("examTypeName").ifEmpty { null },
+            score = item.string("courseScore").trim(),
+            examTime = id?.string("examtime").orEmpty(),
+        )
+    }
+
+    private fun scoreTypeName(code: String): String = when (code) {
+        "001" -> "课堂成绩"
+        "002" -> "实验成绩"
+        "003" -> "实践成绩"
+        else -> "成绩分类"
+    }
+
     // ==================== Exams ====================
     suspend fun getExamInfo(): UniResponse<List<UnifiedExamInfo>> = withContext(Dispatchers.IO) {
         try {

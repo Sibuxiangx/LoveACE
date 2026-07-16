@@ -84,12 +84,15 @@ struct ScoreRecord: Codable, Identifiable {
     let score: String
     let retakeScore: String?
     let makeupScore: String?
+    let examTime: String
+
+    var hasPublishedScore: Bool { !score.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     init(sequence: Int = 0, termId: String = "", courseCode: String = "",
          courseClass: String = "", courseNameCn: String = "", courseNameEn: String = "",
-         credits: String = "0", hours: Int = 0, courseType: String? = nil,
-         examType: String? = nil, score: String = "", retakeScore: String? = nil,
-         makeupScore: String? = nil) {
+          credits: String = "0", hours: Int = 0, courseType: String? = nil,
+          examType: String? = nil, score: String = "", retakeScore: String? = nil,
+          makeupScore: String? = nil, examTime: String = "") {
         self.sequence = sequence
         self.termId = termId
         self.courseCode = courseCode
@@ -103,6 +106,25 @@ struct ScoreRecord: Codable, Identifiable {
         self.score = score
         self.retakeScore = retakeScore
         self.makeupScore = makeupScore
+        self.examTime = examTime
+    }
+}
+
+struct ScoreDetailItem: Identifiable {
+    var id: String { "\(scoreType)_\(remark)" }
+    let scoreType: String
+    let usualScore: String
+    let midtermScore: String
+    let finalScore: String
+    let categoryScore: String
+    let remark: String
+}
+
+struct ScoreDetail {
+    let items: [ScoreDetailItem]
+
+    init(items: [ScoreDetailItem] = []) {
+        self.items = items
     }
 }
 

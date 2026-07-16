@@ -13,9 +13,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.ui.components.*
 import tech.loveace.appv3.ui.screen.ScoreCard
+import tech.loveace.appv3.ui.screen.ScoreDetailSheet
 import tech.loveace.appv3.ui.viewmodel.AcademicViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.util.CsvExporter
+import tech.loveace.appv3.data.model.hasPublishedScore
 
 /**
  * 横屏成绩：左侧学期选择列表 + 右侧成绩双列网格
@@ -31,6 +33,17 @@ fun LandscapeScoresScreen(authViewModel: AuthViewModel, vm: AcademicViewModel = 
 
     val context = LocalContext.current
     var showExportDialog by remember { mutableStateOf(false) }
+
+    if (state.selectedScore != null) {
+        ModalBottomSheet(onDismissRequest = vm::dismissScoreDetail) {
+            ScoreDetailSheet(
+                record = state.selectedScore!!,
+                detail = state.scoreDetail,
+                isLoading = state.scoreDetailLoading,
+                error = state.scoreDetailError,
+            )
+        }
+    }
 
     if (showExportDialog && state.scores != null && state.selectedTerm != null) {
         val records = state.scores!!.records
@@ -85,7 +98,11 @@ fun LandscapeScoresScreen(authViewModel: AuthViewModel, vm: AcademicViewModel = 
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(state.scores!!.records, key = { "${it.termId}_${it.courseCode}_${it.courseClass}_${it.sequence}" }) { record ->
-                        ScoreCard(record)
+                        ScoreCard(record, onClick = if (state.selectedTerm?.isCurrent == true && record.hasPublishedScore) {
+                            { vm.loadScoreDetail(record) }
+                        } else {
+                            null
+                        })
                     }
                 }
             }

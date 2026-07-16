@@ -25,6 +25,10 @@ final class AcademicViewModel {
     var selectedTerm: TermItem?
     var scores: TermScoreResponse?
     var scoresLoading = false
+    var selectedScore: ScoreRecord?
+    var scoreDetail: ScoreDetail?
+    var scoreDetailLoading = false
+    var scoreDetailError: String?
     var error: String?
 
     var allTermGPA: [TermGPAPoint] = []
@@ -60,6 +64,9 @@ final class AcademicViewModel {
 
     func selectTerm(_ term: TermItem) {
         selectedTerm = term
+        selectedScore = nil
+        scoreDetail = nil
+        scoreDetailError = nil
         loadScores(termCode: term.termCode)
     }
 
@@ -67,10 +74,32 @@ final class AcademicViewModel {
         guard let svc = service else { return }
         Task {
             scoresLoading = true
-            let result = await svc.getTermScore(termCode: termCode)
+            let result = selectedTerm?.isCurrent == true
+                ? await svc.getThisTermScores()
+                : await svc.getTermScore(termCode: termCode)
             scoresLoading = false
             if result.success { scores = result.data } else { error = result.error }
         }
+    }
+
+    func loadScoreDetail(_ record: ScoreRecord) {
+        guard let svc = service else { return }
+        selectedScore = record
+        scoreDetail = nil
+        scoreDetailLoading = true
+        scoreDetailError = nil
+        Task {
+            let result = await svc.getScoreDetail(record: record)
+            scoreDetailLoading = false
+            if result.success { scoreDetail = result.data } else { scoreDetailError = result.error }
+        }
+    }
+
+    func dismissScoreDetail() {
+        selectedScore = nil
+        scoreDetail = nil
+        scoreDetailLoading = false
+        scoreDetailError = nil
     }
 
     func loadInsightsData() {

@@ -3,6 +3,7 @@ import SwiftUI
 struct ScoresView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var vm = AcademicViewModel()
+    @State private var selectedScore: ScoreRecord?
 
     var body: some View {
         NavigationStack {
@@ -39,6 +40,14 @@ struct ScoresView: View {
             }
             .navigationTitle("成绩查询")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $selectedScore, onDismiss: vm.dismissScoreDetail) { record in
+                ScoreDetailSheet(
+                    record: record,
+                    detail: vm.scoreDetail,
+                    isLoading: vm.scoreDetailLoading,
+                    error: vm.scoreDetailError
+                )
+            }
             .onAppear {
                 if let jwc = authVM.jwcService {
                     vm.initialize(service: jwc)
@@ -53,7 +62,13 @@ struct ScoresView: View {
         ScrollView(.vertical) {
             LazyVStack(spacing: 14) {
                 ForEach(records) { record in
-                    ScoreCardView(record: record)
+                    ScoreCardView(
+                        record: record,
+                        onTap: vm.selectedTerm?.isCurrent == true && record.hasPublishedScore ? {
+                            selectedScore = record
+                            vm.loadScoreDetail(record)
+                        } : nil
+                    )
                         .compatScrollTransition()
                 }
             }
@@ -67,10 +82,21 @@ struct ScoresView: View {
 
 struct ScoreCardView: View {
     let record: ScoreRecord
+    var onTap: (() -> Void)? = nil
 
     private var color: Color { scoreColor(for: record.score) }
 
     var body: some View {
+        if let onTap {
+            Button(action: onTap) { cardContent }
+                .buttonStyle(.plain)
+                .accessibilityHint("查看成绩明细")
+        } else {
+            cardContent
+        }
+    }
+
+    private var cardContent: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -85,6 +111,9 @@ struct ScoreCardView: View {
                         if let type = record.courseType {
                             GlassBadge(text: type, tint: .blue)
                         }
+                        if let type = record.examType, !type.isEmpty {
+                            GlassBadge(text: type, tint: .orange)
+                        }
                     }
 
                     if !record.courseNameEn.isEmpty {
@@ -98,10 +127,10 @@ struct ScoreCardView: View {
                 Spacer()
 
                 VStack(spacing: 4) {
-                    Text(record.score)
+                    Text(record.hasPublishedScore ? record.score : "暂无成绩")
                         .font(AppFont.heroNumber)
-                        .foregroundStyle(color.gradient)
-                    Text("分")
+                        .foregroundStyle(record.hasPublishedScore ? color.gradient : Color.secondary.gradient)
+                    Text(record.hasPublishedScore ? "分" : "成绩未发布")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -143,5 +172,52 @@ struct ScoreCardView: View {
                 .clipShape(.rect(cornerRadius: 20))
         }
         .glassCard(cornerRadius: 20)
+    }
+}
+
+private struct ScoreDetailSheet: View {
+    let record: ScoreRecord
+    let detail: ScoreDetail?
+    let isLoading: Bool
+    let error: String?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    LoadingView(message: "加载成绩明细...")
+                } else if let error {
+                    ContentUnavailableView("无法加载成绩明细", systemImage: "exclamationmark.triangle", description: Text(error))
+                } else if let detail, !detail.items.isEmpty {
+                    List {
+                        ForEach(detail.items) { item in
+                            Section(item.scoreType) {
+                                ScoreDetailRow(label: "平时", value: item.usualScore)
+                                ScoreDetailRow(label: "期中", value: item.midtermScore)
+                                ScoreDetailRow(label: "期末", value: item.finalScore)
+                                ScoreDetailRow(label: "分类总成绩", value: item.categoryScore)
+                                if !item.remark.isEmpty {
+                                    ScoreDetailRow(label: "备注", value: item.remark)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    ContentUnavailableView("暂无成绩明细", systemImage: "list.bullet.rectangle")
+                }
+            }
+            .navigationTitle(record.courseNameCn)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private struct ScoreDetailRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        LabeledContent(label, value: value.isEmpty ? "-" : value)
     }
 }
