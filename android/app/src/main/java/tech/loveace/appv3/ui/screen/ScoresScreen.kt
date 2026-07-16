@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -127,22 +128,18 @@ fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(record.courseNameCn, style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "${record.credits} 学分",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    record.courseType?.takeIf { it.isNotBlank() }?.let { type ->
-                        AssistChip(onClick = {}, enabled = false, label = { Text(type) })
-                    }
-                    record.examType?.takeIf { it.isNotBlank() }?.let { type ->
-                        AssistChip(onClick = {}, enabled = false, label = { Text(type) })
-                    }
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    record.courseNameCn,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${record.credits} 学分", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    record.courseType?.takeIf { it.isNotBlank() }?.let { type -> ScoreMetaBadge(type, MaterialTheme.colorScheme.secondaryContainer) }
+                    record.examType?.takeIf { it.isNotBlank() }?.let { type -> ScoreMetaBadge(type, MaterialTheme.colorScheme.tertiaryContainer) }
                 }
                 if (record.courseNameEn.isNotBlank()) {
                     Text(
@@ -150,6 +147,7 @@ fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -170,6 +168,17 @@ fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ScoreMetaBadge(text: String, color: Color) {
+    Surface(
+        color = color,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
     }
 }
 
