@@ -59,7 +59,7 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
-      - name: Build debug and release APKs
+      - name: Build release APK
         env:
           ANDROID_KEYSTORE_FILE: loveace-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -68,13 +68,7 @@ jobs:
           ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
           ANALYTICS_SIGNING_SECRET: ${{ secrets.ANALYTICS_SIGNING_SECRET }}
           ANALYTICS_HASH_SALT: ${{ secrets.ANALYTICS_HASH_SALT }}
-        run: ./gradlew assembleDebug assembleRelease
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v5
-        with:
-          name: loveace-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+        run: ./gradlew assembleRelease
 
       - name: Upload release APK
         uses: actions/upload-artifact@v5
