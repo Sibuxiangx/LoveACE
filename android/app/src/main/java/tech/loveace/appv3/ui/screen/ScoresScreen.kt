@@ -184,7 +184,7 @@ fun ScoreDetailSheet(record: ScoreRecord, detail: ScoreDetail?, isLoading: Boole
         when {
             isLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             error != null -> Text(error, color = MaterialTheme.colorScheme.error)
-            detail == null || detail.items.isEmpty -> Text("暂无成绩明细", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            detail == null || detail.items.isEmpty() -> Text("暂无成绩明细", color = MaterialTheme.colorScheme.onSurfaceVariant)
             else -> detail.items.forEach { item ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(item.scoreType, style = MaterialTheme.typography.titleSmall)
