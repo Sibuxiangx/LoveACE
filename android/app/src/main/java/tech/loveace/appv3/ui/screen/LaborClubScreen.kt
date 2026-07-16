@@ -40,13 +40,19 @@ fun LaborClubScreen(
     onNavigateToScan: () -> Unit,
     vm: LaborClubViewModel = viewModel(),
 ) {
+    val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDetailSheet by remember { mutableStateOf<LaborClubActivity?>(null) }
+    var showClubApplicationSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(authViewModel.laborClubService) {
-        authViewModel.laborClubService?.let { vm.init(it); vm.loadAll() }
+    LaunchedEffect(authState.userId, authState.serviceGeneration) {
+        authViewModel.laborClubService?.let {
+            vm.init(it, authState.userId)
+            vm.loadAll()
+            if (showClubApplicationSheet) vm.loadClubDirectory()
+        }
     }
     LaunchedEffect(state.signInResult) {
         state.signInResult?.let {
@@ -58,6 +64,13 @@ fun LaborClubScreen(
         state.applyResult?.let {
             snackbarHostState.showSnackbar(it)
             vm.clearApplyResult()
+        }
+    }
+    LaunchedEffect(state.clubActionResult, showClubApplicationSheet) {
+        val result = state.clubActionResult ?: return@LaunchedEffect
+        if (!showClubApplicationSheet || state.clubSubmissionSucceeded) {
+            snackbarHostState.showSnackbar(result)
+            vm.clearClubActionResult()
         }
     }
 
@@ -76,7 +89,8 @@ fun LaborClubScreen(
     ) { padding ->
         when {
             state.isLoading && state.progress == null -> LoadingScreen()
-            state.error != null && state.progress == null -> ErrorScreen(state.error!!) { vm.loadAll() }
+            state.error != null && state.progress == null && state.clubStatusError != null ->
+                ErrorScreen(state.error!!) { vm.loadAll() }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 96.dp),
@@ -85,9 +99,21 @@ fun LaborClubScreen(
                 // 进度卡片
                 state.progress?.let { item { ProgressCard(it) } }
 
-                // 俱乐部信息
-                if (state.clubs.isNotEmpty()) {
-                    item { ClubsSection(state.clubs) }
+                item {
+                    if (state.clubs.isNotEmpty()) {
+                        ClubsSection(state.clubs)
+                    } else {
+                        LaborClubApplicationStatusCard(
+                            membership = state.membership,
+                            statusError = state.clubStatusError,
+                            submittedStatusSyncing = state.submittedStatusSyncing,
+                            onApply = {
+                                vm.clearClubActionResult()
+                                showClubApplicationSheet = true
+                            },
+                            onRefresh = vm::loadAll,
+                        )
+                    }
                 }
 
                 // Tab 切换
@@ -108,6 +134,25 @@ fun LaborClubScreen(
     // 活动详情 BottomSheet
     showDetailSheet?.let { activity ->
         ActivityDetailSheet(activity, state, vm) { showDetailSheet = null }
+    }
+    if (showClubApplicationSheet) {
+        LaborClubApplicationSheet(
+            directory = state.clubDirectory,
+            isLoading = state.isDirectoryLoading,
+            error = state.directoryError,
+            isSubmitting = state.isSubmittingClub,
+            submissionSucceeded = state.clubSubmissionSucceeded,
+            submissionMessage = state.clubActionResult,
+            onLoadDirectory = vm::loadClubDirectory,
+            onSubmit = vm::applyClub,
+            onConsumeSuccess = vm::consumeClubSubmissionSuccess,
+            onDismiss = {
+                if (!state.isSubmittingClub) {
+                    showClubApplicationSheet = false
+                    vm.clearClubActionResult()
+                }
+            },
+        )
     }
 }
 
