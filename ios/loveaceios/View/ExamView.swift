@@ -7,7 +7,7 @@ struct ExamView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if vm.isLoading {
+                if !vm.hasLoaded || vm.isLoading {
                     LoadingView(message: "加载考试安排...")
                 } else if let error = vm.error {
                     ErrorView(message: error) { vm.loadExams() }

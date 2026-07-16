@@ -3,6 +3,7 @@ import Foundation
 @MainActor @Observable
 final class ExamViewModel {
     var isLoading = false
+    var hasLoaded = false
     var exams: [UnifiedExamInfo] = []
     var error: String?
     private var service: JWCService?
@@ -15,6 +16,7 @@ final class ExamViewModel {
             isLoading = true; error = nil
             let result = await svc.getExamInfo()
             if result.success { exams = result.data ?? [] } else { error = result.error }
+            hasLoaded = true
             isLoading = false
         }
     }

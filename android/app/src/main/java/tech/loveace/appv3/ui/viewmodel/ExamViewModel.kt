@@ -11,6 +11,7 @@ import tech.loveace.appv3.data.service.JWCService
 
 data class ExamUiState(
     val isLoading: Boolean = false,
+    val hasLoaded: Boolean = false,
     val exams: List<UnifiedExamInfo> = emptyList(),
     val error: String? = null,
 )
@@ -25,10 +26,13 @@ class ExamViewModel : ViewModel() {
     fun loadExams() {
         val svc = service ?: return
         viewModelScope.launch {
-            _uiState.value = ExamUiState(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             val result = svc.getExamInfo()
-            _uiState.value = if (result.success) ExamUiState(exams = result.data ?: emptyList())
-            else ExamUiState(error = result.error)
+            _uiState.value = if (result.success) {
+                ExamUiState(hasLoaded = true, exams = result.data ?: emptyList())
+            } else {
+                _uiState.value.copy(isLoading = false, hasLoaded = true, error = result.error)
+            }
         }
     }
 }

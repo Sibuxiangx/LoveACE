@@ -32,7 +32,7 @@ fun ExamScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: ExamViewMod
         )
     }) { padding ->
         when {
-            state.isLoading -> LoadingScreen()
+            !state.hasLoaded || state.isLoading -> LoadingScreen()
             state.error != null -> ErrorScreen(state.error!!) { vm.loadExams() }
             state.exams.isEmpty() -> EmptyScreen("暂无考试安排")
             else -> LazyColumn(

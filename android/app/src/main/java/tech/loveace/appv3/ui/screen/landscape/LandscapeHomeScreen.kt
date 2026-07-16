@@ -35,9 +35,13 @@ import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import tech.loveace.appv3.data.model.AcademicInfo
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.screen.HomeExamSummary
 import tech.loveace.appv3.ui.viewmodel.*
+import tech.loveace.appv3.util.buildHomeExamOverview
+import java.time.LocalDateTime
 
 /**
  * 横屏首页：双栏布局
@@ -53,6 +57,7 @@ fun LandscapeHomeScreen(
     aacVm: AACViewModel = viewModel(),
     yktVm: YKTViewModel = viewModel(),
     semesterVm: SemesterViewModel = viewModel(),
+    examVm: ExamViewModel = viewModel(),
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val academicState by academicVm.uiState.collectAsStateWithLifecycle()
@@ -60,8 +65,32 @@ fun LandscapeHomeScreen(
     val yktState by yktVm.uiState.collectAsStateWithLifecycle()
     val profileState by profileViewModel.state.collectAsStateWithLifecycle()
     val semesterState by semesterVm.uiState.collectAsStateWithLifecycle()
+    val examState by examVm.uiState.collectAsStateWithLifecycle()
 
     val displayName = profileState.nickname.ifEmpty { authState.userId }
+    val now by produceState(initialValue = LocalDateTime.now()) {
+        while (true) {
+            delay(60_000)
+            value = LocalDateTime.now()
+        }
+    }
+    val examOverview = remember(examState.exams, now) {
+        buildHomeExamOverview(examState.exams, now)
+    }
+
+    LaunchedEffect(
+        examState.hasLoaded,
+        examState.isLoading,
+        examOverview != null,
+        now.toLocalDate(),
+    ) {
+        if (examState.hasLoaded && !examState.isLoading) {
+            semesterVm.updatePendingExamStatus(
+                hasPendingExams = examOverview != null,
+                today = now.toLocalDate(),
+            )
+        }
+    }
 
     val context = LocalContext.current
     var pendingCropUri by remember { mutableStateOf<Uri?>(null) }
@@ -92,7 +121,12 @@ fun LandscapeHomeScreen(
     }
 
     LaunchedEffect(authViewModel.jwcService) {
-        authViewModel.jwcService?.let { academicVm.init(it); academicVm.loadAcademicInfo() }
+        authViewModel.jwcService?.let {
+            academicVm.init(it)
+            academicVm.loadAcademicInfo()
+            examVm.init(it)
+            examVm.loadExams()
+        }
     }
     LaunchedEffect(authViewModel.aacService) {
         authViewModel.aacService?.let { aacVm.init(it); aacVm.loadAll() }
@@ -256,24 +290,46 @@ fun LandscapeHomeScreen(
                                 }
                             }
                             is SemesterStatus.Vacation -> {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        Modifier.size(36.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(Icons.Default.BeachAccess, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                    }
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text("假期中", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                        if (semStatus.nextSemesterName != null) {
-                                            Text(
-                                                "${semStatus.nextSemesterName} · ${semStatus.nextStartDate} 开学（${semStatus.daysUntilStart}天后）",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
+                                when {
+                                    authViewModel.jwcService != null &&
+                                        (!examState.hasLoaded || examState.isLoading) -> {
+                                        Box(
+                                            Modifier.fillMaxWidth().padding(8.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
                                         }
                                     }
+                                    else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            Modifier.size(36.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(Icons.Default.BeachAccess, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                                        }
+                                        Spacer(Modifier.width(10.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text("假期中", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                            if (semStatus.nextSemesterName != null) {
+                                                Text(
+                                                    "${semStatus.nextSemesterName} · ${semStatus.nextStartDate} 开学（${semStatus.daysUntilStart}天后）",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            is SemesterStatus.FinalExamWeek -> {
+                                if (examOverview != null) {
+                                    HomeExamSummary(overview = examOverview, maxItems = 2)
+                                } else {
+                                    Text(
+                                        "期末周",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
                                 }
                             }
                             is SemesterStatus.InSession -> {
