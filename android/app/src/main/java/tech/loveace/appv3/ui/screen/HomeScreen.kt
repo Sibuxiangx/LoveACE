@@ -16,17 +16,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import tech.loveace.appv3.data.model.AcademicInfo
 import tech.loveace.appv3.ui.components.*
 import tech.loveace.appv3.ui.navigation.*
 import tech.loveace.appv3.ui.viewmodel.AACViewModel
 import tech.loveace.appv3.ui.viewmodel.AcademicViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
+import tech.loveace.appv3.ui.viewmodel.ExamViewModel
 import tech.loveace.appv3.ui.viewmodel.ProfileViewModel
 import tech.loveace.appv3.ui.viewmodel.SemesterViewModel
 import tech.loveace.appv3.ui.viewmodel.SemesterStatus
 import tech.loveace.appv3.ui.viewmodel.SemesterUiState
 import tech.loveace.appv3.ui.viewmodel.YKTViewModel
+import tech.loveace.appv3.util.HomeExamOverview
+import tech.loveace.appv3.util.buildHomeExamOverview
+import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +42,7 @@ fun HomeScreen(
     aacVm: AACViewModel = viewModel(),
     yktVm: YKTViewModel = viewModel(),
     semesterVm: SemesterViewModel = viewModel(),
+    examVm: ExamViewModel = viewModel(),
     profileVm: ProfileViewModel = viewModel(),
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
@@ -44,14 +50,40 @@ fun HomeScreen(
     val aacState by aacVm.uiState.collectAsStateWithLifecycle()
     val yktState by yktVm.uiState.collectAsStateWithLifecycle()
     val semesterState by semesterVm.uiState.collectAsStateWithLifecycle()
+    val examState by examVm.uiState.collectAsStateWithLifecycle()
     val profileState by profileVm.state.collectAsStateWithLifecycle()
 
     val displayName = profileState.nickname.ifEmpty { authState.userId }
+    val now by produceState(initialValue = LocalDateTime.now()) {
+        while (true) {
+            delay(60_000)
+            value = LocalDateTime.now()
+        }
+    }
+    val examOverview = remember(examState.exams, now) {
+        buildHomeExamOverview(examState.exams, now)
+    }
+
+    LaunchedEffect(
+        examState.hasLoaded,
+        examState.isLoading,
+        examOverview != null,
+        now.toLocalDate(),
+    ) {
+        if (examState.hasLoaded && !examState.isLoading) {
+            semesterVm.updatePendingExamStatus(
+                hasPendingExams = examOverview != null,
+                today = now.toLocalDate(),
+            )
+        }
+    }
 
     LaunchedEffect(authViewModel.jwcService) {
         authViewModel.jwcService?.let {
             academicVm.init(it)
             academicVm.loadAcademicInfo()
+            examVm.init(it)
+            examVm.loadExams()
         }
     }
     LaunchedEffect(authViewModel.aacService) {
@@ -82,10 +114,20 @@ fun HomeScreen(
         ) {
             // ── 学期信息 ──
             val semStatus = semesterState.status
-            if (semStatus is SemesterStatus.Vacation || semStatus is SemesterStatus.InSession) {
+            if (
+                semStatus is SemesterStatus.Vacation ||
+                semStatus is SemesterStatus.FinalExamWeek ||
+                semStatus is SemesterStatus.InSession
+            ) {
                 item {
                     Column(Modifier.padding(horizontal = 20.dp)) {
-                        SectionTitle("学期")
+                        SectionTitle(
+                            if (semStatus is SemesterStatus.FinalExamWeek) {
+                                "考试安排"
+                            } else {
+                                "学期"
+                            },
+                        )
                         Spacer(Modifier.height(4.dp))
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -94,25 +136,51 @@ fun HomeScreen(
                         ) {
                             when (semStatus) {
                                 is SemesterStatus.Vacation -> {
-                                    ListItem(
-                                        headlineContent = {
-                                            Text("假期中", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                        },
-                                        supportingContent = {
-                                            if (semStatus.nextSemesterName != null) {
-                                                Text("即将到来：${semStatus.nextSemesterName}\n${semStatus.nextStartDate} 开学（还有 ${semStatus.daysUntilStart} 天）")
-                                            }
-                                        },
-                                        leadingContent = {
+                                    when {
+                                        authViewModel.jwcService != null &&
+                                            (!examState.hasLoaded || examState.isLoading) -> {
                                             Box(
-                                                Modifier.size(44.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
+                                                Modifier.fillMaxWidth().padding(24.dp),
                                                 contentAlignment = Alignment.Center,
                                             ) {
-                                                Icon(Icons.Default.BeachAccess, null, modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                                                AppCircularProgressIndicator(modifier = Modifier.size(28.dp))
                                             }
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    )
+                                        }
+                                        else -> ListItem(
+                                            headlineContent = {
+                                                Text("假期中", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                            },
+                                            supportingContent = {
+                                                if (semStatus.nextSemesterName != null) {
+                                                    Text("即将到来：${semStatus.nextSemesterName}\n${semStatus.nextStartDate} 开学（还有 ${semStatus.daysUntilStart} 天）")
+                                                }
+                                            },
+                                            leadingContent = {
+                                                Box(
+                                                    Modifier.size(44.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(Icons.Default.BeachAccess, null, modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                                                }
+                                            },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                        )
+                                    }
+                                }
+                                is SemesterStatus.FinalExamWeek -> {
+                                    if (examOverview != null) {
+                                        HomeExamSummary(
+                                            overview = examOverview,
+                                            modifier = Modifier.padding(20.dp),
+                                        )
+                                    } else {
+                                        Text(
+                                            "期末周",
+                                            modifier = Modifier.padding(20.dp),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                    }
                                 }
                                 is SemesterStatus.InSession -> {
                                     Column(Modifier.padding(20.dp)) {
@@ -419,6 +487,64 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun HomeExamSummary(
+    overview: HomeExamOverview,
+    modifier: Modifier = Modifier,
+    maxItems: Int = 3,
+) {
+    val visibleExams = overview.exams.take(maxItems)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).background(MaterialTheme.colorScheme.errorContainer, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.EventAvailable,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("期末周", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "${overview.period.title} · ${overview.exams.size} 场待参加",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        visibleExams.forEachIndexed { index, exam ->
+            if (index > 0) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(exam.courseName, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    listOf(exam.examDate, exam.examTime, exam.examLocation)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        val remaining = overview.exams.size - visibleExams.size
+        if (remaining > 0) {
+            Text(
+                "另有 $remaining 场考试",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

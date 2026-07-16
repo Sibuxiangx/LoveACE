@@ -29,7 +29,7 @@ fun LandscapeExamScreen(authViewModel: AuthViewModel, vm: ExamViewModel = viewMo
         TopAppBar(title = { Text("考试安排") })
 
         when {
-            state.isLoading -> LoadingScreen()
+            !state.hasLoaded || state.isLoading -> LoadingScreen()
             state.error != null -> ErrorScreen(state.error!!) { vm.loadExams() }
             state.exams.isEmpty() -> EmptyScreen("暂无考试安排")
             else -> LazyVerticalGrid(

@@ -62,6 +62,7 @@ sealed class SemesterStatus {
         val nextStartDate: String? = null,
         val daysUntilStart: Long? = null,
     ) : SemesterStatus()
+    data object FinalExamWeek : SemesterStatus()
     data class InSession(
         val semesterName: String,
         val currentWeek: Int,
@@ -84,6 +85,8 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
     val uiState: StateFlow<SemesterUiState> = _uiState.asStateFlow()
 
     private val json = Json { ignoreUnknownKeys = true }
+    private var semesterData: SemesterData? = null
+    private var hasPendingExams = false
 
     init {
         loadSemesterInfo()
@@ -96,7 +99,8 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
                 val rawText = fetchSemesterRawJson()
                 WidgetDataStore.saveSemesterJson(getApplication(), rawText)
                 val data = json.decodeFromString<SemesterData>(rawText)
-                val status = computeStatus(data)
+                semesterData = data
+                val status = computeSemesterStatus(data, hasPendingExams = hasPendingExams)
                 _uiState.value = SemesterUiState(status)
                 // 请求刷新 widget
                 SemesterDayWidget().updateAll(getApplication())
@@ -116,43 +120,72 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
         }.getInputStream().bufferedReader().readText()
     }
 
-    private fun computeStatus(data: SemesterData): SemesterStatus {
-        val today = LocalDate.now()
-        val semesters = data.semesters.sortedBy { it.startDate }
-
-        for (sem in semesters) {
-            val start = LocalDate.parse(sem.startDate, DateTimeFormatter.ISO_LOCAL_DATE)
-            val end = start.plusWeeks(sem.weeks.toLong()).minusDays(1)
-            val display = sem.displayName()
-
-            if (today.isBefore(start)) {
-                val daysUntil = ChronoUnit.DAYS.between(today, start)
-                return SemesterStatus.Vacation(
-                    nextSemesterName = display,
-                    nextStartDate = sem.startDate,
-                    daysUntilStart = daysUntil,
-                )
-            }
-
-            if (!today.isBefore(start) && !today.isAfter(end)) {
-                val weekNum = (ChronoUnit.DAYS.between(start, today) / 7 + 1).toInt()
-                val remaining = sem.weeks - weekNum
-                return SemesterStatus.InSession(
-                    semesterName = display,
-                    currentWeek = weekNum,
-                    totalWeeks = sem.weeks,
-                    remainingWeeks = remaining,
-                    isEnding = remaining <= 2,
-                )
-            }
+    fun updatePendingExamStatus(
+        hasPendingExams: Boolean,
+        today: LocalDate = LocalDate.now(),
+    ) {
+        this.hasPendingExams = hasPendingExams
+        val data = semesterData ?: return
+        when (_uiState.value.status) {
+            is SemesterStatus.Loading,
+            is SemesterStatus.Error -> return
+            else -> Unit
         }
-
-        return SemesterStatus.Vacation()
+        _uiState.value = SemesterUiState(
+            computeSemesterStatus(data, today = today, hasPendingExams = hasPendingExams),
+        )
     }
 
     companion object {
         private const val TAG = "SemesterViewModel"
         private const val SEMESTER_JSON_URL =
             "https://loveace-semsync.oss-cn-beijing.aliyuncs.com/loveace/semesters.json"
+    }
+}
+
+internal fun computeSemesterStatus(
+    data: SemesterData,
+    today: LocalDate = LocalDate.now(),
+    hasPendingExams: Boolean = false,
+): SemesterStatus {
+    val semesters = data.semesters.sortedBy { it.startDate }
+    var latestSemesterEnd: LocalDate? = null
+
+    for (sem in semesters) {
+        val start = LocalDate.parse(sem.startDate, DateTimeFormatter.ISO_LOCAL_DATE)
+        val end = start.plusWeeks(sem.weeks.toLong()).minusDays(1)
+        val display = sem.displayName()
+
+        if (today.isBefore(start)) {
+            if (hasPendingExams && latestSemesterEnd != null && today.isAfter(latestSemesterEnd)) {
+                return SemesterStatus.FinalExamWeek
+            }
+            val daysUntil = ChronoUnit.DAYS.between(today, start)
+            return SemesterStatus.Vacation(
+                nextSemesterName = display,
+                nextStartDate = sem.startDate,
+                daysUntilStart = daysUntil,
+            )
+        }
+
+        if (!today.isAfter(end)) {
+            val weekNum = (ChronoUnit.DAYS.between(start, today) / 7 + 1).toInt()
+            val remaining = sem.weeks - weekNum
+            return SemesterStatus.InSession(
+                semesterName = display,
+                currentWeek = weekNum,
+                totalWeeks = sem.weeks,
+                remainingWeeks = remaining,
+                isEnding = remaining <= 2,
+            )
+        }
+
+        latestSemesterEnd = end
+    }
+
+    return if (hasPendingExams && latestSemesterEnd != null && today.isAfter(latestSemesterEnd)) {
+        SemesterStatus.FinalExamWeek
+    } else {
+        SemesterStatus.Vacation()
     }
 }
