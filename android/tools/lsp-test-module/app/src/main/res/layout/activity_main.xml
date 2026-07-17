@@ -1,0 +1,618 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorSurface"
+        app:liftOnScroll="true"
+        app:liftOnScrollTargetViewId="@id/contentScroll"
+        app:logo="@drawable/ic_module"
+        app:logoDescription="@string/app_icon_description"
+        app:menu="@menu/main_toolbar"
+        app:subtitle="@string/toolbar_subtitle"
+        app:title="@string/toolbar_title"
+        app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge" />
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/contentScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/contentRoot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/statusCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:id="@+id/statusDot"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/bg_status_waiting" />
+
+                        <TextView
+                            android:id="@+id/frameworkStatus"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:text="@string/framework_waiting"
+                            android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/scopeStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/scope_waiting"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+
+                    <TextView
+                        android:id="@+id/processStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/process_waiting"
+                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/requestScopeButton"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_gravity="end"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/request_scope"
+                        app:icon="@drawable/ic_scope"
+                        app:iconGravity="textStart" />
+
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        android:id="@+id/serviceProgress"
+                        android:layout_width="match_parent"
+                        android:layout_height="4dp"
+                        android:layout_marginTop="8dp"
+                        android:indeterminate="true" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/modeToggleGroup"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="16dp"
+                app:checkedButton="@id/modeMockButton"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/modeMockButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/mode_mock"
+                    app:icon="@drawable/ic_science"
+                    app:iconGravity="textStart" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/modeDebugButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="@string/mode_debug"
+                    app:icon="@drawable/ic_trace"
+                    app:iconGravity="textStart" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <LinearLayout
+                android:id="@+id/debugPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/section_observer"
+                    android:textAppearance="@style/TextAppearance.LoveACEExamMock.Section" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/traceSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="@string/enable_trace"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/trace_privacy"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:id="@+id/traceSummary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/trace_empty"
+                            android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+
+                        <TextView
+                            android:id="@+id/lastTrace"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:ellipsize="end"
+                            android:fontFamily="monospace"
+                            android:maxLines="3"
+                            android:text="@string/trace_waiting"
+                            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/viewTraceButton"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:text="@string/view_trace"
+                                app:icon="@drawable/ic_trace"
+                                app:iconGravity="textStart" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/clearTraceButton"
+                                style="@style/Widget.Material3.Button.TextButton"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:text="@string/clear_trace"
+                                app:icon="@drawable/ic_delete"
+                                app:iconGravity="textStart" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/section_runtime"
+                    android:textAppearance="@style/TextAppearance.LoveACEExamMock.Section" />
+
+                <TextView
+                    android:id="@+id/hookStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/hook_waiting"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/processDetailsButton"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="@string/process_details"
+                        app:icon="@drawable/ic_process"
+                        app:iconGravity="textStart" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/copyDiagnosticsButton"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="@string/copy_diagnostics"
+                        app:icon="@drawable/ic_copy"
+                        app:iconGravity="textStart" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/debugOpenLoveAceButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/open_loveace"
+                    app:icon="@drawable/ic_open_in_new"
+                    app:iconGravity="textStart" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/mockPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/section_control"
+                android:textAppearance="@style/TextAppearance.LoveACEExamMock.Section" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/masterSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="@string/enable_mock"
+                android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+
+            <TextView
+                android:id="@+id/liveSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/real_passthrough"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/section_sources"
+                    android:textAppearance="@style/TextAppearance.LoveACEExamMock.Section" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/selectAllSourcesButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/select_all"
+                    app:icon="@drawable/ic_select_all"
+                    app:iconGravity="textStart" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/clearAllSourcesButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/clear_all"
+                    app:icon="@drawable/ic_clear_all"
+                    app:iconGravity="textStart" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/semesterSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_semester" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/academicSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_academic" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/examIndexSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_exam_index" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/schoolExamsSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_school_exams" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/otherExamsSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_other_exams" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/scoresSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_scores" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/scheduleSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_schedule" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/campusCardSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_campus_card" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/trainingPlanSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="@string/source_training_plan" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/examPresetButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="12dp"
+                android:text="@string/apply_exam_preset"
+                app:icon="@drawable/ic_science"
+                app:iconGravity="textStart" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/section_scenario"
+                android:textAppearance="@style/TextAppearance.LoveACEExamMock.Section" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/scenarioInputLayout"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/scenario_hint">
+
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/scenarioDropdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:id="@+id/scenarioSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/response_latency"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+
+                <TextView
+                    android:id="@+id/latencyValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/latency_zero"
+                    android:textAppearance="@style/TextAppearance.Material3.LabelLarge" />
+            </LinearLayout>
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/latencySlider"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:valueFrom="0"
+                android:valueTo="5000"
+                android:stepSize="250" />
+
+            <LinearLayout
+                android:id="@+id/customGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/custom_day_offset">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/dayOffsetInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="numberSigned" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="@string/custom_start_offset">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/startOffsetInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="numberSigned" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="@string/custom_duration">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/durationInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/section_content"
+                android:textAppearance="@style/TextAppearance.LoveACEExamMock.Section" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/course_name">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/courseNameInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/room">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/roomInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/seat">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/seatInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/semester_end_offset">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/semesterEndOffsetInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="numberSigned" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/previewButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="24dp"
+                android:text="@string/preview_responses"
+                app:icon="@drawable/ic_preview"
+                app:iconGravity="textStart" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="end"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/resetButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/reset"
+                    app:icon="@drawable/ic_reset"
+                    app:iconGravity="textStart" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/openLoveAceButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/open_loveace"
+                    app:icon="@drawable/ic_open_in_new"
+                    app:iconGravity="textStart" />
+            </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
