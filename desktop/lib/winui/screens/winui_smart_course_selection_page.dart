@@ -11,6 +11,7 @@ import '../../models/jwc/student_schedule.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/smart_course_selection_provider.dart';
 import '../../services/jwc/class_curriculum_service.dart';
+import '../layout/schedule_card_layout.dart';
 import '../widgets/winui_card.dart';
 import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
@@ -236,7 +237,8 @@ class _WinUISmartCourseSelectionPageState
     with UserScopeDataLoader<WinUISmartCourseSelectionPage> {
   @override
   bool get isUserScopeReady =>
-      Provider.of<SmartCourseSelectionProvider?>(context, listen: false) != null;
+      Provider.of<SmartCourseSelectionProvider?>(context, listen: false) !=
+      null;
 
   @override
   void loadUserScopeData() => _initializeData();
@@ -1090,7 +1092,9 @@ class _WinUISmartCourseSelectionPageState
         ),
         const Divider(),
         // 课程表网格
-        Expanded(child: _buildScheduleGrid(context, provider)),
+        Expanded(
+          child: RepaintBoundary(child: _buildScheduleGrid(context, provider)),
+        ),
       ],
     );
   }
@@ -1152,6 +1156,7 @@ class _WinUISmartCourseSelectionPageState
                 // 背景网格
                 _buildGridBackground(
                   context,
+                  provider,
                   weekdays,
                   sessions,
                   cellWidth,
@@ -1179,6 +1184,7 @@ class _WinUISmartCourseSelectionPageState
   /// 构建网格背景
   Widget _buildGridBackground(
     BuildContext context,
+    SmartCourseSelectionProvider provider,
     List<String> weekdays,
     int sessions,
     double cellWidth,
@@ -1241,33 +1247,18 @@ class _WinUISmartCourseSelectionPageState
                 for (int day = 1; day <= 7; day++)
                   GestureDetector(
                     onTap: () {
-                      final provider =
-                          Provider.of<SmartCourseSelectionProvider>(
-                            context,
-                            listen: false,
-                          );
-                      provider.selectTimeSlot(day, session);
-                      provider.selectCourse(null); // 清除选中的课程
+                      provider.selectCourseAtTimeSlot(null, day, session);
                     },
-                    child: Builder(
-                      builder: (context) {
-                        final provider =
-                            Provider.of<SmartCourseSelectionProvider>(context);
-                        final isSelected =
+                    child: Container(
+                      width: cellWidth,
+                      decoration: BoxDecoration(
+                        color:
                             provider.selectedDay == day &&
-                            provider.selectedSession == session;
-                        return Container(
-                          width: cellWidth,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? theme.accentColor.withValues(alpha: 0.1)
-                                : null,
-                            border: Border(
-                              right: BorderSide(color: borderColor),
-                            ),
-                          ),
-                        );
-                      },
+                                provider.selectedSession == session
+                            ? theme.accentColor.withValues(alpha: 0.1)
+                            : null,
+                        border: Border(right: BorderSide(color: borderColor)),
+                      ),
                     ),
                   ),
               ],
@@ -1286,26 +1277,36 @@ class _WinUISmartCourseSelectionPageState
     double headerHeight,
     double sessionColumnWidth,
   ) {
-    final cards = <Widget>[];
+    final intervals = <ScheduleCardInterval<Widget>>[];
+
+    void addCard({
+      required int weekday,
+      required int startSession,
+      required int continuingSession,
+      required Widget child,
+    }) {
+      if (weekday < 1 || weekday > 7 || startSession < 1) return;
+      final sessionSpan = continuingSession > 0 ? continuingSession : 1;
+      intervals.add(
+        ScheduleCardInterval(
+          item: child,
+          weekday: weekday,
+          startSession: startSession,
+          endSession: startSession + sessionSpan - 1,
+        ),
+      );
+    }
 
     if (provider.usingClassCurriculum) {
       for (final course in provider.classCurriculumCourses) {
         if (course.skxq == null || course.skjc == null) continue;
         final courseKey = '${course.kch}_${course.kxh}';
         if (provider.removedCourses.contains(courseKey)) continue;
-        final left = sessionColumnWidth + (course.skxq! - 1) * cellWidth;
-        final top = headerHeight + (course.skjc! - 1) * cellHeight;
-        final continuingSession = course.cxjc ?? 1;
-        final height = continuingSession * cellHeight;
-
-        cards.add(
-          Positioned(
-            left: left + 2,
-            top: top + 2,
-            width: cellWidth - 4,
-            height: height - 4,
-            child: _buildClassCurriculumCourseCard(context, course, provider),
-          ),
+        addCard(
+          weekday: course.skxq!,
+          startSession: course.skjc!,
+          continuingSession: course.cxjc ?? 1,
+          child: _buildClassCurriculumCourseCard(context, course, provider),
         );
       }
     } else {
@@ -1317,18 +1318,11 @@ class _WinUISmartCourseSelectionPageState
           if (provider.removedCourses.contains(courseKey)) continue;
 
           for (final tp in course.timeAndPlaceList) {
-            final left = sessionColumnWidth + (tp.classDay - 1) * cellWidth;
-            final top = headerHeight + (tp.classSessions - 1) * cellHeight;
-            final height = tp.continuingSession * cellHeight;
-
-            cards.add(
-              Positioned(
-                left: left + 2,
-                top: top + 2,
-                width: cellWidth - 4,
-                height: height - 4,
-                child: _buildExistingCourseCard(context, course, tp, provider),
-              ),
+            addCard(
+              weekday: tp.classDay,
+              startSession: tp.classSessions,
+              continuingSession: tp.continuingSession,
+              child: _buildExistingCourseCard(context, course, tp, provider),
             );
           }
         }
@@ -1340,24 +1334,36 @@ class _WinUISmartCourseSelectionPageState
       for (final course in provider.getAvailableCourseRecordsByKey(key)) {
         if (course.skxq == null || course.skjc == null) continue;
 
-        final left = sessionColumnWidth + (course.skxq! - 1) * cellWidth;
-        final top = headerHeight + (course.skjc! - 1) * cellHeight;
-        final continuingSession = course.cxjc ?? 1;
-        final height = continuingSession * cellHeight;
-
-        cards.add(
-          Positioned(
-            left: left + 2,
-            top: top + 2,
-            width: cellWidth - 4,
-            height: height - 4,
-            child: _buildSimulatedCourseCard(context, course, provider),
-          ),
+        addCard(
+          weekday: course.skxq!,
+          startSession: course.skjc!,
+          continuingSession: course.cxjc ?? 1,
+          child: _buildSimulatedCourseCard(context, course, provider),
         );
       }
     }
 
-    return cards;
+    return layoutScheduleCardIntervals(intervals).map((placement) {
+      final interval = placement.interval;
+      final laneWidth = cellWidth / placement.laneCount;
+      final cardWidth = (laneWidth - 4).clamp(1.0, double.infinity).toDouble();
+      final sessionSpan = interval.endSession - interval.startSession + 1;
+      final cardHeight = (sessionSpan * cellHeight - 4)
+          .clamp(1.0, double.infinity)
+          .toDouble();
+
+      return Positioned(
+        left:
+            sessionColumnWidth +
+            (interval.weekday - 1) * cellWidth +
+            placement.lane * laneWidth +
+            2,
+        top: headerHeight + (interval.startSession - 1) * cellHeight + 2,
+        width: cardWidth,
+        height: cardHeight,
+        child: interval.item,
+      );
+    }).toList();
   }
 
   /// 构建已有课程卡片
@@ -1371,13 +1377,12 @@ class _WinUISmartCourseSelectionPageState
 
     return GestureDetector(
       onTap: () {
-        // 更新选中的时间段，让右下角课程列表显示该时间段的课程
-        provider.selectTimeSlot(tp.classDay, tp.classSessions);
         // 优先从 availableCourses 中查找完整的课程记录（包含 bkskyl 等字段）
-        final matched = provider.availableCourses.firstWhere(
-          (c) => c.kch == course.courseCode && c.kxh == course.courseSequence,
-          orElse: () => CourseScheduleRecord(),
-        );
+        final courseKey = '${course.courseCode}_${course.courseSequence}';
+        final records = provider.getAvailableCourseRecordsByKey(courseKey);
+        final matched = records.isEmpty
+            ? CourseScheduleRecord()
+            : records.first;
         // 必须用学生课表的 courseSequence 作为 kxh，保证 courseKey 与 baseScheduleSnapshot 一致
         final fullRecord = matched.kch != null
             ? CourseScheduleRecord(
@@ -1434,7 +1439,11 @@ class _WinUISmartCourseSelectionPageState
                 cxjc: tp.continuingSession,
                 zcsm: tp.weekDescription,
               );
-        provider.selectCourse(fullRecord);
+        provider.selectCourseAtTimeSlot(
+          fullRecord,
+          tp.classDay,
+          tp.classSessions,
+        );
       },
       child: Container(
         decoration: BoxDecoration(
@@ -1483,9 +1492,10 @@ class _WinUISmartCourseSelectionPageState
     return GestureDetector(
       onTap: () {
         if (course.skxq != null && course.skjc != null) {
-          provider.selectTimeSlot(course.skxq!, course.skjc!);
+          provider.selectCourseAtTimeSlot(course, course.skxq!, course.skjc!);
+        } else {
+          provider.selectCourse(course);
         }
-        provider.selectCourse(course);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -1533,11 +1543,11 @@ class _WinUISmartCourseSelectionPageState
 
     return GestureDetector(
       onTap: () {
-        // 更新选中的时间段，让右下角课程列表显示该时间段的课程
         if (course.skxq != null && course.skjc != null) {
-          provider.selectTimeSlot(course.skxq!, course.skjc!);
+          provider.selectCourseAtTimeSlot(course, course.skxq!, course.skjc!);
+        } else {
+          provider.selectCourse(course);
         }
-        provider.selectCourse(course);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -1716,7 +1726,9 @@ class _WinUISmartCourseSelectionPageState
                 .where((d) => d.isNotEmpty)
                 .toList();
             if (times.isEmpty) {
-              return [_buildDetailRow(context, '时间', course.scheduleDescription)];
+              return [
+                _buildDetailRow(context, '时间', course.scheduleDescription),
+              ];
             }
             return times.asMap().entries.map((entry) {
               return _buildDetailRow(
@@ -2829,7 +2841,10 @@ class _WinUISmartCourseSelectionPageState
                 onTap: () => provider.selectCourse(first),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? Colors.green.withValues(alpha: 0.15)
@@ -2851,7 +2866,9 @@ class _WinUISmartCourseSelectionPageState
                           shape: BoxShape.circle,
                           color: isSelected
                               ? Colors.green
-                              : (hasConflict ? Colors.orange : theme.accentColor),
+                              : (hasConflict
+                                    ? Colors.orange
+                                    : theme.accentColor),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -2889,11 +2906,12 @@ class _WinUISmartCourseSelectionPageState
                                       padding: const EdgeInsets.only(top: 2),
                                       child: Text(
                                         '${r.xqm ?? ""} · $desc',
-                                        style: theme.typography.caption?.copyWith(
-                                          fontSize: 10,
-                                          color: theme.inactiveColor,
-                                          height: 1.3,
-                                        ),
+                                        style: theme.typography.caption
+                                            ?.copyWith(
+                                              fontSize: 10,
+                                              color: theme.inactiveColor,
+                                              height: 1.3,
+                                            ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     )
@@ -2925,18 +2943,18 @@ class _WinUISmartCourseSelectionPageState
                               color: _getActualCapacityInt(first) > 0
                                   ? (isDark ? Colors.green.light : Colors.green)
                                   : Colors.red,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }).toList();
-        }(),
+              );
+            }).toList();
+          }(),
+        ),
       ),
-    ),
     );
   }
 
