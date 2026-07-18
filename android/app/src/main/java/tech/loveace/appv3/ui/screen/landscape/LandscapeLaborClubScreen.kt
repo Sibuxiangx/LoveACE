@@ -50,11 +50,13 @@ fun LandscapeLaborClubScreen(
     profileViewModel: ProfileViewModel = viewModel(),
     vm: LaborClubViewModel = viewModel(),
 ) {
+    val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val profileState by profileViewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDetailActivity by remember { mutableStateOf<LaborClubActivity?>(null) }
+    var showClubApplicationSheet by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     var pendingCropUri by remember { mutableStateOf<Uri?>(null) }
@@ -82,14 +84,25 @@ fun LandscapeLaborClubScreen(
         )
     }
 
-    LaunchedEffect(authViewModel.laborClubService) {
-        authViewModel.laborClubService?.let { vm.init(it); vm.loadAll() }
+    LaunchedEffect(authState.userId, authState.serviceGeneration) {
+        authViewModel.laborClubService?.let {
+            vm.init(it, authState.userId)
+            vm.loadAll()
+            if (showClubApplicationSheet) vm.loadClubDirectory()
+        }
     }
     LaunchedEffect(state.signInResult) {
         state.signInResult?.let { snackbarHostState.showSnackbar(if (it.isSuccess) "✅ ${it.msg}" else "❌ ${it.msg}"); vm.clearSignInResult() }
     }
     LaunchedEffect(state.applyResult) {
         state.applyResult?.let { snackbarHostState.showSnackbar(it); vm.clearApplyResult() }
+    }
+    LaunchedEffect(state.clubActionResult, showClubApplicationSheet) {
+        val result = state.clubActionResult ?: return@LaunchedEffect
+        if (!showClubApplicationSheet || state.clubSubmissionSucceeded) {
+            snackbarHostState.showSnackbar(result)
+            vm.clearClubActionResult()
+        }
     }
 
     Scaffold(
@@ -103,7 +116,8 @@ fun LandscapeLaborClubScreen(
     ) { padding ->
         when {
             state.isLoading && state.progress == null -> LoadingScreen()
-            state.error != null && state.progress == null -> ErrorScreen(state.error!!) { vm.loadAll() }
+            state.error != null && state.progress == null && state.clubStatusError != null ->
+                ErrorScreen(state.error!!) { vm.loadAll() }
             else -> Row(
                 Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -162,6 +176,17 @@ fun LandscapeLaborClubScreen(
                                     }
                                 }
                             }
+                        } else {
+                            LaborClubApplicationStatusCard(
+                                membership = state.membership,
+                                statusError = state.clubStatusError,
+                                submittedStatusSyncing = state.submittedStatusSyncing,
+                                onApply = {
+                                    vm.clearClubActionResult()
+                                    showClubApplicationSheet = true
+                                },
+                                onRefresh = vm::loadAll,
+                            )
                         }
                     }
 
@@ -285,6 +310,25 @@ fun LandscapeLaborClubScreen(
     // 活动详情对话框
     showDetailActivity?.let { activity ->
         LandscapeActivityDetailDialog(activity, state, vm) { showDetailActivity = null }
+    }
+    if (showClubApplicationSheet) {
+        LaborClubApplicationSheet(
+            directory = state.clubDirectory,
+            isLoading = state.isDirectoryLoading,
+            error = state.directoryError,
+            isSubmitting = state.isSubmittingClub,
+            submissionSucceeded = state.clubSubmissionSucceeded,
+            submissionMessage = state.clubActionResult,
+            onLoadDirectory = vm::loadClubDirectory,
+            onSubmit = vm::applyClub,
+            onConsumeSuccess = vm::consumeClubSubmissionSuccess,
+            onDismiss = {
+                if (!state.isSubmittingClub) {
+                    showClubApplicationSheet = false
+                    vm.clearClubActionResult()
+                }
+            },
+        )
     }
 }
 

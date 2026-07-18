@@ -25,6 +25,7 @@ data class AuthUiState(
     val state: AuthState = AuthState.Initial,
     val errorMessage: String? = null,
     val userId: String = "",
+    val serviceGeneration: Long = 0,
 )
 
 /**
@@ -42,6 +43,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private var heartbeatJob: Job? = null
     private var isReconnecting = false
+    private var serviceGeneration = 0L
 
     // Connection and services
     var connection: AUFEConnection? = null
@@ -116,7 +118,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 credentialStore.save(UserCredentials(userId, ecPassword, password))
                 credentialStore.saveRemembered(UserCredentials(userId, ecPassword, password))
 
-                _uiState.value = AuthUiState(state = AuthState.Authenticated, userId = userId)
+                _uiState.value = AuthUiState(
+                    state = AuthState.Authenticated,
+                    userId = userId,
+                    serviceGeneration = serviceGeneration,
+                )
                 Analytics.trackLoginSuccess(userId)
                 Log.i(TAG, "✅ Login successful: $userId")
             } catch (e: Exception) {
@@ -163,7 +169,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 // 恢复 session 凭证
                 credentialStore.save(creds)
 
-                _uiState.value = AuthUiState(state = AuthState.Authenticated, userId = creds.userId)
+                _uiState.value = AuthUiState(
+                    state = AuthState.Authenticated,
+                    userId = creds.userId,
+                    serviceGeneration = serviceGeneration,
+                )
                 Analytics.trackLoginSuccess(creds.userId)
                 Log.i(TAG, "✅ Session restored: ${creds.userId}")
             } catch (e: Exception) {
@@ -250,6 +260,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 wireSessionExpiredHandler(conn)
                 // Re-init services with refreshed connection
                 initServices(conn)
+                _uiState.value = _uiState.value.copy(serviceGeneration = serviceGeneration)
                 Analytics.trackSessionReconnectSuccess()
                 Log.i(TAG, "✅ Auto-reconnect succeeded")
             } else {
@@ -280,6 +291,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         planService = PlanService(conn)
         repairService = RepairService(conn)
         teacherEvaluationService = TeacherEvaluationService(conn)
+        serviceGeneration++
     }
 
     private fun clearServices() {
