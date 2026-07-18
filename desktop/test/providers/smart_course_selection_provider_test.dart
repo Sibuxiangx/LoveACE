@@ -142,6 +142,190 @@ void main() {
       expect(provider.getEffectiveSelectedCourses(), const ['CLASS_01']);
     });
   });
+
+  group('SmartCourseSelectionProvider course indexes', () {
+    test('groups records by course code and selection key', () async {
+      final service = _fakeJwcService(
+        availableCourses: [
+          course('ADD', '01', startSession: 1),
+          course('ADD', '01', startSession: 3),
+          course('ADD', '02', startSession: 5),
+          course('OTHER', '01', startSession: 7),
+        ],
+      );
+      final provider = SmartCourseSelectionProvider(service);
+
+      await provider.initialize(userId);
+
+      expect(provider.getAvailableCourseRecordsByKey('ADD_01'), hasLength(2));
+      expect(provider.getCourseScheduleRecords('ADD'), hasLength(3));
+      expect(provider.isCourseAvailableInTerm('ADD'), isTrue);
+      expect(provider.isCourseAvailableInTerm('MISSING'), isFalse);
+    });
+
+    test('rebuilds indexes after course data refresh', () async {
+      final service = _fakeJwcService(availableCourses: [course('OLD', '01')]);
+      final provider = SmartCourseSelectionProvider(service);
+      await provider.initialize(userId);
+      expect(provider.isCourseAvailableInTerm('OLD'), isTrue);
+
+      service.courseScheduleService.availableCourses = [course('NEW', '01')];
+      await provider.refreshCourseData(userId);
+
+      expect(provider.isCourseAvailableInTerm('OLD'), isFalse);
+      expect(provider.getCourseScheduleRecords('NEW'), hasLength(1));
+    });
+
+    test('keeps indexed course data as an immutable snapshot', () async {
+      final source = [course('STABLE', '01')];
+      final provider = SmartCourseSelectionProvider(
+        _fakeJwcService(availableCourses: source),
+      );
+      await provider.initialize(userId);
+
+      source.add(course('LATE', '01'));
+
+      expect(provider.isCourseAvailableInTerm('STABLE'), isTrue);
+      expect(provider.isCourseAvailableInTerm('LATE'), isFalse);
+      expect(
+        () => provider.availableCourses.add(course('MUTATION', '01')),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('reuses filtered results until data or filters change', () async {
+      final provider = SmartCourseSelectionProvider(
+        _fakeJwcService(
+          availableCourses: [course('ADD', '01'), course('OTHER', '01')],
+        ),
+      );
+      await provider.initialize(userId);
+
+      final first = provider.filteredAvailableCourses;
+      final second = provider.filteredAvailableCourses;
+
+      expect(identical(first, second), isTrue);
+      provider.setFilter(campus: '东校区');
+      expect(identical(first, provider.filteredAvailableCourses), isFalse);
+    });
+
+    test('updates a card selection with one notification', () {
+      final provider = SmartCourseSelectionProvider(_fakeJwcService());
+      final selected = course('SELECTED', '01', startSession: 3);
+      var notifications = 0;
+      provider.addListener(() => notifications++);
+
+      provider.selectCourseAtTimeSlot(selected, 2, 3);
+
+      expect(provider.selectedCourse, same(selected));
+      expect(provider.selectedDay, 2);
+      expect(provider.selectedSession, 3);
+      expect(notifications, 1);
+    });
+
+    test('reuses campus and time slot indexes until filters change', () async {
+      final provider = SmartCourseSelectionProvider(
+        _fakeJwcService(
+          availableCourses: [
+            course('ADD', '01', campus: '西校区'),
+            course('ADD', '02', campus: '东校区'),
+          ],
+        ),
+      );
+      await provider.initialize(userId);
+
+      final campuses = provider.allCampuses;
+      final first = provider.getCoursesForTimeSlot(1, 1);
+
+      expect(campuses, const ['东校区', '西校区']);
+      expect(identical(campuses, provider.allCampuses), isTrue);
+      expect(first, hasLength(2));
+      expect(identical(first, provider.getCoursesForTimeSlot(1, 1)), isTrue);
+
+      provider.setFilter(campus: '东校区');
+      final filtered = provider.getCoursesForTimeSlot(1, 1);
+      expect(identical(first, filtered), isFalse);
+      expect(filtered.map((item) => item.kxh), const ['02']);
+    });
+
+    test(
+      'searches course metadata and composes with existing filters',
+      () async {
+        final provider = SmartCourseSelectionProvider(
+          _fakeJwcService(
+            availableCourses: [
+              course('ADD', '01', name: '数据结构', teacher: '张老师', campus: '东校区'),
+              course(
+                'CLASS',
+                '02',
+                name: '数据分析',
+                teacher: '李老师',
+                campus: '西校区',
+              ),
+            ],
+          ),
+        );
+        await provider.initialize(userId);
+
+        provider.setCourseSearchQuery('数据 张老师');
+        expect(provider.filteredAvailableCourses.map(courseKey), ['ADD_01']);
+
+        provider.setCourseSearchQuery('数据');
+        provider.setFilter(campus: '西校区');
+        expect(provider.filteredAvailableCourses.map(courseKey), ['CLASS_02']);
+
+        provider.setFilter(campus: '');
+        provider.setCourseSearchQuery('class 02');
+        expect(provider.filteredAvailableCourses.map(courseKey), ['CLASS_02']);
+      },
+    );
+
+    test(
+      'groups multi-session search results by course selection key',
+      () async {
+        final provider = SmartCourseSelectionProvider(
+          _fakeJwcService(
+            availableCourses: [
+              course('ADD', '01', name: '高级程序设计', startSession: 1),
+              course('ADD', '01', name: '高级程序设计', startSession: 3),
+              course('ADD', '02', name: '高级程序设计', startSession: 5),
+            ],
+          ),
+        );
+        await provider.initialize(userId);
+
+        provider.setCourseSearchQuery('高级程序');
+
+        expect(provider.filteredAvailableCourses, hasLength(3));
+        expect(provider.visibleCourseResults.map(courseKey), [
+          'ADD_01',
+          'ADD_02',
+        ]);
+      },
+    );
+
+    test('switches between time-slot and all-term search results', () async {
+      final provider = SmartCourseSelectionProvider(
+        _fakeJwcService(
+          availableCourses: [
+            course('ADD', '01', name: '程序设计', startSession: 1),
+            course('CLASS', '01', name: '程序设计', startSession: 5),
+          ],
+        ),
+      );
+      await provider.initialize(userId);
+      provider.setCourseSearchQuery('程序设计');
+
+      provider.selectTimeSlot(1, 1);
+      expect(provider.visibleCourseResults.map(courseKey), ['ADD_01']);
+
+      provider.clearSelectedTimeSlot();
+      expect(provider.visibleCourseResults.map(courseKey), [
+        'ADD_01',
+        'CLASS_01',
+      ]);
+    });
+  });
 }
 
 Future<void> seedClassCurriculumSimulation(
@@ -161,24 +345,36 @@ Future<void> seedClassCurriculumSimulation(
   expect(provider.removedCourses, const ['CLASS_01']);
 }
 
-CourseScheduleRecord course(String code, String sequence) {
+CourseScheduleRecord course(
+  String code,
+  String sequence, {
+  int startSession = 1,
+  String? campus,
+  String? name,
+  String? teacher,
+}) {
   return CourseScheduleRecord(
     kch: code,
     kxh: sequence,
-    kcm: '$code-$sequence',
+    kcm: name ?? '$code-$sequence',
+    skjs: teacher,
     skxq: 1,
-    skjc: 1,
+    skjc: startSession,
     cxjc: 2,
     skzc: '1-16',
+    xqm: campus,
   );
 }
 
 String courseKey(CourseScheduleRecord course) => '${course.kch}_${course.kxh}';
 
-_FakeJwcService _fakeJwcService() {
+_FakeJwcService _fakeJwcService({
+  List<CourseScheduleRecord>? availableCourses,
+}) {
   return _FakeJwcService(
     courseScheduleService: _FakeCourseScheduleService(
-      availableCourses: [course('ADD', '01'), course('CLASS', '01')],
+      availableCourses:
+          availableCourses ?? [course('ADD', '01'), course('CLASS', '01')],
     ),
     studentScheduleService: _FakeStudentScheduleService(
       schedule: studentSchedule(['BASE_01']),
