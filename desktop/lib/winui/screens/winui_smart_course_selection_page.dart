@@ -17,6 +17,9 @@ import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../mixins/user_scope_data_loader.dart';
 
+const double _wideCourseSelectionBreakpoint = 1200;
+const double _minimumScheduleGridWidth = 720;
+
 /// 课程信息辅助类（用于选课清单）
 class _CourseInfo {
   final String courseCode;
@@ -237,6 +240,7 @@ class _WinUISmartCourseSelectionPageState
     with UserScopeDataLoader<WinUISmartCourseSelectionPage> {
   final TextEditingController _courseSearchController = TextEditingController();
   bool _showCourseFilters = false;
+  int _compactViewIndex = 1;
 
   @override
   bool get isUserScopeReady =>
@@ -870,48 +874,11 @@ class _WinUISmartCourseSelectionPageState
     BuildContext context,
     SmartCourseSelectionProvider provider,
   ) {
-    final theme = FluentTheme.of(context);
-
     return PageHeader(
-      title: Row(
-        children: [
-          const Text('智能排课'),
-          const SizedBox(width: 16),
-          // 学期选择
-          if (provider.termList != null && provider.termList!.isNotEmpty)
-            ComboBox<String>(
-              value: provider.selectedTermCode,
-              items: provider.termList!
-                  .map(
-                    (t) => ComboBoxItem<String>(
-                      value: t.termCode,
-                      child: Text(t.termName),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) async {
-                if (value != null) {
-                  final authProvider = Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  );
-                  final userId = authProvider.credentials?.userId ?? '';
-                  await provider.selectTerm(value, userId);
-                }
-              },
-            ),
-          const SizedBox(width: 16),
-          // 刷新时间
-          Text(
-            '开课数据: ${_formatRefreshTime(provider.courseDataRefreshTime)}',
-            style: theme.typography.caption?.copyWith(
-              color: theme.inactiveColor,
-            ),
-          ),
-        ],
-      ),
+      title: const Text('智能排课', maxLines: 1, overflow: TextOverflow.ellipsis),
       commandBar: CommandBar(
         mainAxisAlignment: MainAxisAlignment.end,
+        compactBreakpointWidth: 720,
         primaryItems: _buildCommandBarItems(context, provider),
       ),
     );
@@ -945,24 +912,151 @@ class _WinUISmartCourseSelectionPageState
       return WinUIEmptyState.noData(title: '暂无数据', description: '正在初始化...');
     }
 
-    // 加载完成 - 三栏布局
+    return Column(
+      children: [
+        _buildTermContextBar(context, provider),
+        const Divider(),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth >= _wideCourseSelectionBreakpoint) {
+                return _buildWideCourseSelectionLayout(context, provider);
+              }
+              return _buildCompactCourseSelectionLayout(context, provider);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTermContextBar(
+    BuildContext context,
+    SmartCourseSelectionProvider provider,
+  ) {
+    final theme = FluentTheme.of(context);
+    final refreshLabel = Text(
+      '开课数据 ${_formatRefreshTime(provider.courseDataRefreshTime)}',
+      style: theme.typography.caption?.copyWith(color: theme.inactiveColor),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final selector = _buildTermSelector(
+            context,
+            provider,
+            isExpanded: constraints.maxWidth < 560,
+          );
+          if (constraints.maxWidth < 560) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [selector, const SizedBox(height: 6), refreshLabel],
+            );
+          }
+          return Row(
+            children: [
+              SizedBox(width: 260, child: selector),
+              const SizedBox(width: 12),
+              Expanded(child: refreshLabel),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTermSelector(
+    BuildContext context,
+    SmartCourseSelectionProvider provider, {
+    required bool isExpanded,
+  }) {
+    final terms = provider.termList;
+    if (terms == null || terms.isEmpty) return const SizedBox.shrink();
+
+    return ComboBox<String>(
+      value: provider.selectedTermCode,
+      isExpanded: isExpanded,
+      items: terms
+          .map(
+            (term) => ComboBoxItem<String>(
+              value: term.termCode,
+              child: Text(
+                term.termName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (value) async {
+        if (value == null) return;
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final userId = authProvider.credentials?.userId ?? '';
+        await provider.selectTerm(value, userId);
+      },
+    );
+  }
+
+  Widget _buildWideCourseSelectionLayout(
+    BuildContext context,
+    SmartCourseSelectionProvider provider,
+  ) {
+    final borderColor = FluentTheme.of(
+      context,
+    ).resources.controlStrokeColorDefault;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 左侧：培养方案树
-        SizedBox(width: 320, child: _buildLeftPanel(context, provider)),
-        Container(
-          width: 1,
-          color: FluentTheme.of(context).resources.controlStrokeColorDefault,
-        ),
-        // 中间：课程表（自适应宽度）
+        SizedBox(width: 300, child: _buildLeftPanel(context, provider)),
+        Container(width: 1, color: borderColor),
         Expanded(child: _buildScheduleView(context, provider)),
-        Container(
-          width: 1,
-          color: FluentTheme.of(context).resources.controlStrokeColorDefault,
-        ),
-        // 右侧：课程信息面板（始终显示）
+        Container(width: 1, color: borderColor),
         SizedBox(width: 360, child: _buildSidePanel(context, provider)),
+      ],
+    );
+  }
+
+  Widget _buildCompactCourseSelectionLayout(
+    BuildContext context,
+    SmartCourseSelectionProvider provider,
+  ) {
+    return TabView(
+      currentIndex: _compactViewIndex,
+      onChanged: (index) => setState(() => _compactViewIndex = index),
+      closeButtonVisibility: CloseButtonVisibilityMode.never,
+      tabWidthBehavior: TabWidthBehavior.equal,
+      minTabWidth: 88,
+      tabs: [
+        Tab(
+          icon: const Icon(FluentIcons.education, size: 14),
+          text: const Text('培养方案'),
+          body: _buildLeftPanel(context, provider),
+        ),
+        Tab(
+          icon: const Icon(FluentIcons.calendar, size: 14),
+          text: const Text('课表'),
+          body: _buildScheduleView(context, provider),
+        ),
+        Tab(
+          icon: const Icon(FluentIcons.search, size: 14),
+          text: const Text('课程'),
+          body: _buildAvailableCoursesList(
+            context,
+            provider,
+            onCourseSelected: () {
+              setState(() => _compactViewIndex = 3);
+            },
+          ),
+        ),
+        Tab(
+          icon: const Icon(FluentIcons.info, size: 14),
+          text: const Text('详情'),
+          body: _buildCourseDetail(context, provider),
+        ),
       ],
     );
   }
@@ -1067,38 +1161,75 @@ class _WinUISmartCourseSelectionPageState
 
     return Column(
       children: [
-        // 标题栏
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(FluentIcons.calendar, size: 16, color: theme.accentColor),
-              const SizedBox(width: 8),
-              Text(
-                provider.usingClassCurriculum
-                    ? '班级课表${provider.classCurriculumName != null ? " · ${provider.classCurriculumName}" : ""}'
-                    : '课程表',
-                style: theme.typography.subtitle,
-              ),
-              const Spacer(),
-              if (provider.usingClassCurriculum)
-                Text(
-                  '共 ${provider.classCurriculumCourses.length} 条课程安排',
-                  style: theme.typography.caption?.copyWith(
-                    color: theme.inactiveColor,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    FluentIcons.calendar,
+                    size: 16,
+                    color: theme.accentColor,
                   ),
-                )
-              else if (schedule != null)
-                Text(
-                  '已选 ${provider.getEffectiveSelectedCourses().length} 门课程，'
-                  '共 ${_calculateEffectiveCredits(provider)} 学分'
-                  '${provider.removedCourses.isNotEmpty ? " (退${provider.removedCourses.length}门)" : ""}'
-                  '${provider.currentSelectedCourses.isNotEmpty ? " (加${provider.currentSelectedCourses.length}门)" : ""}',
-                  style: theme.typography.caption?.copyWith(
-                    color: theme.inactiveColor,
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      provider.usingClassCurriculum
+                          ? '班级课表${provider.classCurriculumName != null ? " · ${provider.classCurriculumName}" : ""}'
+                          : '课程表',
+                      style: theme.typography.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-            ],
+                ],
+              );
+              final summary = provider.usingClassCurriculum
+                  ? '共 ${provider.classCurriculumCourses.length} 条课程安排'
+                  : schedule != null
+                  ? '已选 ${provider.getEffectiveSelectedCourses().length} 门课程，'
+                        '共 ${_calculateEffectiveCredits(provider)} 学分'
+                        '${provider.removedCourses.isNotEmpty ? " (退${provider.removedCourses.length}门)" : ""}'
+                        '${provider.currentSelectedCourses.isNotEmpty ? " (加${provider.currentSelectedCourses.length}门)" : ""}'
+                  : null;
+              final summaryText = summary == null
+                  ? null
+                  : Text(
+                      summary,
+                      style: theme.typography.caption?.copyWith(
+                        color: theme.inactiveColor,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: constraints.maxWidth < 520
+                          ? TextAlign.start
+                          : TextAlign.end,
+                    );
+
+              if (constraints.maxWidth < 520) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    title,
+                    if (summaryText != null) ...[
+                      const SizedBox(height: 4),
+                      summaryText,
+                    ],
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  if (summaryText != null) ...[
+                    const SizedBox(width: 12),
+                    Flexible(child: summaryText),
+                  ],
+                ],
+              );
+            },
           ),
         ),
         const Divider(),
@@ -1153,42 +1284,56 @@ class _WinUISmartCourseSelectionPageState
     const double headerHeight = 32.0;
     const double sessionColumnWidth = 28.0;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final availableWidth = constraints.maxWidth - sessionColumnWidth;
-          final cellWidth = availableWidth / 7;
+    return LayoutBuilder(
+      builder: (context, viewportConstraints) {
+        final contentWidth =
+            viewportConstraints.maxWidth < _minimumScheduleGridWidth
+            ? _minimumScheduleGridWidth
+            : viewportConstraints.maxWidth;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: contentWidth,
+            height: viewportConstraints.maxHeight,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(8),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableWidth =
+                      constraints.maxWidth - sessionColumnWidth;
+                  final cellWidth = availableWidth / 7;
 
-          return SizedBox(
-            height: headerHeight + cellHeight * sessions,
-            child: Stack(
-              children: [
-                // 背景网格
-                _buildGridBackground(
-                  context,
-                  provider,
-                  weekdays,
-                  sessions,
-                  cellWidth,
-                  cellHeight,
-                  headerHeight,
-                  sessionColumnWidth,
-                ),
-                // 课程卡片
-                ..._buildCourseCards(
-                  context,
-                  provider,
-                  cellWidth,
-                  cellHeight,
-                  headerHeight,
-                  sessionColumnWidth,
-                ),
-              ],
+                  return SizedBox(
+                    height: headerHeight + cellHeight * sessions,
+                    child: Stack(
+                      children: [
+                        _buildGridBackground(
+                          context,
+                          provider,
+                          weekdays,
+                          sessions,
+                          cellWidth,
+                          cellHeight,
+                          headerHeight,
+                          sessionColumnWidth,
+                        ),
+                        ..._buildCourseCards(
+                          context,
+                          provider,
+                          cellWidth,
+                          cellHeight,
+                          headerHeight,
+                          sessionColumnWidth,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1567,37 +1712,47 @@ class _WinUISmartCourseSelectionPageState
           border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
         ),
         padding: const EdgeInsets.all(3),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    course.kcm ?? '',
-                    style: theme.typography.caption?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                      fontSize: 10,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(FluentIcons.add_event, size: 10, color: Colors.green),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              course.jasm ?? '',
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final courseName = Text(
+              course.kcm ?? '',
               style: theme.typography.caption?.copyWith(
-                fontSize: 8,
-                color: theme.inactiveColor,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+                fontSize: 10,
               ),
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-            ),
-          ],
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (constraints.maxWidth >= 44)
+                  Row(
+                    children: [
+                      Expanded(child: courseName),
+                      Icon(
+                        FluentIcons.add_event,
+                        size: 10,
+                        color: Colors.green,
+                      ),
+                    ],
+                  )
+                else
+                  courseName,
+                const Spacer(),
+                Text(
+                  course.jasm ?? '',
+                  style: theme.typography.caption?.copyWith(
+                    fontSize: 8,
+                    color: theme.inactiveColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -2019,8 +2174,9 @@ class _WinUISmartCourseSelectionPageState
   /// 构建课程检索与当前时间段的可选课程列表。
   Widget _buildAvailableCoursesList(
     BuildContext context,
-    SmartCourseSelectionProvider provider,
-  ) {
+    SmartCourseSelectionProvider provider, {
+    VoidCallback? onCourseSelected,
+  }) {
     final theme = FluentTheme.of(context);
     final selectedDay = provider.selectedDay;
     final selectedSession = provider.selectedSession;
@@ -2142,6 +2298,7 @@ class _WinUISmartCourseSelectionPageState
                       context,
                       provider,
                       courses[index],
+                      onCourseSelected: onCourseSelected,
                     );
                   },
                 ),
@@ -2174,8 +2331,9 @@ class _WinUISmartCourseSelectionPageState
   Widget _buildCourseResultTile(
     BuildContext context,
     SmartCourseSelectionProvider provider,
-    CourseScheduleRecord course,
-  ) {
+    CourseScheduleRecord course, {
+    VoidCallback? onCourseSelected,
+  }) {
     final theme = FluentTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final courseKey = '${course.kch}_${course.kxh}';
@@ -2284,7 +2442,10 @@ class _WinUISmartCourseSelectionPageState
             ],
           ),
         ),
-        onPressed: () => provider.selectCourse(course),
+        onPressed: () {
+          provider.selectCourse(course);
+          onCourseSelected?.call();
+        },
       ),
     );
   }
