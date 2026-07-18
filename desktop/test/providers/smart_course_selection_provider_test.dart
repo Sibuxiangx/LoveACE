@@ -247,6 +247,84 @@ void main() {
       expect(identical(first, filtered), isFalse);
       expect(filtered.map((item) => item.kxh), const ['02']);
     });
+
+    test(
+      'searches course metadata and composes with existing filters',
+      () async {
+        final provider = SmartCourseSelectionProvider(
+          _fakeJwcService(
+            availableCourses: [
+              course('ADD', '01', name: '数据结构', teacher: '张老师', campus: '东校区'),
+              course(
+                'CLASS',
+                '02',
+                name: '数据分析',
+                teacher: '李老师',
+                campus: '西校区',
+              ),
+            ],
+          ),
+        );
+        await provider.initialize(userId);
+
+        provider.setCourseSearchQuery('数据 张老师');
+        expect(provider.filteredAvailableCourses.map(courseKey), ['ADD_01']);
+
+        provider.setCourseSearchQuery('数据');
+        provider.setFilter(campus: '西校区');
+        expect(provider.filteredAvailableCourses.map(courseKey), ['CLASS_02']);
+
+        provider.setFilter(campus: '');
+        provider.setCourseSearchQuery('class 02');
+        expect(provider.filteredAvailableCourses.map(courseKey), ['CLASS_02']);
+      },
+    );
+
+    test(
+      'groups multi-session search results by course selection key',
+      () async {
+        final provider = SmartCourseSelectionProvider(
+          _fakeJwcService(
+            availableCourses: [
+              course('ADD', '01', name: '高级程序设计', startSession: 1),
+              course('ADD', '01', name: '高级程序设计', startSession: 3),
+              course('ADD', '02', name: '高级程序设计', startSession: 5),
+            ],
+          ),
+        );
+        await provider.initialize(userId);
+
+        provider.setCourseSearchQuery('高级程序');
+
+        expect(provider.filteredAvailableCourses, hasLength(3));
+        expect(provider.visibleCourseResults.map(courseKey), [
+          'ADD_01',
+          'ADD_02',
+        ]);
+      },
+    );
+
+    test('switches between time-slot and all-term search results', () async {
+      final provider = SmartCourseSelectionProvider(
+        _fakeJwcService(
+          availableCourses: [
+            course('ADD', '01', name: '程序设计', startSession: 1),
+            course('CLASS', '01', name: '程序设计', startSession: 5),
+          ],
+        ),
+      );
+      await provider.initialize(userId);
+      provider.setCourseSearchQuery('程序设计');
+
+      provider.selectTimeSlot(1, 1);
+      expect(provider.visibleCourseResults.map(courseKey), ['ADD_01']);
+
+      provider.clearSelectedTimeSlot();
+      expect(provider.visibleCourseResults.map(courseKey), [
+        'ADD_01',
+        'CLASS_01',
+      ]);
+    });
   });
 }
 
@@ -272,11 +350,14 @@ CourseScheduleRecord course(
   String sequence, {
   int startSession = 1,
   String? campus,
+  String? name,
+  String? teacher,
 }) {
   return CourseScheduleRecord(
     kch: code,
     kxh: sequence,
-    kcm: '$code-$sequence',
+    kcm: name ?? '$code-$sequence',
+    skjs: teacher,
     skxq: 1,
     skjc: startSession,
     cxjc: 2,

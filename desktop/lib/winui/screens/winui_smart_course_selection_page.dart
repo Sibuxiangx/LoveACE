@@ -235,6 +235,9 @@ class WinUISmartCourseSelectionPage extends StatefulWidget {
 class _WinUISmartCourseSelectionPageState
     extends State<WinUISmartCourseSelectionPage>
     with UserScopeDataLoader<WinUISmartCourseSelectionPage> {
+  final TextEditingController _courseSearchController = TextEditingController();
+  bool _showCourseFilters = false;
+
   @override
   bool get isUserScopeReady =>
       Provider.of<SmartCourseSelectionProvider?>(context, listen: false) !=
@@ -242,6 +245,12 @@ class _WinUISmartCourseSelectionPageState
 
   @override
   void loadUserScopeData() => _initializeData();
+
+  @override
+  void dispose() {
+    _courseSearchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _initializeData() async {
     if (!mounted) return;
@@ -252,6 +261,8 @@ class _WinUISmartCourseSelectionPageState
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (provider == null) return;
 
+    _courseSearchController.clear();
+    provider.clearCourseSearch();
     final userId = authProvider.credentials?.userId ?? '';
     await provider.initialize(userId);
   }
@@ -2005,251 +2016,312 @@ class _WinUISmartCourseSelectionPageState
     );
   }
 
-  /// 构建可选课程列表（显示选中时间段的可选课程）
+  /// 构建课程检索与当前时间段的可选课程列表。
   Widget _buildAvailableCoursesList(
     BuildContext context,
     SmartCourseSelectionProvider provider,
   ) {
     final theme = FluentTheme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final selectedDay = provider.selectedDay;
     final selectedSession = provider.selectedSession;
-
-    // 获取选中时间段的可选课程
-    List<CourseScheduleRecord> courses = [];
-    String title = '可选课程';
-
-    if (selectedDay != null && selectedSession != null) {
-      courses = provider.getCoursesForTimeSlot(selectedDay, selectedSession);
-      const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      title = '${weekdays[selectedDay]} 第$selectedSession节 可选课程';
-    }
+    final hasTimeSlot = selectedDay != null && selectedSession != null;
+    final courses = provider.visibleCourseResults;
+    const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final title = hasTimeSlot
+        ? '${weekdays[selectedDay]} 第$selectedSession节'
+        : provider.hasCourseSearchQuery
+        ? '全学期课程'
+        : '可选课程';
+    final showResultCount = hasTimeSlot || provider.hasCourseSearchQuery;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 标题栏
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
           child: Row(
             children: [
               Icon(FluentIcons.library, size: 16, color: theme.accentColor),
               const SizedBox(width: 8),
               Expanded(child: Text(title, style: theme.typography.subtitle)),
-              if (courses.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${courses.length} 门',
-                    style: theme.typography.caption?.copyWith(
-                      color: Colors.green,
-                    ),
+              if (showResultCount)
+                Text(
+                  '${courses.length} 门',
+                  style: theme.typography.caption?.copyWith(
+                    color: theme.inactiveColor,
                   ),
                 ),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: _showCourseFilters ? '收起筛选' : '展开筛选',
+                child: IconButton(
+                  icon: Icon(
+                    FluentIcons.filter,
+                    size: 14,
+                    color: _showCourseFilters
+                        ? theme.accentColor
+                        : theme.inactiveColor,
+                  ),
+                  onPressed: () {
+                    setState(() => _showCourseFilters = !_showCourseFilters);
+                  },
+                ),
+              ),
             ],
           ),
         ),
-        // 筛选控件
-        _buildFilterControls(context, provider),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: TextBox(
+            controller: _courseSearchController,
+            placeholder: '搜索课程、教师或课程号',
+            prefix: const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Icon(FluentIcons.search, size: 14),
+            ),
+            suffix: provider.hasCourseSearchQuery
+                ? Tooltip(
+                    message: '清除搜索',
+                    child: IconButton(
+                      icon: const Icon(FluentIcons.clear, size: 12),
+                      onPressed: () {
+                        _courseSearchController.clear();
+                        provider.clearCourseSearch();
+                      },
+                    ),
+                  )
+                : null,
+            onChanged: provider.setCourseSearchQuery,
+          ),
+        ),
+        if (hasTimeSlot)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Button(
+                onPressed: provider.clearSelectedTimeSlot,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(FluentIcons.calendar, size: 12),
+                    SizedBox(width: 6),
+                    Text('取消时段'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (_showCourseFilters)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _buildFilterControls(context, provider),
+          )
+        else
+          _buildFilterSummary(context, provider),
+        const SizedBox(height: 6),
         const Divider(),
-        // 课程列表
         Expanded(
-          child: selectedDay == null || selectedSession == null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        FluentIcons.touch_pointer,
-                        size: 40,
-                        color: theme.inactiveColor,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '点击课程表空白处\n查看该时间段可选课程',
-                        textAlign: TextAlign.center,
-                        style: theme.typography.body?.copyWith(
-                          color: theme.inactiveColor,
-                        ),
-                      ),
-                    ],
-                  ),
+          child: !hasTimeSlot && !provider.hasCourseSearchQuery
+              ? _buildCourseResultEmptyState(
+                  context,
+                  FluentIcons.calendar_week,
+                  '未选择时间段',
                 )
               : courses.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        FluentIcons.sad,
-                        size: 40,
-                        color: theme.inactiveColor,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '该时间段暂无可选课程',
-                        textAlign: TextAlign.center,
-                        style: theme.typography.body?.copyWith(
-                          color: theme.inactiveColor,
-                        ),
-                      ),
-                    ],
-                  ),
+              ? _buildCourseResultEmptyState(
+                  context,
+                  FluentIcons.search_issue,
+                  provider.hasCourseSearchQuery ? '未找到相关课程' : '暂无可选课程',
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
                   itemCount: courses.length,
                   itemBuilder: (context, index) {
-                    final course = courses[index];
-                    final isSelected = provider.currentSelectedCourses.contains(
-                      '${course.kch}_${course.kxh}',
-                    );
-                    final hasConflict = provider.checkConflict(course);
-                    final planPath = provider.getCoursePlanPath(course.kch);
-                    final isPassed = provider.isCoursePassed(course.kch);
-                    final score = provider.getCourseScore(course.kch);
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ListTile.selectable(
-                        selected:
-                            provider.selectedCourse?.kch == course.kch &&
-                            provider.selectedCourse?.kxh == course.kxh,
-                        leading: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isPassed
-                                ? (isDark ? Colors.teal.light : Colors.teal)
-                                : (isSelected
-                                      ? Colors.green
-                                      : (hasConflict
-                                            ? Colors.orange
-                                            : Colors.grey)),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                course.kcm ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: isPassed
-                                    ? theme.typography.body?.copyWith(
-                                        color: theme.inactiveColor,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                            if (isPassed)
-                              Container(
-                                margin: const EdgeInsets.only(left: 8),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color:
-                                      (isDark ? Colors.teal.light : Colors.teal)
-                                          .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '已修${score != null ? " $score" : ""}',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: isDark
-                                        ? Colors.teal.light
-                                        : Colors.teal,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${course.kxh ?? ''} | ${course.skjs ?? ''} | ${course.xqm ?? ''}',
-                              style: theme.typography.caption?.copyWith(
-                                color: isPassed ? theme.inactiveColor : null,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (planPath != null)
-                              Text(
-                                planPath,
-                                style: theme.typography.caption?.copyWith(
-                                  color: isPassed
-                                      ? theme.inactiveColor
-                                      : (isDark
-                                            ? Colors.blue.light
-                                            : Colors.blue),
-                                  fontSize: 10,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            // 显示选课备注（如果有）
-                            if (!isPassed &&
-                                course.xkbz != null &&
-                                course.xkbz!.isNotEmpty)
-                              Text(
-                                course.xkbz!,
-                                style: theme.typography.caption?.copyWith(
-                                  color: isDark
-                                      ? Colors.blue.light
-                                      : Colors.blue,
-                                  fontSize: 10,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '${course.xf ?? 0}学分',
-                              style: theme.typography.caption?.copyWith(
-                                color: isPassed ? theme.inactiveColor : null,
-                              ),
-                            ),
-                            if (!isPassed)
-                              Text(
-                                '余${_getActualCapacity(course)}',
-                                style: theme.typography.caption?.copyWith(
-                                  color: _getActualCapacityInt(course) > 0
-                                      ? (isDark
-                                            ? Colors.green.light
-                                            : Colors.green)
-                                      : Colors.red,
-                                  fontSize: 10,
-                                ),
-                              ),
-                          ],
-                        ),
-                        onPressed: () {
-                          provider.selectCourse(course);
-                        },
-                      ),
+                    return _buildCourseResultTile(
+                      context,
+                      provider,
+                      courses[index],
                     );
                   },
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCourseResultEmptyState(
+    BuildContext context,
+    IconData icon,
+    String message,
+  ) {
+    final theme = FluentTheme.of(context);
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 32, color: theme.inactiveColor),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            style: theme.typography.body?.copyWith(color: theme.inactiveColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCourseResultTile(
+    BuildContext context,
+    SmartCourseSelectionProvider provider,
+    CourseScheduleRecord course,
+  ) {
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final courseKey = '${course.kch}_${course.kxh}';
+    final records = provider.getAvailableCourseRecordsByKey(courseKey);
+    final scheduleText = records
+        .map((record) => record.scheduleDescription)
+        .where((description) => description.isNotEmpty)
+        .toSet()
+        .join('；');
+    final isInSchedule = provider.isCourseInSchedule(courseKey);
+    final isPassed = provider.isCoursePassed(course.kch);
+    final hasConflict = !isInSchedule && !isPassed
+        ? provider.checkConflict(course)
+        : false;
+    final score = provider.getCourseScore(course.kch);
+    final statusColor = isPassed
+        ? (isDark ? Colors.teal.light : Colors.teal)
+        : isInSchedule
+        ? Colors.green
+        : hasConflict
+        ? Colors.orange
+        : theme.inactiveColor;
+    final metadata = [
+      course.kch,
+      if ((course.kxh ?? '').isNotEmpty) '课序 ${course.kxh}',
+      course.skjs,
+      course.xqm,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: ListTile.selectable(
+        selected:
+            provider.selectedCourse?.kch == course.kch &&
+            provider.selectedCourse?.kxh == course.kxh,
+        leading: Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: statusColor),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                course.kcm ?? course.kch ?? '未知课程',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: isPassed
+                    ? theme.typography.body?.copyWith(
+                        color: theme.inactiveColor,
+                      )
+                    : theme.typography.bodyStrong,
+              ),
+            ),
+            if (isPassed)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Text(
+                  '已修${score != null ? " $score" : ""}',
+                  style: theme.typography.caption?.copyWith(color: statusColor),
+                ),
+              ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (metadata.isNotEmpty)
+              Text(
+                metadata,
+                style: theme.typography.caption?.copyWith(
+                  color: isPassed ? theme.inactiveColor : null,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (scheduleText.isNotEmpty)
+              Text(
+                scheduleText,
+                style: theme.typography.caption?.copyWith(
+                  color: theme.inactiveColor,
+                  fontSize: 10,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+        trailing: SizedBox(
+          width: 48,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('${course.xf ?? 0}学分', style: theme.typography.caption),
+              if (!isPassed)
+                Text(
+                  '余${_getActualCapacity(course)}',
+                  style: theme.typography.caption?.copyWith(
+                    color: _getActualCapacityInt(course) > 0
+                        ? (isDark ? Colors.green.light : Colors.green)
+                        : Colors.red,
+                    fontSize: 10,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        onPressed: () => provider.selectCourse(course),
+      ),
+    );
+  }
+
+  Widget _buildFilterSummary(
+    BuildContext context,
+    SmartCourseSelectionProvider provider,
+  ) {
+    final theme = FluentTheme.of(context);
+    final filters = <String>[
+      if (provider.filterCampus != null) provider.filterCampus!,
+      if (provider.filterPlanOnly) '计划内',
+      if (provider.filterOutOfPlanOnly) '计划外',
+      if (provider.filterHidePassed) '隐藏已修',
+      if (provider.filterHideCompletedCategory) '隐藏已完成分类',
+    ];
+    if (filters.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: Row(
+        children: [
+          Icon(FluentIcons.filter_solid, size: 10, color: theme.inactiveColor),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              filters.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.typography.caption?.copyWith(
+                color: theme.inactiveColor,
+                fontSize: 10,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

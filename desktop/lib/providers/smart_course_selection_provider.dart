@@ -99,6 +99,9 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   /// 筛选：隐藏已完成分类的课程
   bool _filterHideCompletedCategory = true;
 
+  /// 当前课程检索关键词，仅在页面生命周期内保留。
+  String _courseSearchQuery = '';
+
   /// 培养方案课程代码集合（用于快速查找）
   final Set<String> _planCourseCodes = {};
 
@@ -124,6 +127,9 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   List<CourseScheduleRecord>? _filteredCoursesCache;
   Map<(int, int), List<CourseScheduleRecord>> _filteredCoursesByTimeSlotCache =
       const {};
+  List<CourseScheduleRecord>? _groupedFilteredCoursesCache;
+  Map<(int, int), List<CourseScheduleRecord>>
+  _groupedFilteredCoursesByTimeSlotCache = const {};
 
   /// 加载进度：已完成页数
   int _loadingProgressCompleted = 0;
@@ -169,6 +175,8 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   bool get filterOutOfPlanOnly => _filterOutOfPlanOnly;
   bool get filterHidePassed => _filterHidePassed;
   bool get filterHideCompletedCategory => _filterHideCompletedCategory;
+  String get courseSearchQuery => _courseSearchQuery;
+  bool get hasCourseSearchQuery => _courseSearchQuery.isNotEmpty;
   int? get selectedDay => _selectedDay;
   int? get selectedSession => _selectedSession;
   bool get usingClassCurriculum => _usingClassCurriculum;
@@ -223,6 +231,7 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     _selectedSession = null;
     _usingClassCurriculum = false;
     _classCurriculumName = null;
+    _courseSearchQuery = '';
     _planCourseCodes.clear();
     _courseCodeToPlanPath.clear();
     _courseCodeToPassed.clear();
@@ -885,11 +894,15 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     _availableCampuses = const [];
     _filteredCoursesCache = null;
     _filteredCoursesByTimeSlotCache = const {};
+    _groupedFilteredCoursesCache = null;
+    _groupedFilteredCoursesByTimeSlotCache = const {};
   }
 
   void _invalidateFilteredCoursesCache() {
     _filteredCoursesCache = null;
     _filteredCoursesByTimeSlotCache = const {};
+    _groupedFilteredCoursesCache = null;
+    _groupedFilteredCoursesByTimeSlotCache = const {};
   }
 
   void _rebuildAvailableCourseIndexes() {
@@ -1104,6 +1117,24 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearSelectedTimeSlot() {
+    if (_selectedDay == null && _selectedSession == null) return;
+    _selectedDay = null;
+    _selectedSession = null;
+    notifyListeners();
+  }
+
+  /// 更新课程检索关键词。
+  void setCourseSearchQuery(String query) {
+    final normalized = query.trim();
+    if (_courseSearchQuery == normalized) return;
+    _courseSearchQuery = normalized;
+    _invalidateFilteredCoursesCache();
+    notifyListeners();
+  }
+
+  void clearCourseSearch() => setCourseSearchQuery('');
+
   /// 设置筛选条件
   void setFilter({
     String? campus,
@@ -1140,6 +1171,55 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     _filterHideCompletedCategory = true;
     _invalidateFilteredCoursesCache();
     notifyListeners();
+  }
+
+  bool _matchesCourseSearch(CourseScheduleRecord course) {
+    if (!hasCourseSearchQuery) return true;
+
+    final searchableText = [
+      course.kcm,
+      course.kch,
+      course.kxh,
+      course.skjs,
+      course.xqm,
+      course.kkxqm,
+      course.kkxsjc,
+      course.kclbmc,
+      course.xkbz,
+      course.mxbj,
+      course.jxlm,
+      course.jasm,
+    ].whereType<String>().join('\n').toLowerCase();
+    final tokens = _courseSearchQuery
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((token) => token.isNotEmpty);
+    return tokens.every(searchableText.contains);
+  }
+
+  int _courseSearchRank(CourseScheduleRecord course) {
+    if (!hasCourseSearchQuery) return 0;
+    final query = _courseSearchQuery.toLowerCase();
+    final code = (course.kch ?? '').toLowerCase();
+    final sequence = (course.kxh ?? '').toLowerCase();
+    final name = (course.kcm ?? '').toLowerCase();
+    final teacher = (course.skjs ?? '').toLowerCase();
+    final key = '${code}_$sequence';
+
+    if (code == query || key == query) return 0;
+    if (name == query) return 1;
+    if (code.startsWith(query) || name.startsWith(query)) return 2;
+    if (teacher.startsWith(query)) return 3;
+    return 4;
+  }
+
+  List<CourseScheduleRecord> _groupCourseRecords(
+    Iterable<CourseScheduleRecord> courses,
+  ) {
+    final seen = <String>{};
+    return List.unmodifiable(
+      courses.where((course) => seen.add(_courseKeyFromRecord(course))),
+    );
   }
 
   /// 初始化课表快照（首次加载或用户确认重置时调用）
@@ -1361,14 +1441,25 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
       courses = courses.where((c) => c.xqm == _filterCampus).toList();
     }
 
-    // 排序：未修优先，然后按课程名排序
+    if (hasCourseSearchQuery) {
+      courses = courses.where(_matchesCourseSearch).toList();
+    }
+
+    // 排序：检索匹配度优先，其次未修优先，最后按课程名和课序号排序。
     courses.sort((a, b) {
+      final rankComparison = _courseSearchRank(
+        a,
+      ).compareTo(_courseSearchRank(b));
+      if (rankComparison != 0) return rankComparison;
+
       final aIsPassed = isCoursePassed(a.kch);
       final bIsPassed = isCoursePassed(b.kch);
       if (aIsPassed != bIsPassed) {
         return aIsPassed ? 1 : -1; // 未修优先
       }
-      return (a.kcm ?? '').compareTo(b.kcm ?? '');
+      final nameComparison = (a.kcm ?? '').compareTo(b.kcm ?? '');
+      if (nameComparison != 0) return nameComparison;
+      return (a.kxh ?? '').compareTo(b.kxh ?? '');
     });
 
     final result = List<CourseScheduleRecord>.unmodifiable(courses);
@@ -1389,6 +1480,11 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
       for (final entry in byTimeSlot.entries)
         entry.key: List.unmodifiable(entry.value),
     };
+    _groupedFilteredCoursesCache = _groupCourseRecords(result);
+    _groupedFilteredCoursesByTimeSlotCache = {
+      for (final entry in byTimeSlot.entries)
+        entry.key: _groupCourseRecords(entry.value),
+    };
     return result;
   }
 
@@ -1403,6 +1499,22 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   List<CourseScheduleRecord> getCoursesForTimeSlot(int day, int session) {
     filteredAvailableCourses;
     return _filteredCoursesByTimeSlotCache[(day, session)] ?? const [];
+  }
+
+  /// 页面课程结果：有时间段时显示该时间段，否则仅在检索时显示全学期结果。
+  List<CourseScheduleRecord> get visibleCourseResults {
+    filteredAvailableCourses;
+    if (_selectedDay != null && _selectedSession != null) {
+      return _groupedFilteredCoursesByTimeSlotCache[(
+            _selectedDay!,
+            _selectedSession!,
+          )] ??
+          const [];
+    }
+    if (hasCourseSearchQuery) {
+      return _groupedFilteredCoursesCache ?? const [];
+    }
+    return const [];
   }
 
   /// 检查课程是否在当前学期有开课
