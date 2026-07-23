@@ -11,6 +11,7 @@ on:
         options:
           - bootstrap
           - deploy-page
+          - clear-notice
 
 jobs:
   deploy:
@@ -49,4 +50,16 @@ jobs:
           S3_REGION: ${{ secrets.S3_REGION }}
           CDN_BASE_URL: https://release.loveace.top
         run: uv run python cli.py deploy-page
+        working-directory: utils/manifest_v2
+
+      - name: Clear download notice
+        if: ${{ inputs.action == 'clear-notice' }}
+        env:
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          CDN_BASE_URL: https://release.loveace.top
+        run: uv run python cli.py clear-notice
         working-directory: utils/manifest_v2
