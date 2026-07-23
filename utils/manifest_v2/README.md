@@ -9,8 +9,8 @@ publisher derives the legacy OTA document required by shipped clients.
 | --- | --- |
 | `loveace/manifest_v2.json` | Canonical v2 manifest |
 | `loveace/manifest.json` | Legacy OTA projection |
-| `loveace/download.html` | Legacy download page |
-| `loveace/download_page_v2.html` | Manifest v2 download page |
+| `loveace/download.html` | Canonical manifest v2 download page |
+| `loveace/download_page_v2.html` | Alias of the manifest v2 download page |
 
 Native release URLs must use `https://release.loveace.top`. The publisher
 rejects any other `CDN_BASE_URL` and stores immutable artifacts under:

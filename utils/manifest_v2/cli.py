@@ -415,11 +415,11 @@ def status():
 
 @app.command()
 def deploy_page():
-    """Deploy both download pages and the shared favicon."""
+    """Deploy the v2 download page to its canonical path and alias."""
     client = S3Client()
     base_path = Path(__file__).parent
     assets = [
-        (base_path / "download.html", DOWNLOAD_PAGE_KEY),
+        (base_path / "download_page_v2.html", DOWNLOAD_PAGE_KEY),
         (base_path / "download_page_v2.html", DOWNLOAD_PAGE_V2_KEY),
         (base_path / "favicon.png", FAVICON_KEY),
         (
