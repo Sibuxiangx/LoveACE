@@ -603,7 +603,10 @@
     </main>
 
     <script>
-        const MANIFEST_URL = './manifest_v2.json';
+        const MANIFEST_URLS = [
+            'https://loveace.linota.cn/loveace/manifest_v2.json',
+            'https://release.loveace.top/loveace/manifest_v2.json'
+        ];
         const PLATFORM_INFO = {
             android: {
                 name: 'Android',
@@ -839,12 +842,23 @@
             error.hidden = true;
             content.hidden = true;
             try {
-                const response = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
-                if (!response.ok) throw new Error(`发布源返回 HTTP ${response.status}`);
-                const data = await response.json();
-                if (data.schema_version !== 2 || !data.platforms || !data.semester) {
-                    throw new Error('发布信息格式不受支持');
+                let data = null;
+                let lastError = null;
+                for (const url of MANIFEST_URLS) {
+                    try {
+                        const response = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+                        if (!response.ok) throw new Error(`发布源返回 HTTP ${response.status}`);
+                        const candidate = await response.json();
+                        if (candidate.schema_version !== 2 || !candidate.platforms || !candidate.semester) {
+                            throw new Error('发布信息格式不受支持');
+                        }
+                        data = candidate;
+                        break;
+                    } catch (reason) {
+                        lastError = reason;
+                    }
                 }
+                if (!data) throw lastError || new Error('没有可用的发布源');
                 manifest = data;
                 const available = Object.keys(PLATFORM_INFO).filter(platform => latestRelease(platform));
                 if (!available.length) throw new Error('当前没有可用客户端');

@@ -530,7 +530,10 @@
     </div>
 
     <script>
-        const MANIFEST_URL = './manifest.json';
+        const MANIFEST_URLS = [
+            'https://loveace.linota.cn/loveace/manifest.json',
+            'https://release.loveace.top/loveace/manifest.json'
+        ];
         const IOS_TESTFLIGHT_URL = 'https://testflight.apple.com/join/V2KrVbYZ';
 
         const PLATFORMS = {
@@ -551,19 +554,28 @@
             content.style.display = 'none';
 
             try {
-                // 添加时间戳防止缓存
                 const cacheBuster = `?t=${Date.now()}`;
-                const res = await fetch(MANIFEST_URL + cacheBuster, {
-                    cache: 'no-store',
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
+                let data = null;
+                let lastError = null;
+                for (const url of MANIFEST_URLS) {
+                    try {
+                        const res = await fetch(url + cacheBuster, {
+                            cache: 'no-store',
+                            headers: {
+                                'Cache-Control': 'no-cache',
+                                'Pragma': 'no-cache'
+                            }
+                        });
+                        if (!res.ok) throw new Error(`发布源返回 HTTP ${res.status}`);
+                        const candidate = await res.json();
+                        if (!candidate.ota) throw new Error('暂无可用版本');
+                        data = candidate;
+                        break;
+                    } catch (reason) {
+                        lastError = reason;
                     }
-                });
-                if (!res.ok) throw new Error('网络请求失败');
-                
-                const data = await res.json();
-                if (!data.ota) throw new Error('暂无可用版本');
+                }
+                if (!data) throw lastError || new Error('没有可用的发布源');
 
                 render(data.ota);
                 loading.style.display = 'none';

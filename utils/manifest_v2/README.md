@@ -19,6 +19,12 @@ rejects any other `CDN_BASE_URL` and stores immutable artifacts under:
 loveace/releases/<platform>/<version>/<build>/<filename>
 ```
 
+Consumers read metadata from
+`https://loveace.linota.cn/loveace/manifest_v2.json` first and fall back to
+`https://release.loveace.top/loveace/manifest_v2.json`. This EdgeOne-first
+policy applies only to metadata; native artifact URLs remain on the canonical
+release host.
+
 `semesters.json` in this directory is the authoring source for the nested v2
 semester section. The existing Aliyun OSS semester endpoint remains online but
 is no longer updated by this repository.

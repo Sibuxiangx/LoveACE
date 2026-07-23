@@ -18,8 +18,14 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-private const val MANIFEST_V2_URL = "https://release.loveace.top/loveace/manifest_v2.json"
-internal const val LEGACY_OTA_URL = "https://loveace.linota.cn/loveace/manifest.json"
+private val MANIFEST_V2_URLS = listOf(
+    "https://loveace.linota.cn/loveace/manifest_v2.json",
+    "https://release.loveace.top/loveace/manifest_v2.json",
+)
+private val LEGACY_OTA_URLS = listOf(
+    "https://loveace.linota.cn/loveace/manifest.json",
+    "https://release.loveace.top/loveace/manifest.json",
+)
 private const val LEGACY_SEMESTER_URL =
     "https://loveace-semsync.oss-cn-beijing.aliyuncs.com/loveace/semesters.json"
 
@@ -104,13 +110,17 @@ private data class SemesterCachePayload(
 
 object RemoteManifestService {
     suspend fun fetchManifestV2(): ManifestV2 = withContext(Dispatchers.IO) {
-        val manifest = remoteManifestJson.decodeFromString<ManifestV2>(readUrl(MANIFEST_V2_URL))
-        require(manifest.schemaVersion == 2) { "不支持的远程配置版本" }
-        manifest
+        fetchWithFallback(MANIFEST_V2_URLS) { raw ->
+            remoteManifestJson.decodeFromString<ManifestV2>(raw).also { manifest ->
+                require(manifest.schemaVersion == 2) { "不支持的远程配置版本" }
+            }
+        }
     }
 
     suspend fun fetchLegacyOta(): OtaManifest = withContext(Dispatchers.IO) {
-        remoteManifestJson.decodeFromString<OtaManifest>(readUrl(LEGACY_OTA_URL))
+        fetchWithFallback(LEGACY_OTA_URLS) { raw ->
+            remoteManifestJson.decodeFromString<OtaManifest>(raw)
+        }
     }
 
     suspend fun fetchSemesterJson(): String = withContext(Dispatchers.IO) {
@@ -164,5 +174,22 @@ object RemoteManifestService {
                 }
             }
         })
+    }
+
+    private suspend fun <T> fetchWithFallback(
+        urls: List<String>,
+        decode: (String) -> T,
+    ): T {
+        var lastError: Exception? = null
+        for (url in urls) {
+            try {
+                return decode(readUrl(url))
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+        throw lastError ?: IOException("没有可用的远程配置地址")
     }
 }
