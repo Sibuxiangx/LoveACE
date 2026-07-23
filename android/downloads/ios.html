@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
     <title>LoveACE iOS 说明</title>
-    <link rel="icon" type="image/png" href="../tools/publish/favicon.png">
+    <link rel="icon" type="image/png" href="../../utils/manifest_v2/favicon.png">
     <style>
         * {
             box-sizing: border-box;
@@ -250,7 +250,7 @@
             <div class="header">
                 <div class="brand" aria-label="LoveACE">
                     <div class="logo-wrap">
-                        <img class="logo" src="../tools/publish/favicon.png" alt="LoveACE">
+                        <img class="logo" src="../../utils/manifest_v2/favicon.png" alt="LoveACE">
                         <svg class="logo-fallback" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                     </div>
                     <div class="brand-text">
@@ -284,7 +284,7 @@
     <script>
         const logo = document.querySelector('.logo');
         const logoFallback = document.querySelector('.logo-fallback');
-        const remoteLogo = 'https://release-oss.loveace.tech/loveace/favicon.png';
+        const remoteLogo = 'https://release.loveace.top/loveace/favicon.png';
 
         logo.addEventListener('error', () => {
             if (logo.dataset.remoteTried) {

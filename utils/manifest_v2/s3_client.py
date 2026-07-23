@@ -2,10 +2,12 @@ import json
 import mimetypes
 import opendal
 from config import get_settings
+from manifest import CANONICAL_RELEASE_HOST
 
 
 # 添加 APK 的 MIME 类型
 mimetypes.add_type("application/vnd.android.package-archive", ".apk")
+CANONICAL_CDN_BASE_URL = f"https://{CANONICAL_RELEASE_HOST}"
 
 
 class S3Client:
@@ -13,7 +15,11 @@ class S3Client:
 
     def __init__(self):
         settings = get_settings()
-        self.cdn_base_url = settings.cdn_base_url
+        self.cdn_base_url = settings.cdn_base_url.rstrip("/")
+        if self.cdn_base_url != CANONICAL_CDN_BASE_URL:
+            raise ValueError(
+                f"CDN_BASE_URL must be {CANONICAL_CDN_BASE_URL}, got {self.cdn_base_url}"
+            )
         self.bucket = settings.s3_bucket
 
         self.op = opendal.Operator(
@@ -27,9 +33,7 @@ class S3Client:
 
     def _get_url(self, s3_key: str) -> str:
         """获取文件 URL"""
-        if self.cdn_base_url:
-            return f"{self.cdn_base_url.rstrip('/')}/{s3_key}"
-        return f"{self.op.info().full_capability()}/{self.bucket}/{s3_key}"
+        return f"{self.cdn_base_url}/{s3_key}"
 
     def _get_content_type(self, filename: str) -> str:
         """根据文件名获取 Content-Type"""
@@ -40,7 +44,7 @@ class S3Client:
         """上传文件到 S3"""
         content_type = self._get_content_type(local_path)
         with open(local_path, "rb") as f:
-            self.op.write(s3_key, f.read(),content_type=content_type)
+            self.op.write(s3_key, f.read(), content_type=content_type)
         return self._get_url(s3_key)
 
     def upload_content(self, content: str | bytes, s3_key: str) -> str:
@@ -48,21 +52,23 @@ class S3Client:
         if isinstance(content, str):
             content = content.encode("utf-8")
         content_type = self._get_content_type(s3_key)
-        self.op.write(s3_key, content,content_type=content_type)
+        self.op.write(s3_key, content, content_type=content_type)
         return self._get_url(s3_key)
 
-    def get_json(self, s3_key: str) -> dict | None:
+    def get_json(self, s3_key: str, *, missing_ok: bool = False) -> dict | None:
         """获取 JSON 文件"""
         try:
             data = self.op.read(s3_key)
             return json.loads(data.decode("utf-8"))
-        except Exception:
-            return None
+        except opendal.exceptions.NotFound:
+            if missing_ok:
+                return None
+            raise
 
     def exists(self, s3_key: str) -> bool:
         """检查文件是否存在"""
         try:
             self.op.stat(s3_key)
             return True
-        except Exception:
+        except opendal.exceptions.NotFound:
             return False

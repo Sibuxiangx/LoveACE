@@ -29,6 +29,7 @@ jobs:
     runs-on: macos-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
       artifact_name: ${{ steps.version.outputs.artifact_name }}
     defaults:
       run:
@@ -54,15 +55,17 @@ jobs:
           from pathlib import Path
 
           text = Path('pubspec.yaml').read_text()
-          match = re.search(r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)', text, re.MULTILINE)
+          match = re.search(r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)', text, re.MULTILINE)
           if not match:
               raise SystemExit('Cannot read version from desktop/pubspec.yaml')
 
           version = match.group(1)
+          build = match.group(2)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'version={version}\n')
-              output.write(f'artifact_name=loveace-macos-{version}\n')
-          print(f'Desktop version: {version}')
+              output.write(f'build={build}\n')
+              output.write(f'artifact_name=loveace-macos-{version}-{build}\n')
+          print(f'Desktop version: {version} ({build})')
           PY
 
       - name: Get dependencies
@@ -247,6 +250,9 @@ jobs:
     needs: build
     if: ${{ inputs.dry_run == false }}
     environment: S3
+    concurrency:
+      group: loveace-manifest-publish
+      cancel-in-progress: false
 
     steps:
       - name: Checkout
@@ -268,13 +274,14 @@ jobs:
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
           S3_REGION: ${{ secrets.S3_REGION }}
-          CDN_BASE_URL: ${{ secrets.CDN_BASE_URL }}
+          CDN_BASE_URL: https://release.loveace.top
         run: |
           uv run python cli.py release \
             --version "${{ needs.build.outputs.version }}" \
+            --build "${{ needs.build.outputs.build }}" \
             --platform macos \
-            --file "../../../release/loveace-${{ needs.build.outputs.version }}.zip" \
+            --file "../../release/loveace-${{ needs.build.outputs.version }}.zip" \
             --content "${{ inputs.content }}" \
             --changelog "${{ inputs.changelog }}" \
             ${{ inputs.force && '--force' || '' }}
-        working-directory: android/tools/publish
+        working-directory: utils/manifest_v2

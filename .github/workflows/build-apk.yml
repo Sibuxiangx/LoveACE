@@ -30,12 +30,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
     defaults:
       run:
         working-directory: android
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Validate Android version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          text = Path('app/build.gradle.kts').read_text('utf-8')
+          version = re.search(r'versionName\s*=\s*"([^"]+)"', text)
+          build = re.search(r'versionCode\s*=\s*(\d+)', text)
+          if not version or not build:
+              raise SystemExit('Cannot read Android versionName/versionCode')
+          if version.group(1) != os.environ['REQUESTED_VERSION']:
+              raise SystemExit(
+                  f"Requested version {os.environ['REQUESTED_VERSION']} does not match "
+                  f"Gradle versionName {version.group(1)}"
+              )
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version.group(1)}\n')
+              output.write(f'build={build.group(1)}\n')
+          PY
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -76,28 +104,47 @@ jobs:
           name: loveace-release-apk
           path: android/app/build/outputs/apk/release/*.apk
 
+      - name: Confirm dry run
+        if: ${{ inputs.dry_run }}
+        run: echo "Dry run enabled; APK artifacts were built and uploaded without publishing OTA."
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ inputs.dry_run == false }}
+    environment: S3
+    concurrency:
+      group: loveace-manifest-publish
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download release APK
+        uses: actions/download-artifact@v5
+        with:
+          name: loveace-release-apk
+          path: ./release
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
       - name: Publish Android release
-        if: ${{ !inputs.dry_run }}
         env:
           S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
           S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
           S3_REGION: ${{ secrets.S3_REGION }}
-          CDN_BASE_URL: ${{ secrets.CDN_BASE_URL }}
+          CDN_BASE_URL: https://release.loveace.top
         run: |
           uv run python cli.py release \
-            --version "${{ inputs.version }}" \
+            --version "${{ needs.build.outputs.version }}" \
+            --build "${{ needs.build.outputs.build }}" \
             --platform android \
-            --file ../../app/build/outputs/apk/release/app-release.apk \
+            --file ../../release/app-release.apk \
             --content "${{ inputs.content }}" \
             --changelog "${{ inputs.changelog }}" \
             ${{ inputs.force && '--force' || '' }}
-        working-directory: android/tools/publish
-
-      - name: Confirm dry run
-        if: ${{ inputs.dry_run }}
-        run: echo "Dry run enabled; APK artifacts were built and uploaded without publishing OTA."
+        working-directory: utils/manifest_v2

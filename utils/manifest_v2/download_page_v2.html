@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#eff2e0" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1c2521" media="(prefers-color-scheme: dark)">
+    <title>LoveACE 下载</title>
+    <link rel="icon" type="image/png" href="./favicon.png">
+    <style>
+        :root {
+            color-scheme: light dark;
+            --text: #293630;
+            --text-secondary: #5f7068;
+            --text-muted: #84958c;
+            --accent: #52796f;
+            --accent-hover: #3f625a;
+            --accent-soft: #dfeae4;
+            --button-text: #ffffff;
+            --surface: rgba(250, 249, 241, 0.95);
+            --surface-secondary: rgba(243, 245, 236, 0.96);
+            --border: #d7dfd7;
+            --border-soft: #e2e7df;
+            --shadow: 0 2px 12px rgba(36, 52, 45, 0.1);
+            --shadow-logo: 0 8px 24px rgba(50, 75, 66, 0.24);
+            --warning-bg: rgba(254, 243, 199, 0.96);
+            --warning-border: #f59e0b;
+            --warning-text: #92400e;
+            --critical-bg: rgba(254, 226, 226, 0.96);
+            --critical-border: #ef4444;
+            --critical-text: #991b1b;
+            --info-bg: rgba(222, 235, 232, 0.96);
+            --info-border: #8aafa6;
+            --info-text: #345f58;
+            --focus: #6f9f94;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --text: #edf1e7;
+                --text-secondary: #b8c3b9;
+                --text-muted: #8e9d93;
+                --accent: #9fbd91;
+                --accent-hover: #b7d1aa;
+                --accent-soft: #34473d;
+                --button-text: #1e2a24;
+                --surface: rgba(28, 37, 33, 0.95);
+                --surface-secondary: rgba(35, 47, 42, 0.96);
+                --border: #455b51;
+                --border-soft: #374a42;
+                --shadow: 0 3px 16px rgba(0, 0, 0, 0.34);
+                --shadow-logo: 0 8px 24px rgba(0, 0, 0, 0.36);
+                --warning-bg: rgba(69, 51, 20, 0.96);
+                --warning-border: #d9a11b;
+                --warning-text: #f8d989;
+                --critical-bg: rgba(68, 30, 34, 0.96);
+                --critical-border: #dc626b;
+                --critical-text: #ffb4ba;
+                --info-bg: rgba(38, 57, 53, 0.96);
+                --info-border: #658c82;
+                --info-text: #cee1da;
+                --focus: #b7d1aa;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            min-height: 100%;
+            background: #8eb5ce;
+        }
+
+        body {
+            min-height: 100vh;
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button,
+        a {
+            font: inherit;
+        }
+
+        button:focus-visible,
+        a:focus-visible,
+        summary:focus-visible {
+            outline: 3px solid var(--focus);
+            outline-offset: 3px;
+        }
+
+        .wallpaper {
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            overflow: hidden;
+        }
+
+        .wallpaper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: 50% 42%;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px max(40px, env(safe-area-inset-bottom));
+        }
+
+        .header {
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .logo {
+            display: block;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 16px;
+            object-fit: cover;
+            border-radius: 20px;
+            box-shadow: var(--shadow-logo);
+        }
+
+        .app-name {
+            margin-bottom: 10px;
+            font-size: 26px;
+            font-weight: 650;
+            letter-spacing: -0.02em;
+            text-shadow: 0 1px 8px var(--surface);
+        }
+
+        .version {
+            display: inline-block;
+            padding: 7px 17px;
+            color: var(--accent);
+            background: var(--surface);
+            border: 1px solid var(--border-soft);
+            border-radius: 20px;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+            font-size: 14px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .announcement-list {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .announcement {
+            display: grid;
+            grid-template-columns: 22px 1fr;
+            gap: 10px;
+            padding: 14px 18px;
+            color: var(--info-text);
+            background: var(--info-bg);
+            border: 1px solid var(--info-border);
+            border-radius: 12px;
+            font-size: 14px;
+        }
+
+        .announcement.warning {
+            color: var(--warning-text);
+            background: var(--warning-bg);
+            border-color: var(--warning-border);
+        }
+
+        .announcement.critical {
+            color: var(--critical-text);
+            background: var(--critical-bg);
+            border-color: var(--critical-border);
+        }
+
+        .announcement-symbol {
+            font-weight: 800;
+            text-align: center;
+        }
+
+        .announcement-title {
+            font-weight: 650;
+        }
+
+        .announcement-content {
+            margin-top: 2px;
+            opacity: 0.9;
+            white-space: pre-wrap;
+        }
+
+        .card {
+            margin-bottom: 16px;
+            padding: 20px;
+            background: var(--surface);
+            border: 1px solid var(--border-soft);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .card-title {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 16px;
+            font-size: 16px;
+            font-weight: 650;
+        }
+
+        .card-title svg {
+            width: 22px;
+            height: 22px;
+            fill: var(--accent);
+        }
+
+        .platform-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .platform-item {
+            padding: 14px;
+            background: var(--surface-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .platform-item.recommended {
+            background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface-secondary));
+            border-color: var(--accent);
+        }
+
+        .platform-header {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .platform-icon {
+            display: grid;
+            flex: 0 0 48px;
+            width: 48px;
+            height: 48px;
+            place-items: center;
+            color: var(--text-secondary);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .platform-icon svg {
+            width: 26px;
+            height: 26px;
+            fill: currentColor;
+        }
+
+        .platform-info {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .platform-name {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            font-size: 15px;
+            font-weight: 650;
+            line-height: 1.35;
+        }
+
+        .platform-version {
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 400;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .badge {
+            padding: 2px 8px;
+            color: var(--button-text);
+            background: var(--accent);
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .platform-summary {
+            margin-top: 5px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .artifact-list {
+            display: grid;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        .artifact {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: center;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .artifact-name {
+            overflow: hidden;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .artifact-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 8px;
+            margin-top: 3px;
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .download-button {
+            display: inline-flex;
+            min-height: 42px;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 20px;
+            color: var(--button-text);
+            background: var(--accent);
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background-color 160ms ease, transform 100ms ease;
+        }
+
+        .download-button:hover {
+            background: var(--accent-hover);
+        }
+
+        .download-button:active {
+            transform: scale(0.98);
+        }
+
+        .checksum {
+            grid-column: 1 / -1;
+        }
+
+        .checksum summary {
+            width: fit-content;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .checksum-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            margin-top: 7px;
+        }
+
+        .checksum-value {
+            min-width: 0;
+            flex: 1;
+            overflow-wrap: anywhere;
+            color: var(--text-muted);
+            font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+            font-size: 10px;
+            line-height: 1.5;
+        }
+
+        .copy-button {
+            padding: 4px 8px;
+            color: var(--accent);
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .changelog-item {
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border-soft);
+        }
+
+        .changelog-item:first-child {
+            padding-top: 0;
+        }
+
+        .changelog-item:last-child {
+            padding-bottom: 0;
+            border-bottom: 0;
+        }
+
+        .changelog-heading {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 10px;
+            align-items: baseline;
+        }
+
+        .changelog-version {
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 650;
+        }
+
+        .changelog-date {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .changelog-list {
+            display: grid;
+            gap: 5px;
+            margin-top: 7px;
+            padding-left: 18px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .footer {
+            color: color-mix(in srgb, var(--text) 68%, transparent);
+            font-size: 11px;
+            text-align: center;
+            text-shadow: 0 1px 8px var(--surface);
+        }
+
+        .state-card {
+            margin-top: 18vh;
+            padding: 40px 20px;
+            background: var(--surface);
+            border: 1px solid var(--border-soft);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 16px;
+            border: 3px solid var(--accent-soft);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 800ms linear infinite;
+        }
+
+        .state-title {
+            font-size: 16px;
+            font-weight: 650;
+        }
+
+        .state-text {
+            max-width: 36ch;
+            margin: 7px auto 0;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .retry-button {
+            margin-top: 16px;
+            padding: 10px 24px;
+            color: var(--accent);
+            background: transparent;
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .empty {
+            padding: 28px 12px;
+            color: var(--text-muted);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .wallpaper img {
+                object-position: 47% 32%;
+            }
+
+            .container {
+                padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+            }
+
+            .header {
+                margin-bottom: 24px;
+            }
+
+            .logo {
+                width: 72px;
+                height: 72px;
+                border-radius: 18px;
+            }
+
+            .app-name {
+                font-size: 24px;
+            }
+
+            .card {
+                padding: 16px;
+                border-radius: 14px;
+            }
+
+            .platform-item {
+                padding: 12px;
+            }
+
+            .artifact {
+                grid-template-columns: 1fr;
+            }
+
+            .download-button {
+                width: 100%;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                transition-duration: 0.01ms !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <picture class="wallpaper" aria-hidden="true">
+        <source media="(max-width: 720px)" srcset="./assets/download-background-900.webp">
+        <img src="./assets/download-background-1600.webp" alt="">
+    </picture>
+
+    <main class="container">
+        <section id="loading" class="state-card" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <p class="state-title">正在获取最新版本</p>
+            <p class="state-text">正在连接 LoveACE 官方发布源。</p>
+        </section>
+
+        <section id="error" class="state-card" hidden>
+            <p class="state-title">暂时无法加载下载信息</p>
+            <p id="error-message" class="state-text"></p>
+            <button id="retry" class="retry-button" type="button">重新加载</button>
+        </section>
+
+        <div id="content" hidden>
+            <header class="header">
+                <img class="logo" src="./favicon.png" alt="LoveACE 图标">
+                <h1 class="app-name">LoveACE</h1>
+                <span id="headline-version" class="version">获取版本中</span>
+            </header>
+
+            <div id="announcements" class="announcement-list" aria-live="polite"></div>
+
+            <section class="card" aria-labelledby="download-title">
+                <h2 id="download-title" class="card-title">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></svg>
+                    下载
+                </h2>
+                <div id="platforms" class="platform-list"></div>
+            </section>
+
+            <section id="changelog-card" class="card" aria-labelledby="changelog-title" hidden>
+                <h2 id="changelog-title" class="card-title">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.9 3.9L9 12H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.3 2.55.7-1.22-3.5-2.08V8H12z"></path></svg>
+                    更新日志
+                </h2>
+                <div id="changelog"></div>
+            </section>
+
+            <footer id="manifest-meta" class="footer"></footer>
+        </div>
+    </main>
+
+    <script>
+        const MANIFEST_URL = './manifest_v2.json';
+        const PLATFORM_INFO = {
+            android: {
+                name: 'Android',
+                action: '下载 APK',
+                icon: 'M6 18c0 .55.45 1 1 1h1v3.5a1.5 1.5 0 0 0 3 0V19h2v3.5a1.5 1.5 0 0 0 3 0V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8A1.5 1.5 0 0 0 2 9.5v7a1.5 1.5 0 0 0 3 0v-7A1.5 1.5 0 0 0 3.5 8zm17 0A1.5 1.5 0 0 0 19 9.5v7a1.5 1.5 0 0 0 3 0v-7A1.5 1.5 0 0 0 20.5 8zM15.53 2.16l1.3-1.3a.5.5 0 0 0-.71-.71l-1.48 1.48A6 6 0 0 0 12 1c-.96 0-1.86.23-2.66.63L7.85.15a.5.5 0 0 0-.71.71l1.31 1.31A5.98 5.98 0 0 0 6 7h12a5.98 5.98 0 0 0-2.47-4.84z'
+            },
+            ios: {
+                name: 'iOS',
+                action: '前往 TestFlight',
+                icon: 'M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39a4.8 4.8 0 0 1 4.12-2.51c1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z'
+            },
+            windows: {
+                name: 'Windows',
+                action: '下载安装包',
+                icon: 'M3 12V6.75l6-1.32v6.48L3 12zm17-9v8.75l-10 .15V5.21L20 3zM3 13l6 .09v6.81l-6-1.15V13zm17 .25V22l-10-1.91V13.1l10 .15z'
+            },
+            macos: {
+                name: 'macOS',
+                action: '下载 macOS 版',
+                icon: 'M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z'
+            },
+            linux: {
+                name: 'Linux',
+                action: '下载 Linux 版',
+                icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 17.93A8 8 0 0 1 4 12c0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54A2 2 0 0 0 16 16h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41A8 8 0 0 1 17.9 17.4z'
+            }
+        };
+
+        let manifest = null;
+        let detectedPlatform = null;
+
+        function element(tag, className, text) {
+            const node = document.createElement(tag);
+            if (className) node.className = className;
+            if (text !== undefined && text !== null) node.textContent = text;
+            return node;
+        }
+
+        function svgIcon(pathData) {
+            const namespace = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(namespace, 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('aria-hidden', 'true');
+            const path = document.createElementNS(namespace, 'path');
+            path.setAttribute('d', pathData);
+            svg.append(path);
+            return svg;
+        }
+
+        function detectPlatform() {
+            const ua = navigator.userAgent.toLowerCase();
+            const browserPlatform = (navigator.platform || '').toLowerCase();
+            const combined = `${ua} ${browserPlatform}`;
+            if (/iphone|ipad|ipod/.test(ua) || (browserPlatform === 'macintel' && navigator.maxTouchPoints > 1)) return 'ios';
+            if (/android/.test(ua)) return 'android';
+            if (/windows|win32|win64/.test(combined)) return 'windows';
+            if (/macintosh|macintel|macos/.test(combined)) return 'macos';
+            if (/linux/.test(combined)) return 'linux';
+            return null;
+        }
+
+        function latestRelease(platform) {
+            const releases = manifest.platforms?.[platform]?.releases || [];
+            return releases.find(item => item.channel === 'stable') || releases[0] || null;
+        }
+
+        function formatSize(bytes) {
+            if (!Number.isFinite(bytes) || bytes < 0) return null;
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let value = bytes;
+            let unit = 0;
+            while (value >= 1024 && unit < units.length - 1) {
+                value /= 1024;
+                unit += 1;
+            }
+            return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+        }
+
+        function formatDate(value) {
+            const date = new Date(value);
+            if (!value || Number.isNaN(date.getTime())) return '';
+            return new Intl.DateTimeFormat('zh-CN', {
+                year: 'numeric', month: 'short', day: 'numeric'
+            }).format(date);
+        }
+
+        function fileName(url) {
+            try {
+                return decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || '下载文件');
+            } catch (_) {
+                return '下载文件';
+            }
+        }
+
+        function renderAnnouncements() {
+            const now = Date.now();
+            const visible = (manifest.announcements || []).filter(item => {
+                if (!item.surfaces?.includes('download')) return false;
+                if (!item.platforms?.includes('all') && !item.platforms?.includes(detectedPlatform)) return false;
+                return !item.expires_at || new Date(item.expires_at).getTime() > now;
+            });
+            const nodes = visible.map(item => {
+                const wrapper = element('article', `announcement ${item.level || 'info'}`);
+                const symbol = element('span', 'announcement-symbol', item.level === 'critical' ? '!' : 'i');
+                symbol.setAttribute('aria-hidden', 'true');
+                const body = element('div');
+                body.append(
+                    element('p', 'announcement-title', item.title),
+                    element('p', 'announcement-content', item.content)
+                );
+                wrapper.append(symbol, body);
+                return wrapper;
+            });
+            const container = document.getElementById('announcements');
+            container.replaceChildren(...nodes);
+            container.hidden = nodes.length === 0;
+        }
+
+        function artifactAction(artifact, platform) {
+            if (artifact.type === 'testflight') return '前往 TestFlight';
+            if (artifact.type === 'web') return '打开网页版';
+            return PLATFORM_INFO[platform]?.action || '下载';
+        }
+
+        function renderArtifact(artifact, platform) {
+            const wrapper = element('div', 'artifact');
+            const info = element('div');
+            info.append(element('p', 'artifact-name', fileName(artifact.url)));
+            const meta = element('div', 'artifact-meta');
+            [artifact.type?.toUpperCase(), artifact.arch, formatSize(artifact.size)]
+                .filter(Boolean)
+                .forEach(value => meta.append(element('span', null, value)));
+            info.append(meta);
+
+            const link = element('a', 'download-button', artifactAction(artifact, platform));
+            link.href = artifact.url;
+            if (artifact.type === 'web' || artifact.type === 'testflight') {
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+            }
+            wrapper.append(info, link);
+
+            const sha256 = artifact.checksums?.sha256;
+            if (sha256) {
+                const checksum = element('details', 'checksum');
+                checksum.append(element('summary', null, 'SHA-256 文件校验'));
+                const row = element('div', 'checksum-row');
+                const value = element('code', 'checksum-value', sha256);
+                const copy = element('button', 'copy-button', '复制');
+                copy.type = 'button';
+                copy.setAttribute('aria-label', '复制 SHA-256');
+                copy.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(sha256);
+                        copy.textContent = '已复制';
+                        window.setTimeout(() => { copy.textContent = '复制'; }, 1500);
+                    } catch (_) {
+                        copy.textContent = '复制失败';
+                    }
+                });
+                row.append(value, copy);
+                checksum.append(row);
+                wrapper.append(checksum);
+            }
+            return wrapper;
+        }
+
+        function renderPlatform(platform) {
+            const release = latestRelease(platform);
+            const info = PLATFORM_INFO[platform];
+            const item = element('article', `platform-item${platform === detectedPlatform ? ' recommended' : ''}`);
+            const header = element('div', 'platform-header');
+            const icon = element('div', 'platform-icon');
+            icon.append(svgIcon(info.icon));
+            const platformInfo = element('div', 'platform-info');
+            const name = element('p', 'platform-name');
+            name.append(element('span', null, info.name));
+            if (platform === detectedPlatform) name.append(element('span', 'badge', '推荐'));
+            const build = release.build === null || release.build === undefined ? '' : ` · Build ${release.build}`;
+            name.append(element('span', 'platform-version', `v${release.version}${build}`));
+            platformInfo.append(name);
+            if (release.summary) platformInfo.append(element('p', 'platform-summary', release.summary));
+            header.append(icon, platformInfo);
+            item.append(header);
+
+            const artifacts = element('div', 'artifact-list');
+            (release.artifacts || []).forEach(artifact => artifacts.append(renderArtifact(artifact, platform)));
+            if (release.artifacts?.length) item.append(artifacts);
+            else item.append(element('p', 'empty', '该版本暂时没有可下载文件。'));
+            return item;
+        }
+
+        function renderPlatforms(available) {
+            const ordered = [...available].sort((a, b) => {
+                if (a === detectedPlatform) return -1;
+                if (b === detectedPlatform) return 1;
+                return 0;
+            });
+            document.getElementById('platforms').replaceChildren(...ordered.map(renderPlatform));
+        }
+
+        function renderChangelog(available) {
+            const entries = [];
+            available.forEach(platform => {
+                (manifest.platforms[platform].releases || []).forEach(release => {
+                    if (release.changelog?.length) entries.push({ platform, release });
+                });
+            });
+            entries.sort((a, b) => new Date(b.release.published_at) - new Date(a.release.published_at));
+            const nodes = entries.slice(0, 8).map(({ platform, release }) => {
+                const item = element('article', 'changelog-item');
+                const heading = element('div', 'changelog-heading');
+                const build = release.build === null || release.build === undefined ? '' : ` · Build ${release.build}`;
+                heading.append(
+                    element('p', 'changelog-version', `${PLATFORM_INFO[platform].name} v${release.version}${build}`),
+                    element('span', 'changelog-date', formatDate(release.published_at))
+                );
+                const list = element('ul', 'changelog-list');
+                release.changelog.forEach(change => list.append(element('li', null, change)));
+                item.append(heading, list);
+                return item;
+            });
+            const card = document.getElementById('changelog-card');
+            document.getElementById('changelog').replaceChildren(...nodes);
+            card.hidden = nodes.length === 0;
+        }
+
+        async function loadManifest() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const content = document.getElementById('content');
+            loading.hidden = false;
+            error.hidden = true;
+            content.hidden = true;
+            try {
+                const response = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`发布源返回 HTTP ${response.status}`);
+                const data = await response.json();
+                if (data.schema_version !== 2 || !data.platforms || !data.semester) {
+                    throw new Error('发布信息格式不受支持');
+                }
+                manifest = data;
+                const available = Object.keys(PLATFORM_INFO).filter(platform => latestRelease(platform));
+                if (!available.length) throw new Error('当前没有可用客户端');
+                const detected = detectPlatform();
+                detectedPlatform = available.includes(detected) ? detected : available[0];
+                const current = latestRelease(detectedPlatform);
+                const build = current.build === null || current.build === undefined ? '' : ` · Build ${current.build}`;
+                document.getElementById('headline-version').textContent = `${PLATFORM_INFO[detectedPlatform].name} v${current.version}${build}`;
+                renderAnnouncements();
+                renderPlatforms(available);
+                renderChangelog(available);
+                document.getElementById('manifest-meta').textContent = `官方发布源 · 更新于 ${formatDate(manifest.generated_at)}`;
+                loading.hidden = true;
+                content.hidden = false;
+            } catch (reason) {
+                loading.hidden = true;
+                error.hidden = false;
+                document.getElementById('error-message').textContent = reason instanceof Error ? reason.message : '请稍后重试。';
+            }
+        }
+
+        document.getElementById('retry').addEventListener('click', loadManifest);
+        loadManifest();
+    </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 [project]
-name = "utils"
+name = "loveace-manifest-v2"
 version = "0.1.0"
-description = "Add your description here"
+description = "LoveACE release manifest and download page publisher"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

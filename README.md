@@ -103,9 +103,9 @@ gh workflow run build-apk.yml \
 工作流会依次完成：
 
 1. 还原正式版签名密钥
-2. 构建调试版和正式版 APK
+2. 构建正式版 APK
 3. 上传 APK 构建产物
-4. 通过 `android/tools/publish` 发布正式版 APK 并更新 OTA 清单
+4. 通过 `utils/manifest_v2` 发布正式版 APK 并更新 v2 与兼容 OTA 清单
 
 > 签名密钥和 S3/CDN 配置均通过 GitHub Secrets 注入，禁止提交到仓库。
 
@@ -153,7 +153,7 @@ flutter run -d macos      # macOS
 flutter run -d windows    # Windows
 ```
 
-桌面端发布通过手动 workflow 完成。macOS 会完成 Developer ID 签名、公证与 stapling；Windows 会生成 Inno Setup 安装器。两个桌面端发布都会更新 OTA manifest，因此如需同时发版应串行触发，避免 manifest 覆盖竞态。
+桌面端发布通过手动 workflow 完成。macOS 会完成 Developer ID 签名、公证与 stapling；Windows 会生成 Inno Setup 安装器。两个桌面端的 manifest 写入由统一并发组自动串行化。
 
 ```bash
 gh workflow run build-desktop-macos.yml \
@@ -171,12 +171,7 @@ gh workflow run build-desktop-windows.yml \
   -f force=false
 ```
 
-如需临时切换 manifest 下载 URL 的网络出口，可使用：
-
-```bash
-gh workflow run network-guard-ci.yml --ref main -f mode=cloudflare -f dry_run=false
-gh workflow run network-guard-ci.yml --ref main -f mode=edgeone -f dry_run=false
-```
+所有公开安装包固定通过 `https://release.loveace.top` 分发。
 
 ## 本地开发
 

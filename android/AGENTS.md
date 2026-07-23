@@ -3,22 +3,21 @@
 ## Build and verification
 
 - This machine does **not** have a usable Android build environment. Do not rely on local `./gradlew assemble*`; validate syntax/whitespace locally with `git diff --check`, then use GitHub Actions for real builds.
-- CI/release workflow: `.github/workflows/build-apk.yml`. It is **manual only** (`workflow_dispatch`), installs JDK 17 + Android SDK 36, restores signing secrets, runs `./gradlew assembleDebug assembleRelease`, uploads APK artifacts, then publishes the release APK through `tools/publish` with `uv run python cli.py release ...`.
+- CI/release workflow: `.github/workflows/build-apk.yml`. It is **manual only** (`workflow_dispatch`), installs JDK 17 + Android SDK 36, restores signing secrets, builds the release APK, uploads the artifact, then publishes it through `utils/manifest_v2` with `uv run python cli.py release ...`.
 - Trigger Android release manually with inputs, for example:
   `gh workflow run build-apk.yml --ref main -f version=1.1.11 -f changelog="更新内容" -f content="发现新版本" -f force=false`.
 - Check/watch/download CI artifacts:
   - `gh run list --workflow build-apk.yml --branch main --limit 5`
   - `gh run watch <run-id> --exit-status`
-  - `gh run download <run-id> -n loveace-debug-apk -D <dir>`
   - `gh run download <run-id> -n loveace-release-apk -D <dir>`
 - Debug APKs are signed with the runner debug key and will not install over release builds. Release APKs are signed in GitHub Actions from repository secrets; do not commit keystores or signing passwords.
 
 ## Versioning and release
 
 - Android version lives in `app/build.gradle.kts`. Keep `versionCode = major * 10000 + minor * 100 + patch` (for example `1.1.10 -> 10110`).
-- Publishing is part of the manual GitHub Actions workflow after a successful release build. The workflow runs `cd android/tools/publish && uv run python cli.py release --version <x.y.z> --platform android --file <release-apk> --content "..." --changelog "..."`.
-- `tools/publish` reads S3/CDN credentials from environment variables in GitHub Actions secrets. For local one-off publishing it can still read `tools/publish/.env` (ignored). Do not print or commit credentials.
-- The publish CLI uploads APKs to `loveace/releases/<platform>/<version>/...`, computes MD5, and updates `loveace/manifest.json`; check with `uv run python cli.py status`.
+- Publishing is part of the manual GitHub Actions workflow after a successful release build. The workflow validates the requested version against Gradle, reads `versionCode`, then runs `cd utils/manifest_v2 && uv run python cli.py release --version <x.y.z> --build <versionCode> --platform android --file <release-apk> --content "..." --changelog "..."`.
+- `utils/manifest_v2` reads S3/CDN credentials from environment variables in GitHub Actions secrets. For local one-off publishing it can still read `.env` (ignored). Do not print or commit credentials.
+- The publish CLI uploads APKs to `loveace/releases/<platform>/<version>/<build>/...`, computes SHA-256 and compatibility MD5, updates canonical `loveace/manifest_v2.json`, and generates the legacy OTA projection; check with `uv run python cli.py status` from `utils/manifest_v2`.
 
 ## App wiring
 

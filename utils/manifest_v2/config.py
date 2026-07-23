@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     s3_secret_key: str = ""
     s3_bucket: str = ""
     s3_region: str = "us-east-1"
-    cdn_base_url: str = ""
+    cdn_base_url: str = "https://release.loveace.top"
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), ".env"),

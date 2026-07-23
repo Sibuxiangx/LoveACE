@@ -6,6 +6,10 @@ on:
 jobs:
   upload:
     runs-on: ubuntu-latest
+    environment: S3
+    concurrency:
+      group: loveace-manifest-publish
+      cancel-in-progress: false
 
     steps:
       - name: Checkout
@@ -14,48 +18,13 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Validate semester data
-        run: |
-          uv run python - <<'PY'
-          import json
-          from datetime import date, timedelta
-          from pathlib import Path
-
-          data = json.loads(Path('semesters.json').read_text('utf-8'))
-          semesters = data.get('semesters', [])
-          if not semesters:
-              raise SystemExit('semesters.json has no semesters')
-
-          seen = set()
-          for semester in semesters:
-              code = semester['code']
-              if code in seen:
-                  raise SystemExit(f'duplicate semester code: {code}')
-              seen.add(code)
-
-              start = date.fromisoformat(semester['start_date'])
-              weeks = int(semester.get('weeks', 18))
-              if weeks <= 0:
-                  raise SystemExit(f'invalid weeks for {code}: {weeks}')
-              end = start + timedelta(weeks=weeks) - timedelta(days=1)
-              print(f'{code}: {start.isoformat()} -> {end.isoformat()} ({weeks} weeks)')
-          PY
-        working-directory: android/tools/semester-sync
-
-      - name: Upload semester data to OSS
+      - name: Publish semester data into manifest v2
         env:
-          OSS_ENDPOINT: ${{ secrets.SEMSYNC_OSS_ENDPOINT }}
-          OSS_BUCKET: ${{ secrets.SEMSYNC_OSS_BUCKET }}
-          OSS_ACCESS_KEY_ID: ${{ secrets.SEMSYNC_OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.SEMSYNC_OSS_ACCESS_KEY_SECRET }}
-          OSS_UPLOAD_PATH: ${{ secrets.SEMSYNC_OSS_UPLOAD_PATH }}
-        run: |
-          uv run python - <<'PY'
-          from semester_sync import upload_to_oss
-
-          result = upload_to_oss()
-          print(result)
-          if not result.startswith('✅'):
-              raise SystemExit(1)
-          PY
-        working-directory: android/tools/semester-sync
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          CDN_BASE_URL: https://release.loveace.top
+        run: uv run python cli.py sync-semesters
+        working-directory: utils/manifest_v2
