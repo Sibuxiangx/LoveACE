@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:provider/provider.dart';
@@ -50,27 +51,38 @@ void main() async {
 
   // 初始化 SharedPreferences
   final prefs = await SharedPreferences.getInstance();
+  final packageInfo = await PackageInfo.fromPlatform();
+  final appBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
 
   // 初始化 AnalyticsService
-  await AnalyticsService.init(prefs, appVersion: AppConstants.appVersion);
+  await AnalyticsService.init(prefs, appVersion: packageInfo.version);
 
   // 创建 ManifestService
   final manifestService = ManifestService(
     dio: Dio(),
-    manifestUrl: AppConstants.manifestUrl,
+    manifestUrls: AppConstants.manifestUrls,
   );
 
-  runApp(MyApp(prefs: prefs, manifestService: manifestService));
+  runApp(MyApp(
+    prefs: prefs,
+    manifestService: manifestService,
+    appVersion: packageInfo.version,
+    appBuild: appBuild,
+  ));
 }
 
 class MyApp extends StatelessWidget {
   final SharedPreferences prefs;
   final ManifestService manifestService;
+  final String appVersion;
+  final int appBuild;
 
   const MyApp({
     super.key,
     required this.prefs,
     required this.manifestService,
+    required this.appVersion,
+    required this.appBuild,
   });
 
   @override
@@ -88,6 +100,8 @@ class MyApp extends StatelessWidget {
           create: (_) => ManifestProvider(
             service: manifestService,
             prefs: prefs,
+            currentVersion: appVersion,
+            currentBuild: appBuild,
           ),
         ),
 

@@ -1,195 +1,190 @@
 import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../constants/app_constants.dart';
+
 import '../models/manifest_model.dart';
 import '../services/analytics_service.dart';
-import '../services/manifest_service.dart';
 import '../services/logger_service.dart';
+import '../services/manifest_service.dart';
 
-enum ManifestState {
-  initial,
-  loading,
-  loaded,
-  error,
-}
+enum ManifestState { initial, loading, loaded, error }
 
-/// Manifest Provider
-///
-/// 管理应用公告和 OTA 更新信息的状态
 class ManifestProvider extends ChangeNotifier {
+  static const _dismissedNoticeIDsKey = 'dismissed_manifest_notice_ids';
+
   final ManifestService _service;
   final SharedPreferences _prefs;
-
-  static const String _announcementMd5Key = 'announcement_md5_shown';
+  final String _currentVersion;
+  final int _currentBuild;
 
   ManifestState _state = ManifestState.initial;
-  LoveACEManifest? _manifest;
+  ManifestV2? _manifest;
   String? _errorMessage;
+  List<ManifestNotice> _pendingNotices = const [];
+
+  factory ManifestProvider({
+    required ManifestService service,
+    required SharedPreferences prefs,
+    required String currentVersion,
+    required int currentBuild,
+  }) => ManifestProvider._(service, prefs, currentVersion, currentBuild);
+
+  ManifestProvider._(
+    this._service,
+    this._prefs,
+    this._currentVersion,
+    this._currentBuild,
+  );
 
   ManifestState get state => _state;
-  LoveACEManifest? get manifest => _manifest;
+  ManifestV2? get manifest => _manifest;
   String? get errorMessage => _errorMessage;
+  String get currentVersion => _currentVersion;
+  int get currentBuild => _currentBuild;
 
-  /// 获取当前平台名称
   String get currentPlatform {
     if (kIsWeb) return 'web';
-    if (Platform.isAndroid) return 'android';
-    if (Platform.isIOS) return 'ios';
     if (Platform.isWindows) return 'windows';
     if (Platform.isMacOS) return 'macos';
     if (Platform.isLinux) return 'linux';
     return 'unknown';
   }
 
-  /// 获取当前应用版本
-  String get currentVersion => AppConstants.appVersion;
+  PlatformManifest? get platformManifest =>
+      _manifest?.platforms[currentPlatform];
 
-  /// 是否有新公告（未显示过）
-  bool get hasNewAnnouncement {
-    if (_manifest?.announcement == null) return false;
-    final announcement = _manifest!.announcement!;
-    final shownMd5 = _prefs.getString(_announcementMd5Key);
-    return shownMd5 != announcement.md5;
+  ManifestRelease? get latestRelease {
+    final releases = platformManifest?.releases ?? const [];
+    for (final release in releases) {
+      if (release.channel == 'stable') return release;
+    }
+    return releases.isEmpty ? null : releases.first;
   }
 
-  /// 是否有 OTA 更新（针对当前平台）
+  ReleaseArtifact? get latestArtifact {
+    final artifacts = latestRelease?.artifacts ?? const [];
+    final expectedType = switch (currentPlatform) {
+      'windows' => 'exe',
+      'macos' => 'zip',
+      _ => null,
+    };
+    if (expectedType == null) return null;
+    for (final artifact in artifacts) {
+      if (artifact.type == expectedType) return artifact;
+    }
+    return null;
+  }
+
   bool get hasOTAUpdate {
-    if (_manifest?.ota == null) return false;
-    final ota = _manifest!.ota!;
-
-    // 检查是否有当前平台的发布
-    final release = ota.getPlatformRelease(currentPlatform);
-    if (release == null) return false;
-
-    // 比较版本号（使用平台特定的版本号）
+    final release = latestRelease;
+    if (release == null || latestArtifact == null) return false;
+    if (release.build != null) return release.build! > currentBuild;
     return _isNewerVersion(release.version, currentVersion);
   }
 
-  /// 是否为强制更新（使用平台特定的强制更新标志）
   bool get isForceUpdate {
-    if (_manifest?.ota == null) return false;
-    final release = _manifest!.ota!.getPlatformRelease(currentPlatform);
-    if (release == null) return false;
-    return release.forceOta && hasOTAUpdate;
+    final minimumBuild = platformManifest?.minimumSupportedBuild;
+    return hasOTAUpdate && minimumBuild != null && currentBuild < minimumBuild;
   }
 
-  /// 获取当前平台的最新版本号
-  String? get latestVersion {
-    if (_manifest?.ota == null) return null;
-    final release = _manifest!.ota!.getPlatformRelease(currentPlatform);
-    return release?.version;
-  }
+  String? get latestVersion => latestRelease?.version;
+  ManifestNotice? get currentNotice =>
+      _pendingNotices.isEmpty ? null : _pendingNotices.first;
+  bool get hasUnreadNotice => currentNotice != null;
 
-  /// 获取 OTA 信息
-  OTA? get ota => _manifest?.ota;
-
-  /// 获取公告信息
-  Announcement? get announcement => _manifest?.announcement;
-
-  ManifestProvider({
-    required ManifestService service,
-    required SharedPreferences prefs,
-  })  : _service = service,
-        _prefs = prefs;
-
-  /// 加载 Manifest
   Future<void> loadManifest({bool forceRefresh = false}) async {
     if (_state == ManifestState.loading) return;
-
     _state = ManifestState.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      LoggerService.info('📦 加载 Manifest...');
-
+      LoggerService.info('📦 加载 Manifest v2...');
       final manifest = await _service.getManifest();
-
-      if (manifest != null) {
-        _manifest = manifest;
-        _state = ManifestState.loaded;
-        _errorMessage = null;
-        LoggerService.info('✅ Manifest 加载成功');
-
-        // 记录版本检查结果
-        if (manifest.ota != null) {
-          final platformRelease = manifest.ota!.getPlatformRelease(currentPlatform);
-          if (platformRelease != null) {
-            LoggerService.info('📱 当前版本: $currentVersion, 最新版本: ${platformRelease.version}');
-            LoggerService.info('📱 当前平台: $currentPlatform');
-            LoggerService.info('📱 有更新: $hasOTAUpdate, 强制更新: $isForceUpdate');
-            AnalyticsService.instance.trackOtaCheck(
-              hasOTAUpdate ? 'update_available' : 'up_to_date',
-              currentVersion,
-              latestVersion: platformRelease.version,
-            );
-          } else {
-            LoggerService.info('📱 当前平台 $currentPlatform 暂无发布');
-            AnalyticsService.instance.trackOtaCheck('no_release', currentVersion);
-          }
-        } else {
-          AnalyticsService.instance.trackOtaCheck('no_ota_config', currentVersion);
-        }
-      } else {
+      if (manifest == null) {
         _state = ManifestState.error;
-        _errorMessage = '获取 Manifest 失败';
-        LoggerService.error('❌ Manifest 加载失败');
+        _errorMessage = '获取 Manifest v2 失败';
+      } else {
+        _manifest = manifest;
+        _pendingNotices = _visibleUnreadNotices(manifest.announcements);
+        _state = ManifestState.loaded;
+        LoggerService.info('✅ Manifest v2 加载成功: ${manifest.revision}');
+        final release = latestRelease;
+        if (release != null) {
+          AnalyticsService.instance.trackOtaCheck(
+            hasOTAUpdate ? 'update_available' : 'up_to_date',
+            currentVersion,
+            latestVersion: release.version,
+          );
+        } else {
+          AnalyticsService.instance.trackOtaCheck('no_release', currentVersion);
+        }
       }
-    } catch (e) {
+    } catch (error) {
       _state = ManifestState.error;
-      _errorMessage = '加载 Manifest 时发生错误: $e';
-      LoggerService.error('❌ Manifest 加载异常', error: e);
+      _errorMessage = '加载 Manifest v2 时发生错误: $error';
+      LoggerService.error('❌ Manifest v2 加载异常', error: error);
     }
-
     notifyListeners();
   }
 
-  /// 标记公告为已显示
-  Future<void> markAnnouncementAsShown() async {
-    if (_manifest?.announcement == null) return;
-
-    final md5 = _manifest!.announcement!.md5;
-    await _prefs.setString(_announcementMd5Key, md5);
-    LoggerService.info('✅ 公告已标记为已显示');
+  Future<void> dismissCurrentNotice() async {
+    final notice = currentNotice;
+    if (notice == null) return;
+    final dismissed =
+        _prefs.getStringList(_dismissedNoticeIDsKey)?.toSet() ?? {};
+    dismissed.add(notice.id);
+    await _prefs.setStringList(
+      _dismissedNoticeIDsKey,
+      dismissed.toList()..sort(),
+    );
+    _pendingNotices = _pendingNotices.skip(1).toList(growable: false);
     notifyListeners();
   }
 
-  /// 重试加载
-  Future<void> retry() async {
-    await loadManifest(forceRefresh: true);
+  Future<void> retry() => loadManifest(forceRefresh: true);
+
+  List<ManifestNotice> _visibleUnreadNotices(List<ManifestNotice> notices) {
+    final dismissed =
+        _prefs.getStringList(_dismissedNoticeIDsKey)?.toSet() ?? {};
+    final now = DateTime.now();
+    return notices
+        .where((notice) {
+          final targetsPlatform =
+              notice.platforms.contains('all') ||
+              notice.platforms.contains(currentPlatform);
+          final targetsApp = notice.surfaces.contains('app');
+          final expiry = notice.expiresAt == null
+              ? null
+              : DateTime.tryParse(notice.expiresAt!);
+          final active =
+              notice.expiresAt == null ||
+              (expiry != null && expiry.isAfter(now));
+          return notice.id.isNotEmpty &&
+              targetsPlatform &&
+              targetsApp &&
+              active &&
+              !dismissed.contains(notice.id);
+        })
+        .toList(growable: false);
   }
 
-  /// 比较版本号，判断 newVersion 是否比 currentVersion 新
-  ///
-  /// 版本号格式: major.minor.patch (例如 1.0.1)
-  bool _isNewerVersion(String newVersion, String currentVersion) {
+  bool _isNewerVersion(String remote, String local) {
     try {
-      final newParts = newVersion.split('.').map(int.parse).toList();
-      final currentParts = currentVersion.split('.').map(int.parse).toList();
-
-      // 补齐版本号长度
-      while (newParts.length < 3) {
-        newParts.add(0);
+      final remoteParts = remote.split('.').map(int.parse).toList();
+      final localParts = local.split('.').map(int.parse).toList();
+      final length = remoteParts.length > localParts.length
+          ? remoteParts.length
+          : localParts.length;
+      for (var index = 0; index < length; index++) {
+        final remotePart = index < remoteParts.length ? remoteParts[index] : 0;
+        final localPart = index < localParts.length ? localParts[index] : 0;
+        if (remotePart != localPart) return remotePart > localPart;
       }
-      while (currentParts.length < 3) {
-        currentParts.add(0);
-      }
-
-      // 比较 major
-      if (newParts[0] > currentParts[0]) return true;
-      if (newParts[0] < currentParts[0]) return false;
-
-      // 比较 minor
-      if (newParts[1] > currentParts[1]) return true;
-      if (newParts[1] < currentParts[1]) return false;
-
-      // 比较 patch
-      if (newParts[2] > currentParts[2]) return true;
-
       return false;
-    } catch (e) {
-      LoggerService.error('❌ 版本号比较失败', error: e);
+    } catch (error) {
+      LoggerService.error('❌ 版本号比较失败', error: error);
       return false;
     }
   }

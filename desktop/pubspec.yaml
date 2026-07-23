@@ -95,6 +95,9 @@ dependencies:
   # URL launcher
   url_launcher: ^6.2.5
 
+  # Runtime app version/build metadata
+  package_info_plus: ^8.3.1
+
   # Fluent UI for desktop WinUI experience
   fluent_ui: ^4.15.1
 

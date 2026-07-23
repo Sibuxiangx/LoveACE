@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/manifest_provider.dart';
 import '../../services/session_manager.dart';
 import '../widgets/winui_card.dart';
+import '../widgets/winui_ota_dialog.dart';
 import 'winui_login_screen.dart';
 
 /// WinUI 风格的设置页面
@@ -252,7 +253,7 @@ class _WinUISettingsPageState extends State<WinUISettingsPage> {
                       children: [
                         Text(AppConstants.appName, style: theme.typography.body?.copyWith(fontWeight: FontWeight.w500)),
                         const SizedBox(height: 4),
-                        Text('版本 ${AppConstants.appVersion}', style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
+                        Text('版本 ${manifestProvider.currentVersion}', style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
                       ],
                     ),
                   ),
@@ -346,46 +347,18 @@ class _WinUISettingsPageState extends State<WinUISettingsPage> {
   Future<void> _checkForUpdate(BuildContext context, ManifestProvider manifestProvider) async {
     await manifestProvider.loadManifest(forceRefresh: true);
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
-    if (manifestProvider.hasOTAUpdate && manifestProvider.ota != null) {
-      // 显示更新对话框
-      await showDialog(
-        context: context,
-        barrierDismissible: !manifestProvider.isForceUpdate,
-        builder: (context) => ContentDialog(
-          title: const Text('发现新版本'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('版本: ${manifestProvider.latestVersion}'),
-              const SizedBox(height: 8),
-              if (manifestProvider.ota?.changelog.isNotEmpty == true) ...[
-                const Text('更新日志:'),
-                const SizedBox(height: 4),
-                ...manifestProvider.ota!.changelog.take(3).map((entry) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text('• ${entry.version}: ${entry.changes}'),
-                )),
-              ],
-            ],
-          ),
-          actions: [
-            if (!manifestProvider.isForceUpdate)
-              Button(
-                child: const Text('稍后'),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            FilledButton(
-              child: const Text('更新'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                // TODO: 实现更新逻辑
-              },
-            ),
-          ],
-        ),
+    if (manifestProvider.hasOTAUpdate &&
+        manifestProvider.latestRelease != null &&
+        manifestProvider.latestArtifact != null) {
+      await WinUIOTADialog.show(
+        context,
+        release: manifestProvider.latestRelease!,
+        artifact: manifestProvider.latestArtifact!,
+        currentVersion: manifestProvider.currentVersion,
+        platform: manifestProvider.currentPlatform,
+        forceUpdate: manifestProvider.isForceUpdate,
       );
     } else if (manifestProvider.state == ManifestState.error) {
       displayInfoBar(

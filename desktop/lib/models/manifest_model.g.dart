@@ -6,94 +6,136 @@ part of 'manifest_model.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-Announcement _$AnnouncementFromJson(Map<String, dynamic> json) => Announcement(
+ManifestNotice _$ManifestNoticeFromJson(
+  Map<String, dynamic> json,
+) => ManifestNotice(
+  id: json['id'] as String? ?? '',
   title: json['title'] as String? ?? '',
   content: json['content'] as String? ?? '',
-  confirmRequire: json['confirm_require'] as bool? ?? false,
-  md5: json['md5'] as String? ?? '',
+  level: json['level'] as String? ?? 'info',
+  platforms:
+      (json['platforms'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      [],
+  surfaces:
+      (json['surfaces'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      [],
+  publishedAt: json['published_at'] as String? ?? '',
+  expiresAt: json['expires_at'] as String?,
+  requireConfirmation: json['require_confirmation'] as bool? ?? false,
 );
 
-Map<String, dynamic> _$AnnouncementToJson(Announcement instance) =>
+Map<String, dynamic> _$ManifestNoticeToJson(ManifestNotice instance) =>
     <String, dynamic>{
+      'id': instance.id,
       'title': instance.title,
       'content': instance.content,
-      'confirm_require': instance.confirmRequire,
-      'md5': instance.md5,
+      'level': instance.level,
+      'platforms': instance.platforms,
+      'surfaces': instance.surfaces,
+      'published_at': instance.publishedAt,
+      'expires_at': instance.expiresAt,
+      'require_confirmation': instance.requireConfirmation,
     };
 
-ChangelogEntry _$ChangelogEntryFromJson(Map<String, dynamic> json) =>
-    ChangelogEntry(
-      version: json['version'] as String? ?? '',
-      changes: json['changes'] as String? ?? '',
+ArtifactChecksums _$ArtifactChecksumsFromJson(Map<String, dynamic> json) =>
+    ArtifactChecksums(
+      sha256: json['sha256'] as String?,
+      md5: json['md5'] as String?,
     );
 
-Map<String, dynamic> _$ChangelogEntryToJson(ChangelogEntry instance) =>
-    <String, dynamic>{'version': instance.version, 'changes': instance.changes};
+Map<String, dynamic> _$ArtifactChecksumsToJson(ArtifactChecksums instance) =>
+    <String, dynamic>{'sha256': instance.sha256, 'md5': instance.md5};
 
-PlatformRelease _$PlatformReleaseFromJson(Map<String, dynamic> json) =>
-    PlatformRelease(
-      version: json['version'] as String? ?? '',
-      forceOta: json['force_ota'] as bool? ?? false,
+ReleaseArtifact _$ReleaseArtifactFromJson(Map<String, dynamic> json) =>
+    ReleaseArtifact(
+      type: json['type'] as String? ?? '',
       url: json['url'] as String? ?? '',
-      md5: json['md5'] as String? ?? '',
-      type: json['type'] as String? ?? 'native',
+      arch: json['arch'] as String?,
+      size: (json['size'] as num?)?.toInt(),
+      checksums: ArtifactChecksums.fromJson(
+        json['checksums'] as Map<String, dynamic>,
+      ),
     );
 
-Map<String, dynamic> _$PlatformReleaseToJson(PlatformRelease instance) =>
+Map<String, dynamic> _$ReleaseArtifactToJson(ReleaseArtifact instance) =>
     <String, dynamic>{
-      'version': instance.version,
-      'force_ota': instance.forceOta,
-      'url': instance.url,
-      'md5': instance.md5,
       'type': instance.type,
+      'url': instance.url,
+      'arch': instance.arch,
+      'size': instance.size,
+      'checksums': instance.checksums,
     };
 
-OTA _$OTAFromJson(Map<String, dynamic> json) => OTA(
-  content: json['content'] as String? ?? '',
-  notice: json['notice'] as String? ?? '',
-  changelog: (json['changelog'] as List<dynamic>? ?? [])
-      .map((e) => ChangelogEntry.fromJson(e as Map<String, dynamic>))
-      .toList(),
-  android: json['android'] == null
-      ? null
-      : PlatformRelease.fromJson(json['android'] as Map<String, dynamic>),
-  ios: json['ios'] == null
-      ? null
-      : PlatformRelease.fromJson(json['ios'] as Map<String, dynamic>),
-  windows: json['windows'] == null
-      ? null
-      : PlatformRelease.fromJson(json['windows'] as Map<String, dynamic>),
-  macos: json['macos'] == null
-      ? null
-      : PlatformRelease.fromJson(json['macos'] as Map<String, dynamic>),
-  linux: json['linux'] == null
-      ? null
-      : PlatformRelease.fromJson(json['linux'] as Map<String, dynamic>),
+ManifestRelease _$ManifestReleaseFromJson(Map<String, dynamic> json) =>
+    ManifestRelease(
+      id: json['id'] as String? ?? '',
+      version: json['version'] as String? ?? '',
+      build: (json['build'] as num?)?.toInt(),
+      channel: json['channel'] as String? ?? 'stable',
+      publishedAt: json['published_at'] as String? ?? '',
+      summary: json['summary'] as String? ?? '',
+      changelog:
+          (json['changelog'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+      artifacts:
+          (json['artifacts'] as List<dynamic>?)
+              ?.map((e) => ReleaseArtifact.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+
+Map<String, dynamic> _$ManifestReleaseToJson(ManifestRelease instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'version': instance.version,
+      'build': instance.build,
+      'channel': instance.channel,
+      'published_at': instance.publishedAt,
+      'summary': instance.summary,
+      'changelog': instance.changelog,
+      'artifacts': instance.artifacts,
+    };
+
+PlatformManifest _$PlatformManifestFromJson(Map<String, dynamic> json) =>
+    PlatformManifest(
+      minimumSupportedBuild: (json['minimum_supported_build'] as num?)?.toInt(),
+      releases:
+          (json['releases'] as List<dynamic>?)
+              ?.map((e) => ManifestRelease.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+
+Map<String, dynamic> _$PlatformManifestToJson(PlatformManifest instance) =>
+    <String, dynamic>{
+      'minimum_supported_build': instance.minimumSupportedBuild,
+      'releases': instance.releases,
+    };
+
+ManifestV2 _$ManifestV2FromJson(Map<String, dynamic> json) => ManifestV2(
+  schemaVersion: (json['schema_version'] as num?)?.toInt() ?? 0,
+  revision: json['revision'] as String? ?? '',
+  generatedAt: json['generated_at'] as String? ?? '',
+  announcements:
+      (json['announcements'] as List<dynamic>?)
+          ?.map((e) => ManifestNotice.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      [],
+  platforms:
+      (json['platforms'] as Map<String, dynamic>?)?.map(
+        (k, e) =>
+            MapEntry(k, PlatformManifest.fromJson(e as Map<String, dynamic>)),
+      ) ??
+      {},
 );
 
-Map<String, dynamic> _$OTAToJson(OTA instance) => <String, dynamic>{
-  'content': instance.content,
-  'notice': instance.notice,
-  'changelog': instance.changelog,
-  'android': instance.android,
-  'ios': instance.ios,
-  'windows': instance.windows,
-  'macos': instance.macos,
-  'linux': instance.linux,
-};
-
-LoveACEManifest _$LoveACEManifestFromJson(Map<String, dynamic> json) =>
-    LoveACEManifest(
-      announcement: json['announcement'] == null
-          ? null
-          : Announcement.fromJson(json['announcement'] as Map<String, dynamic>),
-      ota: json['ota'] == null
-          ? null
-          : OTA.fromJson(json['ota'] as Map<String, dynamic>),
-    );
-
-Map<String, dynamic> _$LoveACEManifestToJson(LoveACEManifest instance) =>
+Map<String, dynamic> _$ManifestV2ToJson(ManifestV2 instance) =>
     <String, dynamic>{
-      'announcement': instance.announcement,
-      'ota': instance.ota,
+      'schema_version': instance.schemaVersion,
+      'revision': instance.revision,
+      'generated_at': instance.generatedAt,
+      'announcements': instance.announcements,
+      'platforms': instance.platforms,
     };

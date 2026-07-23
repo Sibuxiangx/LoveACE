@@ -5,7 +5,7 @@ import '../../models/manifest_model.dart';
 ///
 /// 使用 fluent_ui 的 ContentDialog 显示公告信息
 class WinUIAnnouncementDialog extends StatelessWidget {
-  final Announcement announcement;
+  final ManifestNotice announcement;
   final VoidCallback? onConfirm;
 
   const WinUIAnnouncementDialog({
@@ -17,6 +17,16 @@ class WinUIAnnouncementDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final noticeColor = switch (announcement.level) {
+      'critical' => Colors.red,
+      'warning' => Colors.orange,
+      _ => theme.accentColor,
+    };
+    final noticeIcon = switch (announcement.level) {
+      'critical' => FluentIcons.error_badge,
+      'warning' => FluentIcons.warning,
+      _ => FluentIcons.megaphone,
+    };
 
     return ContentDialog(
       title: Row(
@@ -24,12 +34,12 @@ class WinUIAnnouncementDialog extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: theme.accentColor.withValues(alpha: 0.15),
+              color: noticeColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              FluentIcons.megaphone,
-              color: theme.accentColor,
+              noticeIcon,
+              color: noticeColor,
               size: 20,
             ),
           ),
@@ -64,7 +74,7 @@ class WinUIAnnouncementDialog extends StatelessWidget {
       actions: [
         FilledButton(
           onPressed: () {
-            Navigator.pop(context);
+            Navigator.pop(context, true);
             onConfirm?.call();
           },
           child: const Text('我知道了'),
@@ -74,14 +84,15 @@ class WinUIAnnouncementDialog extends StatelessWidget {
   }
 
   /// 显示公告对话框
-  static Future<void> show(
+  static Future<bool?> show(
     BuildContext context, {
-    required Announcement announcement,
+    required ManifestNotice announcement,
     VoidCallback? onConfirm,
   }) {
     return showDialog(
       context: context,
-      barrierDismissible: !announcement.confirmRequire,
+      barrierDismissible: false,
+      dismissWithEsc: false,
       builder: (context) => WinUIAnnouncementDialog(
         announcement: announcement,
         onConfirm: onConfirm,

@@ -101,47 +101,55 @@ class _WinUIMainShellState extends State<WinUIMainShell> {
     if (!mounted) return;
 
     // 优先显示强制更新对话框
-    if (manifestProvider.isForceUpdate && manifestProvider.ota != null) {
-      _showOTAUpdateDialog(manifestProvider, isForce: true);
+    if (manifestProvider.isForceUpdate &&
+        manifestProvider.latestRelease != null &&
+        manifestProvider.latestArtifact != null) {
+      _showOTAUpdateDialog(manifestProvider);
       return;
     }
 
-    // 显示新公告
-    if (manifestProvider.hasNewAnnouncement &&
-        manifestProvider.announcement != null) {
-      await _showAnnouncementDialog(manifestProvider);
+    // 按顺序显示未读公告
+    while (mounted && manifestProvider.hasUnreadNotice) {
+      if (!await _showAnnouncementDialog(manifestProvider)) break;
     }
 
     // 显示可选更新
-    if (manifestProvider.hasOTAUpdate && manifestProvider.ota != null) {
-      _showOTAUpdateDialog(manifestProvider, isForce: false);
+    if (manifestProvider.hasOTAUpdate &&
+        manifestProvider.latestRelease != null &&
+        manifestProvider.latestArtifact != null) {
+      _showOTAUpdateDialog(manifestProvider);
     }
   }
 
   /// 显示公告对话框
-  Future<void> _showAnnouncementDialog(
+  Future<bool> _showAnnouncementDialog(
       ManifestProvider manifestProvider) async {
-    if (!mounted) return;
+    if (!mounted) return false;
 
-    await WinUIAnnouncementDialog.show(
+    final notice = manifestProvider.currentNotice;
+    if (notice == null) return false;
+    final confirmed = await WinUIAnnouncementDialog.show(
       context,
-      announcement: manifestProvider.announcement!,
-      onConfirm: () {
-        manifestProvider.markAnnouncementAsShown();
-      },
+      announcement: notice,
     );
+    if (confirmed == true) {
+      await manifestProvider.dismissCurrentNotice();
+      return true;
+    }
+    return false;
   }
 
   /// 显示 OTA 更新对话框
-  void _showOTAUpdateDialog(ManifestProvider manifestProvider,
-      {required bool isForce}) {
+  void _showOTAUpdateDialog(ManifestProvider manifestProvider) {
     if (!mounted) return;
 
     WinUIOTADialog.show(
       context,
-      ota: manifestProvider.ota!,
+      release: manifestProvider.latestRelease!,
+      artifact: manifestProvider.latestArtifact!,
       currentVersion: manifestProvider.currentVersion,
       platform: manifestProvider.currentPlatform,
+      forceUpdate: manifestProvider.isForceUpdate,
     );
   }
 

@@ -8,61 +8,58 @@ import '../services/logger_service.dart';
 /// 负责从远程服务器获取应用公告和 OTA 更新信息
 class ManifestService {
   final Dio _dio;
-  final String _manifestUrl;
+  final List<String> _manifestUrls;
 
-  ManifestService({
+  factory ManifestService({
     required Dio dio,
-    required String manifestUrl,
-  })  : _dio = dio,
-        _manifestUrl = manifestUrl;
+    required List<String> manifestUrls,
+  }) => ManifestService._(dio, List.unmodifiable(manifestUrls));
+
+  ManifestService._(this._dio, this._manifestUrls);
 
   /// 获取 Manifest
   ///
-  /// 返回 LoveACEManifest 对象，包含公告和 OTA 信息
+  /// 返回 ManifestV2 对象，包含公告和各平台发布信息
   /// 如果获取失败返回 null
-  Future<LoveACEManifest?> getManifest() async {
-    try {
-      LoggerService.info('📦 正在获取 Manifest...');
+  Future<ManifestV2?> getManifest() async {
+    for (final manifestUrl in _manifestUrls) {
+      try {
+        LoggerService.info('📦 正在获取 Manifest v2: $manifestUrl');
 
-      final response = await _dio.get(
-        _manifestUrl,
-        options: Options(
-          receiveTimeout: const Duration(seconds: 10),
-          sendTimeout: const Duration(seconds: 10),
-        ),
-      );
+        final response = await _dio.get(
+          manifestUrl,
+          options: Options(
+            receiveTimeout: const Duration(seconds: 10),
+            sendTimeout: const Duration(seconds: 10),
+          ),
+        );
 
-      if (response.statusCode == 200 && response.data != null) {
-        // 处理响应数据，可能是字符串或 Map
+        if (response.statusCode != 200 || response.data == null) {
+          throw StateError('Manifest 响应异常: ${response.statusCode}');
+        }
         var data = response.data;
 
         if (data is String) {
-          try {
-            data = jsonDecode(data);
-          } catch (e) {
-            LoggerService.error('❌ JSON 解析失败', error: e);
-            return null;
-          }
+          data = jsonDecode(data);
         }
 
         if (data is! Map<String, dynamic>) {
-          LoggerService.error('❌ 响应数据格式错误: 期望 Map，得到 ${data.runtimeType}');
-          return null;
+          throw FormatException('期望 Map，得到 ${data.runtimeType}');
         }
 
-        final manifest = LoveACEManifest.fromJson(data);
-        LoggerService.info('✅ Manifest 获取成功');
+        final manifest = ManifestV2.fromJson(data);
+        if (manifest.schemaVersion != 2) {
+          throw FormatException('不支持的 Manifest 版本: ${manifest.schemaVersion}');
+        }
+        LoggerService.info('✅ Manifest v2 获取成功');
         return manifest;
+      } on DioException catch (error) {
+        LoggerService.warning('⚠️ Manifest 地址不可用: $manifestUrl', error: error);
+      } catch (error) {
+        LoggerService.warning('⚠️ Manifest 解析失败: $manifestUrl', error: error);
       }
-
-      LoggerService.warning('⚠️ Manifest 响应异常: ${response.statusCode}');
-      return null;
-    } on DioException catch (e) {
-      LoggerService.error('❌ 获取 Manifest 失败', error: e);
-      return null;
-    } catch (e) {
-      LoggerService.error('❌ 解析 Manifest 失败', error: e);
-      return null;
     }
+    LoggerService.error('❌ 所有 Manifest v2 地址均不可用');
+    return null;
   }
 }

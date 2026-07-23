@@ -3,7 +3,7 @@ import '../models/manifest_model.dart';
 
 /// 公告对话框
 class AnnouncementDialog extends StatelessWidget {
-  final Announcement announcement;
+  final ManifestNotice announcement;
   final VoidCallback? onConfirm;
 
   const AnnouncementDialog({
@@ -17,7 +17,7 @@ class AnnouncementDialog extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return PopScope(
-      canPop: !announcement.confirmRequire,
+      canPop: !announcement.requireConfirmation,
       child: AlertDialog(
         titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
         contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 8),

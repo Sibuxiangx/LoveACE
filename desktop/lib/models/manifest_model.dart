@@ -2,145 +2,155 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'manifest_model.g.dart';
 
-/// 公告模型
 @JsonSerializable()
-class Announcement {
+class ManifestNotice {
+  @JsonKey(defaultValue: '')
+  final String id;
   @JsonKey(defaultValue: '')
   final String title;
   @JsonKey(defaultValue: '')
   final String content;
-  @JsonKey(name: 'confirm_require', defaultValue: false)
-  final bool confirmRequire;
-  @JsonKey(defaultValue: '')
-  final String md5;
+  @JsonKey(defaultValue: 'info')
+  final String level;
+  @JsonKey(defaultValue: <String>[])
+  final List<String> platforms;
+  @JsonKey(defaultValue: <String>[])
+  final List<String> surfaces;
+  @JsonKey(name: 'published_at', defaultValue: '')
+  final String publishedAt;
+  @JsonKey(name: 'expires_at')
+  final String? expiresAt;
+  @JsonKey(name: 'require_confirmation', defaultValue: false)
+  final bool requireConfirmation;
 
-  Announcement({
+  const ManifestNotice({
+    required this.id,
     required this.title,
     required this.content,
-    required this.confirmRequire,
-    required this.md5,
+    required this.level,
+    required this.platforms,
+    required this.surfaces,
+    required this.publishedAt,
+    this.expiresAt,
+    required this.requireConfirmation,
   });
 
-  factory Announcement.fromJson(Map<String, dynamic> json) =>
-      _$AnnouncementFromJson(json);
+  factory ManifestNotice.fromJson(Map<String, dynamic> json) =>
+      _$ManifestNoticeFromJson(json);
 
-  Map<String, dynamic> toJson() => _$AnnouncementToJson(this);
+  Map<String, dynamic> toJson() => _$ManifestNoticeToJson(this);
 }
 
-/// 更新日志条目
 @JsonSerializable()
-class ChangelogEntry {
-  @JsonKey(defaultValue: '')
-  final String version;
-  @JsonKey(defaultValue: '')
-  final String changes;
+class ArtifactChecksums {
+  final String? sha256;
+  final String? md5;
 
-  ChangelogEntry({
-    required this.version,
-    required this.changes,
-  });
+  const ArtifactChecksums({this.sha256, this.md5});
 
-  factory ChangelogEntry.fromJson(Map<String, dynamic> json) =>
-      _$ChangelogEntryFromJson(json);
+  factory ArtifactChecksums.fromJson(Map<String, dynamic> json) =>
+      _$ArtifactChecksumsFromJson(json);
 
-  Map<String, dynamic> toJson() => _$ChangelogEntryToJson(this);
+  Map<String, dynamic> toJson() => _$ArtifactChecksumsToJson(this);
 }
 
-/// 平台发布信息
-///
-/// 每个平台独立管理版本号和强制更新标志
 @JsonSerializable()
-class PlatformRelease {
+class ReleaseArtifact {
   @JsonKey(defaultValue: '')
-  final String version;
-  @JsonKey(name: 'force_ota', defaultValue: false)
-  final bool forceOta;
+  final String type;
   @JsonKey(defaultValue: '')
   final String url;
-  @JsonKey(defaultValue: '')
-  final String md5;
-  @JsonKey(defaultValue: 'native')
-  final String type;
+  final String? arch;
+  final int? size;
+  final ArtifactChecksums checksums;
 
-  PlatformRelease({
-    required this.version,
-    required this.forceOta,
+  const ReleaseArtifact({
+    required this.type,
     required this.url,
-    required this.md5,
-    this.type = 'native',
+    this.arch,
+    this.size,
+    required this.checksums,
   });
 
-  factory PlatformRelease.fromJson(Map<String, dynamic> json) =>
-      _$PlatformReleaseFromJson(json);
+  factory ReleaseArtifact.fromJson(Map<String, dynamic> json) =>
+      _$ReleaseArtifactFromJson(json);
 
-  Map<String, dynamic> toJson() => _$PlatformReleaseToJson(this);
+  Map<String, dynamic> toJson() => _$ReleaseArtifactToJson(this);
 }
 
-/// OTA 更新模型
-///
-/// 每个平台独立管理版本号和强制更新标志
-/// content 和 changelog 为所有平台共享的更新说明
 @JsonSerializable()
-class OTA {
+class ManifestRelease {
   @JsonKey(defaultValue: '')
-  final String content;
+  final String id;
   @JsonKey(defaultValue: '')
-  final String notice;
-  @JsonKey(defaultValue: <ChangelogEntry>[])
-  final List<ChangelogEntry> changelog;
-  final PlatformRelease? android;
-  final PlatformRelease? ios;
-  final PlatformRelease? windows;
-  final PlatformRelease? macos;
-  final PlatformRelease? linux;
+  final String version;
+  final int? build;
+  @JsonKey(defaultValue: 'stable')
+  final String channel;
+  @JsonKey(name: 'published_at', defaultValue: '')
+  final String publishedAt;
+  @JsonKey(defaultValue: '')
+  final String summary;
+  @JsonKey(defaultValue: <String>[])
+  final List<String> changelog;
+  @JsonKey(defaultValue: <ReleaseArtifact>[])
+  final List<ReleaseArtifact> artifacts;
 
-  OTA({
-    required this.content,
-    this.notice = '',
+  const ManifestRelease({
+    required this.id,
+    required this.version,
+    this.build,
+    required this.channel,
+    required this.publishedAt,
+    required this.summary,
     required this.changelog,
-    this.android,
-    this.ios,
-    this.windows,
-    this.macos,
-    this.linux,
+    required this.artifacts,
   });
 
-  factory OTA.fromJson(Map<String, dynamic> json) => _$OTAFromJson(json);
+  factory ManifestRelease.fromJson(Map<String, dynamic> json) =>
+      _$ManifestReleaseFromJson(json);
 
-  Map<String, dynamic> toJson() => _$OTAToJson(this);
-
-  /// 获取当前平台的发布信息
-  PlatformRelease? getPlatformRelease(String platform) {
-    switch (platform.toLowerCase()) {
-      case 'android':
-        return android;
-      case 'ios':
-        return ios;
-      case 'windows':
-        return windows;
-      case 'macos':
-        return macos;
-      case 'linux':
-        return linux;
-      default:
-        return null;
-    }
-  }
+  Map<String, dynamic> toJson() => _$ManifestReleaseToJson(this);
 }
 
-/// Manifest 模型
 @JsonSerializable()
-class LoveACEManifest {
-  final Announcement? announcement;
-  final OTA? ota;
+class PlatformManifest {
+  @JsonKey(name: 'minimum_supported_build')
+  final int? minimumSupportedBuild;
+  @JsonKey(defaultValue: <ManifestRelease>[])
+  final List<ManifestRelease> releases;
 
-  LoveACEManifest({
-    this.announcement,
-    this.ota,
+  const PlatformManifest({this.minimumSupportedBuild, required this.releases});
+
+  factory PlatformManifest.fromJson(Map<String, dynamic> json) =>
+      _$PlatformManifestFromJson(json);
+
+  Map<String, dynamic> toJson() => _$PlatformManifestToJson(this);
+}
+
+@JsonSerializable()
+class ManifestV2 {
+  @JsonKey(name: 'schema_version', defaultValue: 0)
+  final int schemaVersion;
+  @JsonKey(defaultValue: '')
+  final String revision;
+  @JsonKey(name: 'generated_at', defaultValue: '')
+  final String generatedAt;
+  @JsonKey(defaultValue: <ManifestNotice>[])
+  final List<ManifestNotice> announcements;
+  @JsonKey(defaultValue: <String, PlatformManifest>{})
+  final Map<String, PlatformManifest> platforms;
+
+  const ManifestV2({
+    required this.schemaVersion,
+    required this.revision,
+    required this.generatedAt,
+    required this.announcements,
+    required this.platforms,
   });
 
-  factory LoveACEManifest.fromJson(Map<String, dynamic> json) =>
-      _$LoveACEManifestFromJson(json);
+  factory ManifestV2.fromJson(Map<String, dynamic> json) =>
+      _$ManifestV2FromJson(json);
 
-  Map<String, dynamic> toJson() => _$LoveACEManifestToJson(this);
+  Map<String, dynamic> toJson() => _$ManifestV2ToJson(this);
 }
