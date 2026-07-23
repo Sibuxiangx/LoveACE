@@ -20,7 +20,6 @@ import java.io.File
 enum class OtaDialogMode { INFO, DOWNLOADING, ERROR }
 
 data class OtaUiState(
-    val startupCheckComplete: Boolean = false,
     val checking: Boolean = false,
     val updateInfo: UpdateInfo? = null,
     val announcement: AppAnnouncement? = null,
@@ -101,10 +100,7 @@ class OtaViewModel(application: Application) : AndroidViewModel(application) {
                         pendingUpdate = null
                         showUpdate(visibleOptionalUpdate)
                     } else {
-                        _state.value = _state.value.copy(
-                            checking = false,
-                            startupCheckComplete = true,
-                        )
+                        _state.value = _state.value.copy(checking = false)
                     }
                 }
             }.onFailure {
@@ -115,7 +111,6 @@ class OtaViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _state.value = _state.value.copy(
                     checking = false,
-                    startupCheckComplete = if (silent) true else _state.value.startupCheckComplete,
                     noUpdateMessage = if (silent) null else "检查更新失败，请稍后重试",
                 )
             }
@@ -235,7 +230,6 @@ class OtaViewModel(application: Application) : AndroidViewModel(application) {
     private fun showAnnouncement(announcement: AppAnnouncement) {
         _state.value = _state.value.copy(
             checking = false,
-            startupCheckComplete = true,
             announcement = announcement,
             showAnnouncementDialog = true,
             showUpdateDialog = false,
@@ -246,7 +240,6 @@ class OtaViewModel(application: Application) : AndroidViewModel(application) {
     private fun showUpdate(update: UpdateInfo) {
         _state.value = _state.value.copy(
             checking = false,
-            startupCheckComplete = true,
             updateInfo = update,
             announcement = null,
             showAnnouncementDialog = false,
