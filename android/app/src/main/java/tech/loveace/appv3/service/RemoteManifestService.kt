@@ -15,6 +15,8 @@ import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private const val MANIFEST_V2_URL = "https://release.loveace.top/loveace/manifest_v2.json"
 internal const val LEGACY_OTA_URL = "https://loveace.linota.cn/loveace/manifest.json"
@@ -138,19 +140,27 @@ object RemoteManifestService {
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, error: IOException) {
-                continuation.tryResumeWithException(error)?.let(continuation::completeResume)
+                if (continuation.isActive) continuation.resumeWithException(error)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
-                        continuation.tryResumeWithException(
-                            IOException("远程服务返回 HTTP ${response.code}")
-                        )?.let(continuation::completeResume)
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(
+                                IOException("远程服务返回 HTTP ${response.code}")
+                            )
+                        }
                         return
                     }
-                    continuation.tryResume(response.body.string())
-                        ?.let(continuation::completeResume)
+                    val body = response.body
+                    if (body == null) {
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(IOException("远程服务返回空响应"))
+                        }
+                    } else if (continuation.isActive) {
+                        continuation.resume(body.string())
+                    }
                 }
             }
         })
