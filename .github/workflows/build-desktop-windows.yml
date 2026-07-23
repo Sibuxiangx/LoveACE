@@ -83,10 +83,7 @@ jobs:
       - name: Install Inno Setup
         shell: pwsh
         run: |
-          $innoUrl = 'https://jrsoftware.org/download.php/is.exe'
-          $innoInstaller = "$env:TEMP\innosetup.exe"
-          Invoke-WebRequest -Uri $innoUrl -OutFile $innoInstaller
-          Start-Process -FilePath $innoInstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          choco install innosetup --yes --no-progress
 
           $innoPath = 'C:\Program Files (x86)\Inno Setup 6'
           "$innoPath" >> $env:GITHUB_PATH
