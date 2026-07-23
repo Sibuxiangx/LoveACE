@@ -37,6 +37,7 @@ import tech.loveace.appv3.ui.components.SectionTitle
 import tech.loveace.appv3.ui.components.AppLinearProgressIndicator
 import tech.loveace.appv3.ui.theme.*
 import tech.loveace.appv3.service.CourseNotificationService
+import tech.loveace.appv3.service.AppAnnouncement
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.OtaDialogMode
 import tech.loveace.appv3.ui.viewmodel.OtaViewModel
@@ -50,7 +51,7 @@ fun SettingsScreen(
     themeViewModel: ThemeViewModel,
     onBack: (() -> Unit)? = null,
     profileViewModel: ProfileViewModel = viewModel(),
-    otaViewModel: OtaViewModel = viewModel(),
+    otaViewModel: OtaViewModel,
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val themeConfig by themeViewModel.themeConfig.collectAsStateWithLifecycle()
@@ -358,11 +359,6 @@ fun SettingsScreen(
                 }
             }
 
-            // OTA 更新弹窗
-            if (otaState.showDialog && otaState.updateInfo != null) {
-                UpdateDialog(otaState.updateInfo!!, otaViewModel)
-            }
-
             // 日志
             SectionTitle("日志")
             Card(
@@ -420,24 +416,32 @@ fun UpdateDialog(info: tech.loveace.appv3.service.UpdateInfo, vm: OtaViewModel) 
 
     AlertDialog(
         onDismissRequest = {
-            if (!isDownloading && !info.forceUpdate) vm.dismissDialog()
+            if (!isDownloading && !info.forceUpdate) vm.dismissUpdateDialog()
         },
         title = {
             Text(
                 when (mode) {
                     OtaDialogMode.INFO -> "发现新版本 v${info.latestVersion}"
                     OtaDialogMode.DOWNLOADING -> "正在下载更新"
-                    OtaDialogMode.ERROR -> "下载失败"
+                    OtaDialogMode.ERROR -> "更新失败"
                 },
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 when (mode) {
                     OtaDialogMode.INFO -> {
                         Text("当前版本: v${info.currentVersion}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        info.latestBuild?.let { build ->
+                            Text("目标构建: $build",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         if (info.content.isNotEmpty()) {
                             Text(info.content, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -445,7 +449,7 @@ fun UpdateDialog(info: tech.loveace.appv3.service.UpdateInfo, vm: OtaViewModel) 
                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
                             Text("更新日志", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             info.changelog.forEach { entry ->
-                                Text("v${entry.version}: ${entry.changes}",
+                                Text("• ${entry.changes}",
                                     style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -485,11 +489,15 @@ fun UpdateDialog(info: tech.loveace.appv3.service.UpdateInfo, vm: OtaViewModel) 
         confirmButton = {
             when (mode) {
                 OtaDialogMode.INFO -> {
-                    Button(onClick = { vm.startDownload() }) { Text("立即更新") }
+                    Button(onClick = { vm.startDownload() }) {
+                        Text(if (otaState.downloadedFile != null) "继续安装" else "立即更新")
+                    }
                 }
                 OtaDialogMode.DOWNLOADING -> {}
                 OtaDialogMode.ERROR -> {
-                    Button(onClick = { vm.retryDownload() }) { Text("重试") }
+                    Button(onClick = { vm.retryDownload() }) {
+                        Text(if (otaState.downloadedFile != null) "重试安装" else "重试")
+                    }
                 }
             }
         },
@@ -497,14 +505,43 @@ fun UpdateDialog(info: tech.loveace.appv3.service.UpdateInfo, vm: OtaViewModel) 
             when (mode) {
                 OtaDialogMode.INFO -> {
                     if (!info.forceUpdate) {
-                        TextButton(onClick = { vm.dismissDialog() }) { Text("稍后再说") }
+                        Row {
+                            TextButton(onClick = { vm.ignoreUpdate() }) { Text("忽略此版本") }
+                            TextButton(onClick = { vm.dismissUpdateDialog() }) { Text("稍后再说") }
+                        }
                     }
                 }
                 OtaDialogMode.DOWNLOADING -> {}
                 OtaDialogMode.ERROR -> {
-                    TextButton(onClick = { vm.dismissDialog() }) { Text("取消") }
+                    if (!info.forceUpdate) {
+                        TextButton(onClick = { vm.dismissUpdateDialog() }) { Text("取消") }
+                    }
                 }
             }
+        },
+    )
+}
+
+@Composable
+fun AnnouncementDialog(info: AppAnnouncement, vm: OtaViewModel) {
+    val otaState by vm.state.collectAsStateWithLifecycle()
+    AlertDialog(
+        onDismissRequest = {
+            if (!info.requireConfirmation) vm.dismissAnnouncement()
+        },
+        title = { Text(info.title.ifEmpty { "公告" }) },
+        text = {
+            Text(
+                info.content,
+                modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { vm.dismissAnnouncement() },
+                enabled = !otaState.dismissingAnnouncement,
+            ) { Text("我知道了") }
         },
     )
 }

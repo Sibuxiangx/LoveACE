@@ -33,6 +33,7 @@ import tech.loveace.appv3.ui.navigation.*
 import tech.loveace.appv3.ui.screen.landscape.LandscapeShell
 import tech.loveace.appv3.ui.theme.ThemeViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
+import tech.loveace.appv3.ui.viewmodel.OtaViewModel
 import tech.loveace.appv3.ui.viewmodel.ProfileViewModel
 
 data class BottomNavItem(
@@ -48,6 +49,7 @@ data class BottomNavItem(
 fun MainShell(
     authViewModel: AuthViewModel,
     themeViewModel: ThemeViewModel,
+    otaViewModel: OtaViewModel,
     onNavigateToDetail: (Any) -> Unit,
     profileViewModel: ProfileViewModel = viewModel(),
     navigateToSchedule: Boolean = false,
@@ -59,6 +61,7 @@ fun MainShell(
         LandscapeShell(
             authViewModel = authViewModel,
             themeViewModel = themeViewModel,
+            otaViewModel = otaViewModel,
             profileViewModel = profileViewModel,
             navigateToSchedule = navigateToSchedule,
             onScheduleNavigated = onScheduleNavigated,
@@ -73,6 +76,7 @@ fun MainShell(
         PortraitShell(
             authViewModel = authViewModel,
             themeViewModel = themeViewModel,
+            otaViewModel = otaViewModel,
             onNavigateToDetail = onNavigateToDetail,
             profileViewModel = profileViewModel,
         )
@@ -85,6 +89,7 @@ fun MainShell(
 private fun PortraitShell(
     authViewModel: AuthViewModel,
     themeViewModel: ThemeViewModel,
+    otaViewModel: OtaViewModel,
     onNavigateToDetail: (Any) -> Unit,
     profileViewModel: ProfileViewModel,
 ) {
@@ -123,7 +128,12 @@ private fun PortraitShell(
             composable<AACRoute> { AACScreen(authViewModel) }
             composable<MoreRoute> { MoreScreen(onNavigateToDetail) }
             composable<SettingsRoute> {
-                SettingsScreen(authViewModel, themeViewModel, profileViewModel = profileViewModel)
+                SettingsScreen(
+                    authViewModel = authViewModel,
+                    themeViewModel = themeViewModel,
+                    profileViewModel = profileViewModel,
+                    otaViewModel = otaViewModel,
+                )
             }
         }
 

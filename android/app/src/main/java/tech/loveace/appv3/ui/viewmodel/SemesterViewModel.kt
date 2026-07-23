@@ -5,19 +5,17 @@ import android.util.Log
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import tech.loveace.appv3.widget.SemesterDayWidget
 import tech.loveace.appv3.widget.SemesterWeekWidget
 import tech.loveace.appv3.widget.WidgetDataStore
-import java.net.URL
+import tech.loveace.appv3.service.RemoteManifestService
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -93,9 +91,9 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             _uiState.value = SemesterUiState(SemesterStatus.Loading)
             try {
-                val rawText = fetchSemesterRawJson()
-                WidgetDataStore.saveSemesterJson(getApplication(), rawText)
+                val rawText = RemoteManifestService.fetchSemesterJson()
                 val data = json.decodeFromString<SemesterData>(rawText)
+                WidgetDataStore.saveSemesterJson(getApplication(), rawText)
                 val status = computeStatus(data)
                 _uiState.value = SemesterUiState(status)
                 // 请求刷新 widget
@@ -106,14 +104,6 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
                 _uiState.value = SemesterUiState(SemesterStatus.Error("无法获取学期信息"))
             }
         }
-    }
-
-    private suspend fun fetchSemesterRawJson(): String = withContext(Dispatchers.IO) {
-        val url = URL(SEMESTER_JSON_URL)
-        url.openConnection().apply {
-            connectTimeout = 5000
-            readTimeout = 5000
-        }.getInputStream().bufferedReader().readText()
     }
 
     private fun computeStatus(data: SemesterData): SemesterStatus {
@@ -152,7 +142,5 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
 
     companion object {
         private const val TAG = "SemesterViewModel"
-        private const val SEMESTER_JSON_URL =
-            "https://loveace-semsync.oss-cn-beijing.aliyuncs.com/loveace/semesters.json"
     }
 }

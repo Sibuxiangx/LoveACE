@@ -106,13 +106,22 @@ fun RibbonApp(
     val widgetNavTarget by (activity?.pendingWidgetNav ?: remember { mutableStateOf(null) })
     var widgetScheduleNav by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { authViewModel.restoreSession() }
-
     // Silent OTA check on launch
     LaunchedEffect(Unit) { otaViewModel.checkForUpdate(silent = true) }
 
-    // Global update dialog
-    if (otaState.showDialog && otaState.updateInfo != null) {
+    if (!otaState.startupCheckComplete) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AppCircularProgressIndicator()
+        }
+        return
+    }
+
+    LaunchedEffect(Unit) { authViewModel.restoreSession() }
+
+    // Global announcement/update host. The ViewModel enforces force OTA -> announcement -> optional OTA.
+    if (otaState.showAnnouncementDialog && otaState.announcement != null) {
+        AnnouncementDialog(otaState.announcement!!, otaViewModel)
+    } else if (otaState.showUpdateDialog && otaState.updateInfo != null) {
         UpdateDialog(otaState.updateInfo!!, otaViewModel)
     }
 
@@ -237,6 +246,7 @@ fun RibbonApp(
             MainShell(
                 authViewModel = authViewModel,
                 themeViewModel = themeViewModel,
+                otaViewModel = otaViewModel,
                 onNavigateToDetail = { route -> navController.navigate(route) },
                 navigateToSchedule = widgetScheduleNav,
                 onScheduleNavigated = { widgetScheduleNav = false },

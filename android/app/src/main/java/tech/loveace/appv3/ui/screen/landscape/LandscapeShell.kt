@@ -27,6 +27,7 @@ import tech.loveace.appv3.R
 import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.ui.theme.ThemeViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
+import tech.loveace.appv3.ui.viewmodel.OtaViewModel
 import tech.loveace.appv3.ui.viewmodel.ProfileViewModel
 
 /** 横屏导航项 */
@@ -44,6 +45,7 @@ data class LandscapeNavItem(
 fun LandscapeShell(
     authViewModel: AuthViewModel,
     themeViewModel: ThemeViewModel,
+    otaViewModel: OtaViewModel,
     profileViewModel: ProfileViewModel = viewModel(),
     navigateToSchedule: Boolean = false,
     onScheduleNavigated: () -> Unit = {},
@@ -181,7 +183,12 @@ fun LandscapeShell(
                 10 -> LandscapeDoorCardScreen(authViewModel)
                 11 -> LandscapeCompetitionScreen(authViewModel)
                 12 -> LandscapeLaborClubScreen(authViewModel, profileViewModel)
-                13 -> LandscapeSettingsScreen(authViewModel, themeViewModel, profileViewModel)
+                13 -> LandscapeSettingsScreen(
+                    authViewModel,
+                    themeViewModel,
+                    profileViewModel,
+                    otaViewModel,
+                )
             }
         }
     }

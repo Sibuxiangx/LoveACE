@@ -4,16 +4,14 @@ import android.content.Context
 import android.util.Log
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import tech.loveace.appv3.data.service.JWCService
 import tech.loveace.appv3.data.service.StudentScheduleService
 import tech.loveace.appv3.service.CourseNotificationService
+import tech.loveace.appv3.service.RemoteManifestService
 import tech.loveace.appv3.ui.theme.ThemePreferences
 import kotlinx.coroutines.flow.first
-import java.net.URL
 
 /**
  * Widget 数据同步助手
@@ -21,9 +19,6 @@ import java.net.URL
  */
 object WidgetSyncHelper {
     private const val TAG = "WidgetSync"
-    private const val SEMESTER_JSON_URL =
-        "https://loveace-semsync.oss-cn-beijing.aliyuncs.com/loveace/semesters.json"
-    
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun syncWidgetDataIfNeeded(
@@ -48,7 +43,8 @@ object WidgetSyncHelper {
 
             // 1. 获取 semester 数据
             try {
-                val semesterJson = fetchSemesterJson()
+                val semesterJson = RemoteManifestService.fetchSemesterJson()
+                json.decodeFromString<WidgetSemesterData>(semesterJson)
                 WidgetDataStore.saveSemesterJson(context, semesterJson)
                 Log.d(TAG, "Semester saved")
             } catch (e: Exception) {
@@ -93,12 +89,5 @@ object WidgetSyncHelper {
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed", e)
         }
-    }
-
-    private suspend fun fetchSemesterJson(): String = withContext(Dispatchers.IO) {
-        URL(SEMESTER_JSON_URL).openConnection().apply {
-            connectTimeout = 5000
-            readTimeout = 5000
-        }.getInputStream().bufferedReader().readText()
     }
 }

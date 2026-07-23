@@ -2,6 +2,9 @@ package tech.loveace.appv3.widget
 
 import android.content.Context
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * Widget 数据存储 — 使用文件存储，跨进程可靠
@@ -25,13 +28,11 @@ object WidgetDataStore {
     }
 
     fun saveSemesterJson(context: Context, json: String) {
-        val file = File(getDir(context), FILE_SEMESTER)
-        file.writeText(json)
+        writeAtomically(File(getDir(context), FILE_SEMESTER), json)
     }
 
     fun saveCourses(context: Context, json: String) {
-        val file = File(getDir(context), FILE_COURSES)
-        file.writeText(json)
+        writeAtomically(File(getDir(context), FILE_COURSES), json)
     }
 
     fun loadSemesterJson(context: Context): String? {
@@ -42,5 +43,28 @@ object WidgetDataStore {
     fun loadCoursesJson(context: Context): String? {
         val file = File(getDir(context), FILE_COURSES)
         return if (file.exists()) file.readText() else null
+    }
+
+    private fun writeAtomically(file: File, content: String) {
+        val temporary = File.createTempFile(file.name, ".tmp", file.parentFile)
+        try {
+            temporary.writeText(content)
+            try {
+                Files.move(
+                    temporary.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    temporary.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            }
+        } finally {
+            temporary.delete()
+        }
     }
 }

@@ -44,7 +44,7 @@ fun LandscapeSettingsScreen(
     authViewModel: AuthViewModel,
     themeViewModel: ThemeViewModel,
     profileViewModel: ProfileViewModel,
-    otaViewModel: OtaViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    otaViewModel: OtaViewModel,
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val themeConfig by themeViewModel.themeConfig.collectAsStateWithLifecycle()
@@ -325,7 +325,4 @@ fun LandscapeSettingsScreen(
         )
     }
 
-    if (otaState.showDialog && otaState.updateInfo != null) {
-        tech.loveace.appv3.ui.screen.UpdateDialog(otaState.updateInfo!!, otaViewModel)
-    }
 }
