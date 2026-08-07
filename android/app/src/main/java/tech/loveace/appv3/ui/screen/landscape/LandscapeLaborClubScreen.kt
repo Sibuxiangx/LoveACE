@@ -116,7 +116,7 @@ fun LandscapeLaborClubScreen(
     ) { padding ->
         when {
             state.isLoading && state.progress == null -> LoadingScreen()
-            state.error != null && state.progress == null && state.clubStatusError != null ->
+            state.error != null && state.progress == null ->
                 ErrorScreen(state.error!!) { vm.loadAll() }
             else -> Row(
                 Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp, vertical = 16.dp),

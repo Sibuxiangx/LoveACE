@@ -89,7 +89,7 @@ fun LaborClubScreen(
     ) { padding ->
         when {
             state.isLoading && state.progress == null -> LoadingScreen()
-            state.error != null && state.progress == null && state.clubStatusError != null ->
+            state.error != null && state.progress == null ->
                 ErrorScreen(state.error!!) { vm.loadAll() }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
