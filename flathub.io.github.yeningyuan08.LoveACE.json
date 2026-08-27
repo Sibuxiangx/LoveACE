@@ -3,6 +3,9 @@
   "runtime": "org.freedesktop.Platform",
   "runtime-version": "24.08",
   "sdk": "org.freedesktop.Sdk",
+  "sdk-extensions": [
+    "org.freedesktop.Sdk.Extension.llvm20"
+  ],
   "command": "loveace",
   "finish-args": [
     "--share=network",
@@ -14,7 +17,7 @@
     "--filesystem=xdg-download"
   ],
   "build-options": {
-    "append-path": "/app/opt/flutter/bin",
+    "append-path": "/app/opt/flutter/bin:/usr/lib/sdk/llvm20/bin",
     "env": {
       "FLUTTER_SUPPRESS_ANALYTICS": "true",
       "PKG_CONFIG_PATH": "/app/lib/pkgconfig:/app/lib/x86_64-linux-gnu/pkgconfig:/app/share/pkgconfig:/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
