@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.yeningyuan08.LoveACE</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>LoveACE</name>
+  <name xml:lang="zh-CN">LoveACE</name>
+  <summary>Campus life and study toolkit</summary>
+  <summary xml:lang="zh-CN">校园学习与生活一体化工具箱</summary>
+  <description>
+    <p>
+      LoveACE is an all-in-one toolkit for campus study and daily life. It aggregates
+      course schedules, grades, exams, campus cards, electricity bills, competitions,
+      labor clubs, repair requests, door access and teaching evaluation into a single app.
+    </p>
+    <p xml:lang="zh-CN">
+      LoveACE 是面向校园学习与生活的一体化工具箱，聚合课程表、成绩、考试、一卡通、
+      电费、竞赛、劳动俱乐部、报修、门禁与自动评教辅助等常用能力。
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.yeningyuan08.LoveACE.desktop</launchable>
+  <developer id="io.github.yeningyuan08">
+    <name>LoveACE Project</name>
+  </developer>
+  <url type="homepage">https://github.com/yeningyuan08/LoveACE</url>
+  <url type="bugtracker">https://github.com/yeningyuan08/LoveACE/issues</url>
+  <url type="donation">https://github.com/yeningyuan08/LoveACE</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Login</caption>
+      <caption xml:lang="zh-CN">登录页</caption>
+      <image type="source">https://raw.githubusercontent.com/yeningyuan08/LoveACE/flathub/assets/screenshot-login.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">none</content_attribute>
+    <content_attribute id="violence-fantasy">none</content_attribute>
+    <content_attribute id="violence-realistic">none</content_attribute>
+    <content_attribute id="violence-bloodshed">none</content_attribute>
+    <content_attribute id="violence-sexual">none</content_attribute>
+    <content_attribute id="drugs-alcohol">none</content_attribute>
+    <content_attribute id="drugs-narcotics">none</content_attribute>
+    <content_attribute id="drugs-tobacco">none</content_attribute>
+    <content_attribute id="sex-nudity">none</content_attribute>
+    <content_attribute id="sex-themes">none</content_attribute>
+    <content_attribute id="sex-homosexuality">none</content_attribute>
+    <content_attribute id="sex-prostitution">none</content_attribute>
+    <content_attribute id="sex-adultery">none</content_attribute>
+    <content_attribute id="sex-appearance">none</content_attribute>
+    <content_attribute id="language-profanity">none</content_attribute>
+    <content_attribute id="language-humor">none</content_attribute>
+    <content_attribute id="language-discrimination">none</content_attribute>
+    <content_attribute id="social-chat">none</content_attribute>
+    <content_attribute id="social-contacts">none</content_attribute>
+    <content_attribute id="social-info">mild</content_attribute>
+    <content_attribute id="social-location">none</content_attribute>
+    <content_attribute id="social-audio">none</content_attribute>
+  </content_rating>
+  <releases>
+    <release version="1.1.12" date="2026-06-10">
+      <description>
+        <p>Desktop 1.1.12 release.</p>
+        <p xml:lang="zh-CN">桌面端 1.1.12 版本发布。</p>
+      </description>
+    </release>
+  </releases>
+</component>

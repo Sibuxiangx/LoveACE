@@ -19,6 +19,14 @@ DerivedData/
 *.ipa
 *.dSYM
 
+# AppImage packaging (downloaded tool + local outputs)
+desktop/appimage/*.AppImage
+
+# Local sandbox workarounds (writable SDK/pub-cache copies)
+.flutter-sdk/
+.pub-cache/
+.home/
+
 # IDE user state
 .idea/
 *.xcuserstate
