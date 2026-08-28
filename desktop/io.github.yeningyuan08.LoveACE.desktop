@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=LoveACE
+GenericName=LoveACE
+Comment=校园学习与生活一体化工具箱
+Comment[zh_CN]=校园学习与生活一体化工具箱
+Exec=loveace
+Icon=io.github.yeningyuan08.LoveACE
+Terminal=false
+Type=Application
+Categories=Education;Utility;
+StartupWMClass=loveace
