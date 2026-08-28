@@ -29,11 +29,11 @@ actor HTTPClient {
         config.timeoutIntervalForRequest = timeoutInterval
         config.timeoutIntervalForResource = timeoutInterval * 2
 
-        if followRedirects {
-            self.session = URLSession(configuration: config)
-        } else {
-            self.session = URLSession(configuration: config, delegate: NoRedirectDelegate.shared, delegateQueue: nil)
-        }
+        self.session = URLSession(
+            configuration: config,
+            delegate: HTTPClientSessionDelegate(followRedirects: followRedirects),
+            delegateQueue: nil
+        )
     }
 
     func get(_ urlString: String, headers: [String: String] = [:]) async throws -> (Data, HTTPURLResponse) {
@@ -77,23 +77,76 @@ actor HTTPClient {
     }
 
     private func execute(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let requestID = UUID().uuidString
+        let startedAt = Date()
         let reqUrl = request.url?.absoluteString ?? ""
         logger.info("🌐 \(request.httpMethod ?? "?") \(self.safeLogURL(request.url))")
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw HTTPError.invalidResponse
-        }
-        let respUrl = httpResponse.url?.absoluteString ?? reqUrl
-        logger.info("✅ \(httpResponse.statusCode) \(self.safeLogURL(httpResponse.url)) [\(data.count) bytes]")
+        await NetworkLogStore.shared.recordRequestStarted(
+            id: requestID,
+            request: request,
+            bodySummary: requestBodySummary(request.httpBody, contentType: request.value(forHTTPHeaderField: "Content-Type"))
+        )
 
-        let isLoginRequest = reqUrl.contains("/por/login_auth.csp") || reqUrl.contains("/por/login_psw.csp")
-        if !isLoginRequest, let peek = String(data: data.prefix(512), encoding: .utf8) {
-            if isVpnLoginPage(body: peek, url: respUrl) {
-                logger.warning("⚠️ Session expired detected for \(reqUrl)")
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw HTTPError.invalidResponse
+            }
+            let location = httpResponse.value(forHTTPHeaderField: "Location")
+            let detection = SessionPageDetector.inspect(responseURL: httpResponse.url, body: data, location: location)
+            await NetworkLogStore.shared.recordResponse(
+                id: requestID,
+                requestURL: request.url,
+                response: httpResponse,
+                body: data,
+                duration: Date().timeIntervalSince(startedAt),
+                detection: detection
+            )
+            let respUrl = httpResponse.url?.absoluteString ?? reqUrl
+            logger.info("✅ \(httpResponse.statusCode) \(self.safeLogURL(httpResponse.url)) [\(data.count) bytes]")
+
+            if detection.isExpired {
+                logger.warning("⚠️ VPN session expired detected for \(self.safeLogURL(httpResponse.url))")
+                await NetworkLogStore.shared.recordSessionExpired(
+                    requestURL: request.url,
+                    responseURL: httpResponse.url,
+                    signals: detection.signals
+                )
+                onSessionExpired?()
+            } else if !reqUrl.contains("/por/login_auth.csp"),
+                      !reqUrl.contains("/por/login_psw.csp"),
+                      let peek = String(data: data.prefix(512), encoding: .utf8),
+                      isVpnLoginPage(body: peek, url: respUrl) {
+                logger.warning("⚠️ Legacy VPN login page detected for \(reqUrl)")
+                await NetworkLogStore.shared.recordSessionExpired(
+                    requestURL: request.url,
+                    responseURL: httpResponse.url,
+                    signals: ["legacy_login_page"]
+                )
                 onSessionExpired?()
             }
+            return (data, httpResponse)
+        } catch {
+            await NetworkLogStore.shared.recordFailure(
+                id: requestID,
+                request: request,
+                error: error,
+                duration: Date().timeIntervalSince(startedAt)
+            )
+            throw error
         }
-        return (data, httpResponse)
+    }
+
+    private func requestBodySummary(_ body: Data?, contentType: String?) -> String? {
+        guard let body else { return nil }
+        let type = contentType ?? "unknown"
+        if type.lowercased().contains("form-urlencoded"),
+           let text = String(data: body, encoding: .utf8) {
+            let fields = text.split(separator: "&").compactMap { $0.split(separator: "=", maxSplits: 1).first }
+                .map(String.init).sorted().joined(separator: ",")
+            return "content_type=\(type); bytes=\(body.count); fields=[\(fields)]"
+        }
+        return "content_type=\(type); bytes=\(body.count)"
     }
 
     private func safeLogURL(_ url: URL?) -> String {
@@ -162,14 +215,25 @@ enum HTTPError: Error, LocalizedError {
     }
 }
 
-final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable {
-    static let shared = NoRedirectDelegate()
+final class HTTPClientSessionDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    private let followRedirects: Bool
+
+    init(followRedirects: Bool) {
+        self.followRedirects = followRedirects
+    }
 
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
+        Task {
+            await NetworkLogStore.shared.recordRedirect(
+                taskID: task.taskIdentifier,
+                response: response,
+                newRequest: request
+            )
+        }
+        completionHandler(followRedirects ? request : nil)
     }
 }
 

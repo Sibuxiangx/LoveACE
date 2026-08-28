@@ -4,6 +4,10 @@ struct SettingsView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var profileVM = ProfileViewModel()
     @State private var showLogoutAlert = false
+    @State private var networkLoggingEnabled = NetworkLogStore.isLoggingEnabled
+    @State private var logArchiveURL: URL?
+    @State private var isExportingLogs = false
+    @State private var logExportError: String?
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -42,6 +46,38 @@ struct SettingsView: View {
                         Image(systemName: "lock.shield.fill")
                             .foregroundStyle(.green)
                     }
+                }
+
+                Section("网络诊断") {
+                    Toggle(isOn: $networkLoggingEnabled) {
+                        Label("记录网络日志", systemImage: "waveform.path.ecg")
+                    }
+                    .onChange(of: networkLoggingEnabled) { _, enabled in
+                        NetworkLogStore.setLoggingEnabled(enabled)
+                    }
+
+                    Button {
+                        exportNetworkLogs()
+                    } label: {
+                        Label(isExportingLogs ? "正在整理网络日志..." : "导出网络日志 ZIP", systemImage: "doc.zipper")
+                    }
+                    .disabled(isExportingLogs || !networkLoggingEnabled)
+                    .foregroundStyle(networkLoggingEnabled ? Color.accentColor : Color.secondary)
+                    .opacity(networkLoggingEnabled ? 1 : 0.45)
+
+                    if let logArchiveURL {
+                        Button {
+                            self.logArchiveURL = logArchiveURL
+                        } label: {
+                            Label("分享最近的网络日志 ZIP", systemImage: "square.and.arrow.up")
+                        }
+                    }
+
+                    Text(networkLoggingEnabled
+                         ? "日志只保存在本机。请求参数中的密码、Cookie、令牌和票据会脱敏；超过 256 KB 的响应会作为独立文件放入 ZIP。"
+                         : "日志默认关闭。开启后才会记录新的网络请求，关闭时不会保存请求和响应内容。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("法律信息") {
@@ -91,7 +127,41 @@ struct SettingsView: View {
                 Button("取消", role: .cancel) {}
                 Button("退出", role: .destructive) { authVM.logout() }
             } message: { Text("退出后需要重新登录") }
+            .alert("日志导出失败", isPresented: Binding(
+                get: { logExportError != nil },
+                set: { if !$0 { logExportError = nil } }
+            )) {
+                Button("好的", role: .cancel) {}
+            } message: {
+                Text(logExportError ?? "未知错误")
+            }
+            .sheet(isPresented: Binding(
+                get: { logArchiveURL != nil && !isExportingLogs },
+                set: { if !$0 { logArchiveURL = nil } }
+            )) {
+                if let logArchiveURL {
+                    NetworkLogShareSheet(archiveURL: logArchiveURL)
+                }
+            }
             .onAppear { profileVM.setActiveUserId(authVM.userId) }
+        }
+    }
+
+    private func exportNetworkLogs() {
+        isExportingLogs = true
+        Task {
+            do {
+                let archiveURL = try await NetworkLogStore.shared.exportZip()
+                await MainActor.run {
+                    isExportingLogs = false
+                    logArchiveURL = archiveURL
+                }
+            } catch {
+                await MainActor.run {
+                    isExportingLogs = false
+                    logExportError = error.localizedDescription
+                }
+            }
         }
     }
 

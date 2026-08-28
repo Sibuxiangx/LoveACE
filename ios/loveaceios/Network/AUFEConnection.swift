@@ -43,6 +43,7 @@ actor AUFEConnection {
     func setOnSessionExpired(_ callback: @escaping @Sendable () -> Void) async {
         await client.setSessionExpired(callback)
         await simpleClient.setSessionExpired(callback)
+        await noRedirectClient.setSessionExpired(callback)
     }
 
     // MARK: - Heartbeat
@@ -59,9 +60,11 @@ actor AUFEConnection {
             let body = String(data: data, encoding: .utf8) ?? ""
             let result: HeartbeatResult = body.contains("<TwfID>") ? .alive : .expired
             logger.debug("💓 Heartbeat: \(String(describing: result))")
+            await NetworkLogStore.shared.recordHeartbeat(result: String(describing: result), bodyBytes: data.count)
             return result
         } catch {
             logger.warning("💓 Heartbeat failed: \(error.localizedDescription)")
+            await NetworkLogStore.shared.recordHeartbeat(result: "unavailable", bodyBytes: 0)
             return .unavailable
         }
     }
