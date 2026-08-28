@@ -6,6 +6,8 @@ struct LoginView: View {
     @State private var ecPassword = ""
     @State private var password = ""
     @State private var showPassword = false
+    @State private var showAdvancedOptions = false
+    @State private var usesSeparateGatewayPassword = false
     @State private var showPasswordHelp = false
 
     var body: some View {
@@ -32,30 +34,23 @@ struct LoginView: View {
                         .keyboardType(.numberPad)
                         .textContentType(.username)
 
-                    inputField(icon: "network", placeholder: "校园网关密码", text: $ecPassword, isSecure: true)
-                        .textContentType(.password)
+                    passwordField(placeholder: "教务系统密码", text: $password)
 
-                    HStack(spacing: 12) {
-                        Image(systemName: "lock.fill")
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 20)
-                        Group {
-                            if showPassword {
-                                TextField("教务密码", text: $password)
-                            } else {
-                                SecureField("教务密码", text: $password)
+                    DisclosureGroup(isExpanded: $showAdvancedOptions) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Toggle("我的网关密码和教务密码不一样", isOn: $usesSeparateGatewayPassword)
+                                .font(.subheadline)
+                            if usesSeparateGatewayPassword {
+                                inputField(icon: "network", placeholder: "网关密码", text: $ecPassword, isSecure: true)
+                                    .textContentType(.password)
                             }
                         }
-                        .textContentType(.password)
-                        Button { showPassword.toggle() } label: {
-                            Image(systemName: showPassword ? "eye.slash" : "eye")
-                                .foregroundStyle(.tertiary)
-                                .contentTransition(.symbolEffect(.replace))
-                        }
+                        .padding(.top, 8)
+                    } label: {
+                        Label("高级选项", systemImage: "slider.horizontal.3")
+                            .font(.subheadline.weight(.medium))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(.fill.quaternary, in: .rect(cornerRadius: 12))
+                    .tint(.secondary)
                 }
                 .padding(.horizontal, 32)
 
@@ -65,6 +60,13 @@ struct LoginView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                     .padding(.top, 18)
+
+                Text("彩带小工具由开源工作者维护，可能与学校系统存在不同步风险，重要信息可能无法及时更新展示，请以学校官方信息为准。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.top, 8)
 
                 if let error = authVM.errorMessage {
                     HStack(spacing: 6) {
@@ -77,7 +79,11 @@ struct LoginView: View {
                 }
 
                 Button {
-                    authVM.login(userId: userId, ecPassword: ecPassword, password: password)
+                    authVM.login(
+                        userId: userId,
+                        password: password,
+                        gatewayPassword: usesSeparateGatewayPassword ? ecPassword : nil
+                    )
                 } label: {
                     Group {
                         if authVM.state == .loading {
@@ -114,14 +120,43 @@ struct LoginView: View {
         .onAppear {
             if let creds = authVM.getRememberedCredentials() {
                 userId = creds.userId
-                ecPassword = creds.ecPassword
                 password = creds.password
+                if creds.ecPassword != creds.password {
+                    ecPassword = creds.ecPassword
+                    showAdvancedOptions = true
+                    usesSeparateGatewayPassword = true
+                }
             }
         }
     }
 
     private var canLogin: Bool {
-        !userId.isEmpty && !ecPassword.isEmpty && !password.isEmpty
+        !userId.isEmpty && !password.isEmpty
+            && (!usesSeparateGatewayPassword || !ecPassword.isEmpty)
+    }
+
+    private func passwordField(placeholder: String, text: Binding<String>) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lock.fill")
+                .foregroundStyle(.tertiary)
+                .frame(width: 20)
+            Group {
+                if showPassword {
+                    TextField(placeholder, text: text)
+                } else {
+                    SecureField(placeholder, text: text)
+                }
+            }
+            .textContentType(.password)
+            Button { showPassword.toggle() } label: {
+                Image(systemName: showPassword ? "eye.slash" : "eye")
+                    .foregroundStyle(.tertiary)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(.fill.quaternary, in: .rect(cornerRadius: 12))
     }
 
     private func inputField(icon: String, placeholder: String, text: Binding<String>, isSecure: Bool) -> some View {
@@ -149,18 +184,17 @@ private struct PasswordHelpView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     PasswordHelpSection(
-                        icon: "network",
-                        title: "VPN 密码（EasyConnect）",
-                        description: "用于连接校园 VPN 的密码，登录界面如下图所示："
-                    )
-                    passwordHelpImage("EasyConnect", description: "EasyConnect 登录界面")
-
-                    PasswordHelpSection(
                         icon: "lock.fill",
-                        title: "教务密码（UAAP）",
-                        description: "用于登录教务系统等校内服务的密码，登录界面如下图所示："
+                        title: "教务系统密码",
+                        description: "通常只需填写教务系统密码，彩带小工具会使用同一密码建立校内访问并登录教务系统。"
                     )
                     passwordHelpImage("UAAP", description: "UAAP 登录界面")
+
+                    infoCard(
+                        icon: "slider.horizontal.3",
+                        tint: .orange,
+                        text: "只有在你确认网关密码与教务系统密码不同时，才需要在登录页的高级选项中单独填写网关密码。"
+                    )
 
                     infoCard(
                         icon: "info.circle.fill",
@@ -170,7 +204,7 @@ private struct PasswordHelpView: View {
                     infoCard(
                         icon: "lightbulb.fill",
                         tint: .orange,
-                        text: "忘记密码？建议访问 vpn.aufe.edu.cn 尝试登录来确认。"
+                        text: "忘记密码时，请通过学校官方教务系统确认或重置。"
                     )
                 }
                 .padding()

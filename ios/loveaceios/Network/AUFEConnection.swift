@@ -47,30 +47,23 @@ actor AUFEConnection {
 
     // MARK: - Heartbeat
 
-    func heartbeat() async -> Bool {
+    enum HeartbeatResult {
+        case alive
+        case expired
+        case unavailable
+    }
+
+    func heartbeat() async -> HeartbeatResult {
         do {
             let (data, _) = try await client.get("\(Self.serverURL)/por/login_auth.csp?apiversion=1")
             let body = String(data: data, encoding: .utf8) ?? ""
-            let alive = body.contains("<TwfID>")
-            logger.debug("💓 Heartbeat: \(alive ? "alive" : "expired")")
-            return alive
+            let result: HeartbeatResult = body.contains("<TwfID>") ? .alive : .expired
+            logger.debug("💓 Heartbeat: \(String(describing: result))")
+            return result
         } catch {
             logger.warning("💓 Heartbeat failed: \(error.localizedDescription)")
-            return false
+            return .unavailable
         }
-    }
-
-    // MARK: - Reconnect
-
-    func reconnect() async -> Bool {
-        logger.info("🔄 Reconnecting...")
-        startClient()
-        let ec = await ecLogin()
-        guard ec.success else { logger.error("🔄 EC re-login failed"); return false }
-        let uaap = await uaapLogin()
-        guard uaap.success else { logger.error("🔄 UAAP re-login failed"); return false }
-        logger.info("✅ Reconnect succeeded")
-        return true
     }
 
     // MARK: - EC Login
@@ -80,6 +73,7 @@ actor AUFEConnection {
             return try await performEcLogin()
         } catch {
             logger.error("EC login error: \(error.localizedDescription)")
+            if isNetworkError(error) { return ECLoginStatus(failNetworkError: true) }
             return ECLoginStatus(failUnknownError: true)
         }
     }
@@ -92,14 +86,14 @@ actor AUFEConnection {
             logger.error("❌ EC auth response is empty")
             return ECLoginStatus(failNetworkError: true)
         }
-        logger.info("📄 EC auth response: \(body.prefix(300))")
+        logger.info("📄 EC auth response received [\(body.count) bytes]")
 
         guard let twfMatch = body.range(of: "(?<=<TwfID>).+?(?=</TwfID>)", options: .regularExpression) else {
             logger.error("❌ TwfID not found in response")
             return ECLoginStatus(failNotFoundTwfid: true)
         }
         twfId = String(body[twfMatch])
-        logger.info("✅ TwfID: \(self.twfId ?? "nil")")
+        logger.info("✅ TwfID received")
 
         guard let rsaKeyMatch = body.range(of: "(?<=<RSA_ENCRYPT_KEY>).+?(?=</RSA_ENCRYPT_KEY>)", options: .regularExpression) else {
             logger.error("❌ RSA key not found")
@@ -120,7 +114,7 @@ actor AUFEConnection {
             return ECLoginStatus(failNotFoundCsrfCode: true)
         }
         let csrfCode = String(body[csrfMatch])
-        logger.info("✅ CSRF code: \(csrfCode)")
+        logger.info("✅ CSRF code received")
 
         let passwordToEncrypt = "\(ecPassword)_\(csrfCode)"
         let encryptedPassword = CryptoHelper.rsaEncrypt(plaintext: passwordToEncrypt, modulusHex: rsaKey, exponentStr: rsaExp)
@@ -139,7 +133,7 @@ actor AUFEConnection {
             headers: ["Cookie": "TWFID=\(twfId!)"]
         )
         let loginBody = String(data: loginData, encoding: .utf8) ?? ""
-        logger.info("📄 EC login response: \(loginBody.prefix(500))")
+        logger.info("📄 EC login response received [\(loginBody.count) bytes]")
 
         if loginBody.contains("<Result>1</Result>") {
             await client.setCookie(name: "TWFID", value: twfId!, domain: ".vpn2.aufe.edu.cn")
@@ -155,7 +149,7 @@ actor AUFEConnection {
             logger.error("❌ EC Login: maybe attacked / captcha required")
             return ECLoginStatus(failMaybeAttacked: true)
         }
-        logger.error("❌ EC Login: unknown error, response snippet: \(loginBody.prefix(200))")
+        logger.error("❌ EC Login: unknown response [\(loginBody.count) bytes]")
         return ECLoginStatus(failUnknownError: true)
     }
 
@@ -166,13 +160,14 @@ actor AUFEConnection {
             return try await performUaapLogin()
         } catch {
             logger.error("UAAP login error: \(error.localizedDescription)")
+            if isNetworkError(error) { return UAAPLoginStatus(failNetworkError: true) }
             return UAAPLoginStatus(failUnknownError: true)
         }
     }
 
     private func performUaapLogin() async throws -> UAAPLoginStatus {
         logger.info("🔑 UAAP Login Step 1: fetching CAS page...")
-        let (data, _) = try await client.get(Self.uaapLoginURL)
+        let (data, casResponse) = try await client.get(Self.uaapLoginURL)
         let body = String(data: data, encoding: .utf8) ?? ""
         if body.isEmpty {
             logger.error("❌ UAAP CAS page is empty")
@@ -180,25 +175,28 @@ actor AUFEConnection {
         }
 
         guard let ltMatch = body.range(of: #"(?<=name="lt" value=").+?(?=")"#, options: .regularExpression) else {
-            logger.error("❌ lt not found. Body snippet: \(body.prefix(500))")
+            logger.error("❌ lt not found in CAS response [\(body.count) bytes]")
             return UAAPLoginStatus(failNotFoundLt: true)
         }
         let ltValue = String(body[ltMatch])
-        logger.info("✅ lt value: \(ltValue.prefix(20))... (len=\(ltValue.count))")
+        logger.info("✅ lt value received (len=\(ltValue.count))")
 
         guard let execMatch = body.range(of: #"(?<=name="execution" value=").+?(?=")"#, options: .regularExpression) else {
             logger.error("❌ execution not found")
             return UAAPLoginStatus(failNotFoundExecution: true)
         }
         let executionValue = String(body[execMatch])
-        logger.info("✅ execution: \(executionValue.prefix(20))...")
+        logger.info("✅ execution value received")
 
         let encryptedPassword = CryptoHelper.desEncrypt(plaintext: password, key: ltValue)
-        logger.info("🔐 DES encrypted password: \(encryptedPassword.prefix(30))... (len=\(encryptedPassword.count))")
+        logger.info("🔐 DES encrypted password generated (len=\(encryptedPassword.count))")
 
         logger.info("🔑 UAAP Login Step 2: posting credentials...")
-        let (loginData, loginResponse) = try await client.post(
-            Self.uaapLoginURL,
+        let casPostURL = formActionURL(in: body, relativeTo: casResponse.url)
+            ?? casResponse.url?.absoluteString
+            ?? Self.uaapLoginURL
+        let (loginData, loginResponse) = try await noRedirectClient.post(
+            casPostURL,
             formData: [
                 "username": userId,
                 "password": encryptedPassword,
@@ -209,26 +207,90 @@ actor AUFEConnection {
             ]
         )
         let loginBody = String(data: loginData, encoding: .utf8) ?? ""
-        let responseUrl = loginResponse.url?.absoluteString ?? ""
-        logger.info("📄 UAAP response URL: \(responseUrl)")
+        let redirectURL = loginResponse.value(forHTTPHeaderField: "Location")
+        let responseUrl = redirectURL ?? loginResponse.url?.absoluteString ?? ""
         logger.info("📄 UAAP response size: \(loginBody.count), contains '用户名或密码错误': \(loginBody.contains("用户名或密码错误")), contains 'ticket': \(responseUrl.contains("ticket="))")
 
-        if loginBody.contains("Invalid username or password") || loginBody.contains("用户名或密码错误") {
+        if loginBody.contains("Invalid username or password")
+            || loginBody.contains("用户名或密码错误")
+            || loginBody.contains("errorMsg") {
             logger.error("❌ UAAP Login: invalid credentials")
             return UAAPLoginStatus(failInvalidCredentials: true)
         }
-        if responseUrl.hasPrefix("http://jwcxk2") || responseUrl.contains("ticket=") {
+        if let redirectURL,
+           redirectURL.contains("ticket="),
+           let callbackURL = proxiedJwcURL(from: redirectURL),
+           try await establishJwcSession(from: callbackURL) {
             uaapLogged = true
+            await client.copyCookies(from: noRedirectClient)
             await simpleClient.copyCookies(from: client)
             await noRedirectClient.copyCookies(from: client)
             logger.info("✅ UAAP Login succeeded")
             return UAAPLoginStatus(success: true)
         }
-        logger.error("❌ UAAP Login: unknown error. responseUrl=\(responseUrl), body snippet: \(loginBody.prefix(300))")
+        let responseScheme = loginResponse.url?.scheme ?? ""
+        let responseHost = loginResponse.url?.host ?? ""
+        let responsePath = loginResponse.url?.path ?? ""
+        let hasTicket = responseUrl.contains("ticket=")
+        let hasLoginForm = loginBody.contains("name=\"username\"") || loginBody.contains("name='username'")
+        let hasCasError = loginBody.contains("登录失败") || loginBody.contains("认证失败")
+        let hasErrorMessage = loginBody.contains("errorMsg")
+        logger.error("❌ UAAP unknown status=\(loginResponse.statusCode, privacy: .public), bodyLength=\(loginBody.count, privacy: .public)")
+        logger.error("❌ UAAP unknown location: scheme=\(responseScheme, privacy: .public), host=\(responseHost, privacy: .public), path=\(responsePath, privacy: .public)")
+        logger.error("❌ UAAP unknown features: ticket=\(hasTicket, privacy: .public), loginForm=\(hasLoginForm, privacy: .public), casError=\(hasCasError, privacy: .public), errorMsg=\(hasErrorMessage, privacy: .public)")
         return UAAPLoginStatus(failUnknownError: true)
     }
 
+    private func formActionURL(in html: String, relativeTo baseURL: URL?) -> String? {
+        let pattern = #"<form\b[^>]*\baction=["']([^"']+)["']"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+              let actionRange = Range(match.range(at: 1), in: html) else { return nil }
+
+        let action = String(html[actionRange])
+        if let baseURL, let resolved = URL(string: action, relativeTo: baseURL)?.absoluteString {
+            return resolved
+        }
+        return URL(string: action)?.absoluteString
+    }
+
+    private func proxiedJwcURL(from redirectURL: String) -> String? {
+        guard var components = URLComponents(string: redirectURL),
+              components.host?.contains("jwcxk2") == true else { return nil }
+        components.scheme = "http"
+        components.host = "jwcxk2-aufe-edu-cn.vpn2.aufe.edu.cn"
+        components.port = 8118
+        return components.url?.absoluteString
+    }
+
+    private func establishJwcSession(from callbackURL: String) async throws -> Bool {
+        var nextURL = callbackURL
+
+        for _ in 0..<8 {
+            let (data, response) = try await noRedirectClient.get(nextURL)
+            guard (301...308).contains(response.statusCode),
+                  let location = response.value(forHTTPHeaderField: "Location") else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                logger.info("JWC callback response: status=\(response.statusCode, privacy: .public), bodyLength=\(body.count, privacy: .public)")
+                return response.statusCode == 200 && !body.isEmpty
+            }
+
+            guard let baseURL = response.url ?? URL(string: nextURL),
+                  let resolvedURL = URL(string: location, relativeTo: baseURL)?.absoluteString else {
+                return false
+            }
+            nextURL = proxiedJwcURL(from: resolvedURL) ?? resolvedURL
+        }
+
+        logger.error("JWC callback exceeded redirect limit")
+        return false
+    }
+
     var isHealthy: Bool { ecLogged && uaapLogged }
+
+    private func isNetworkError(_ error: Error) -> Bool {
+        error is URLError || (error as NSError).domain == NSURLErrorDomain
+    }
 }
 
 // MARK: - HTTPClient extension for session expired

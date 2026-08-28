@@ -1,5 +1,6 @@
 import Foundation
 import os
+import WidgetKit
 
 private let logger = Logger(subsystem: "tech.loveace.loveaceios", category: "SemesterViewModel")
 private let semesterJSONURL = "https://loveace-semsync.oss-cn-beijing.aliyuncs.com/loveace/semesters.json"
@@ -18,11 +19,18 @@ final class SemesterViewModel {
                 let (data, _) = try await URLSession.shared.data(from: url)
                 let semesterData = try JSONDecoder().decode(SemesterData.self, from: data)
                 status = computeStatus(semesterData)
-                if case .inSession(_, let week, let total, _, _) = status {
+                switch status {
+                case .inSession(_, let week, let total, _, _):
                     currentWeek = week
                     totalWeeks = total
                     WidgetDataBridge.saveCurrentWeek(week, totalWeeks: total)
+                case .vacation:
+                    currentWeek = 0
+                    WidgetDataBridge.saveVacationStatus()
+                case .loading, .error:
+                    break
                 }
+                WidgetCenter.shared.reloadAllTimelines()
             } catch {
                 logger.error("Failed to load semester info: \(error.localizedDescription)")
                 status = .error(message: "无法获取学期信息")

@@ -39,7 +39,7 @@ actor AACService {
                     if let ticketRange = nextUrl.range(of: "ticket=([^&#]+)", options: .regularExpression) {
                         let ticketStr = String(nextUrl[ticketRange]).replacingOccurrences(of: "ticket=", with: "")
                         let decoded = ticketStr.removingPercentEncoding ?? ticketStr
-                        logger.info("fetchTicket: found app ticket: \(decoded.prefix(30))...")
+                        logger.info("fetchTicket: found app ticket")
 
                         let client = await connection.client!
                         logger.info("fetchTicket: establishing AAC session via CAS redirect...")
@@ -54,7 +54,7 @@ actor AACService {
                 if let ticketRange = body.range(of: "ticket=([^&\"#'\\s]+)", options: .regularExpression) {
                     let ticketStr = String(body[ticketRange]).replacingOccurrences(of: "ticket=", with: "")
                     let decoded = ticketStr.removingPercentEncoding ?? ticketStr
-                    logger.info("fetchTicket: found ticket in body: \(decoded.prefix(30))...")
+                    logger.info("fetchTicket: found ticket in body")
                     return decoded
                 }
                 break
@@ -82,9 +82,7 @@ actor AACService {
                 formData: [:], headers: headers
             )
             let body = String(data: data, encoding: .utf8) ?? ""
-            let ticketDbg = headers["ticket"]?.prefix(20) ?? "nil"
-            let sdpDbg = headers["sdp-app-session"]?.prefix(20) ?? "nil"
-            logger.info("getCreditInfo: HTTP \(response.statusCode), ticket=\(ticketDbg), sdp=\(sdpDbg)")
+            logger.info("getCreditInfo: HTTP \(response.statusCode)")
             if response.statusCode != 200 {
                 logger.error("getCreditInfo 500 body: \(body.prefix(800))")
                 throw ServiceError.parseError("HTTP \(response.statusCode)")

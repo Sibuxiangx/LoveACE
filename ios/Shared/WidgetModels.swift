@@ -20,6 +20,7 @@ struct WidgetCourseEntry: Codable, Identifiable {
 
 enum WidgetDataBridge {
     static let suiteName = "group.cn.linota.loveace"
+    private static let semesterStatusKey = "widget_semester_in_session"
 
     static func saveCourses(_ courses: [WidgetCourseEntry]) {
         guard let defaults = UserDefaults(suiteName: suiteName),
@@ -38,11 +39,25 @@ enum WidgetDataBridge {
 
     static func saveCurrentWeek(_ week: Int, totalWeeks: Int) {
         guard let defaults = UserDefaults(suiteName: suiteName) else { return }
+        defaults.set(true, forKey: semesterStatusKey)
         defaults.set(week, forKey: "widget_current_week")
         defaults.set(totalWeeks, forKey: "widget_total_weeks")
     }
 
+    static func saveVacationStatus() {
+        guard let defaults = UserDefaults(suiteName: suiteName) else { return }
+        defaults.set(false, forKey: semesterStatusKey)
+        defaults.removeObject(forKey: "widget_current_week")
+    }
+
+    static func isInSession() -> Bool {
+        guard let defaults = UserDefaults(suiteName: suiteName),
+              defaults.object(forKey: semesterStatusKey) != nil else { return true }
+        return defaults.bool(forKey: semesterStatusKey)
+    }
+
     static func loadCurrentWeek() -> Int? {
+        guard isInSession() else { return nil }
         guard let defaults = UserDefaults(suiteName: suiteName) else { return nil }
         let val = defaults.integer(forKey: "widget_current_week")
         return val > 0 ? val : nil
@@ -54,8 +69,9 @@ enum WidgetDataBridge {
         return val > 0 ? val : 18
     }
 
-    static func todayCourses() -> [WidgetCourseEntry] {
-        let weekday = Calendar.current.component(.weekday, from: Date())
+    static func todayCourses(on date: Date = Date()) -> [WidgetCourseEntry] {
+        guard isInSession() else { return [] }
+        let weekday = Calendar.current.component(.weekday, from: date)
         let isoWeekday = weekday == 1 ? 7 : weekday - 1
         let currentWeek = loadCurrentWeek()
         return loadCourses()
@@ -69,25 +85,68 @@ enum WidgetDataBridge {
             .sorted { $0.startSession < $1.startSession }
     }
 
-    static func nextCourse() -> WidgetCourseEntry? {
-        let today = todayCourses()
-        let hour = Calendar.current.component(.hour, from: Date())
-        let minute = Calendar.current.component(.minute, from: Date())
+    static func nextCourse(on date: Date = Date()) -> WidgetCourseEntry? {
+        let today = todayCourses(on: date)
+        let hour = Calendar.current.component(.hour, from: date)
+        let minute = Calendar.current.component(.minute, from: date)
         let currentMinutes = hour * 60 + minute
 
-        let sessionStartMinutes: [Int: Int] = [
-            1: 480, 2: 530, 3: 600, 4: 650,
-            5: 840, 6: 890, 7: 960, 8: 1010,
-            9: 1110, 10: 1160, 11: 1210
-        ]
-
         for course in today {
-            if let start = sessionStartMinutes[course.startSession], start > currentMinutes - 30 {
+            let start = sessionStartMinutes[course.startSession] ?? 0
+            let end = sessionEndMinutes[course.endSession]
+                ?? sessionStartMinutes[course.endSession + 1]
+                ?? 21 * 60
+            if end > currentMinutes {
                 return course
             }
         }
-        return today.first
+        return nil
     }
+
+    static func isCourseInProgress(_ course: WidgetCourseEntry, at date: Date) -> Bool {
+        let currentMinutes = Calendar.current.component(.hour, from: date) * 60
+            + Calendar.current.component(.minute, from: date)
+        let start = sessionStartMinutes[course.startSession] ?? 0
+        let end = sessionEndMinutes[course.endSession]
+            ?? sessionStartMinutes[course.endSession + 1]
+            ?? 21 * 60
+        return currentMinutes >= start && currentMinutes < end
+    }
+
+    static func timelineDates(from date: Date = Date()) -> [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: date)
+        var dates: Set<Date> = [date]
+
+        for dayOffset in 0...7 {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: today) else { continue }
+            if day > date { dates.insert(day) }
+            for course in todayCourses(on: day) {
+                let start = sessionStartMinutes[course.startSession] ?? 0
+                let end = sessionEndMinutes[course.endSession]
+                    ?? sessionStartMinutes[course.endSession + 1]
+                    ?? 21 * 60
+                for minutes in [start, end] {
+                    guard let transition = calendar.date(byAdding: .minute, value: minutes, to: day),
+                          transition > date else { continue }
+                    dates.insert(transition)
+                }
+            }
+        }
+        return dates.sorted()
+    }
+
+    private static let sessionStartMinutes: [Int: Int] = [
+        1: 480, 2: 530, 3: 600, 4: 650,
+        5: 840, 6: 890, 7: 960, 8: 1010,
+        9: 1110, 10: 1160, 11: 1210
+    ]
+
+    private static let sessionEndMinutes: [Int: Int] = [
+        1: 530, 2: 600, 3: 650, 4: 840,
+        5: 890, 6: 960, 7: 1010, 8: 1110,
+        9: 1160, 10: 1210, 11: 1260
+    ]
 
     static func sessionTimeString(_ session: Int) -> String {
         let times = [

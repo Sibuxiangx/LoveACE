@@ -25,12 +25,15 @@ struct ScheduleProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ScheduleEntry>) -> Void) {
-        let courses = WidgetDataBridge.todayCourses()
-        let week = WidgetDataBridge.loadCurrentWeek()
-        let entry = ScheduleEntry(date: Date(), courses: courses,
-                                  nextCourse: WidgetDataBridge.nextCourse(), currentWeek: week)
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+        let entries = WidgetDataBridge.timelineDates().map { date in
+            ScheduleEntry(
+                date: date,
+                courses: WidgetDataBridge.todayCourses(on: date),
+                nextCourse: WidgetDataBridge.nextCourse(on: date),
+                currentWeek: WidgetDataBridge.loadCurrentWeek()
+            )
+        }
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 }
 
@@ -44,7 +47,7 @@ struct SmallScheduleView: View {
                     Image(systemName: "book.fill")
                         .font(.caption2)
                         .foregroundStyle(.blue)
-                    Text("下节课")
+                    Text(WidgetDataBridge.isCourseInProgress(next, at: entry.date) ? "正在上课" : "下节课")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -74,6 +77,16 @@ struct SmallScheduleView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(2)
+        } else if !WidgetDataBridge.isInSession() {
+            VStack(spacing: 8) {
+                Image(systemName: "sun.max.fill")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                Text("假期中")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if entry.courses.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "cup.and.saucer.fill")
@@ -107,7 +120,23 @@ struct MediumScheduleView: View {
     let entry: ScheduleEntry
 
     var body: some View {
-        if entry.courses.isEmpty {
+        if !WidgetDataBridge.isInSession() {
+            HStack(spacing: 16) {
+                Image(systemName: "sun.max.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("假期中")
+                        .font(.headline)
+                    Text("好好休息吧")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(2)
+        } else if entry.courses.isEmpty {
             HStack(spacing: 16) {
                 Image(systemName: "cup.and.saucer.fill")
                     .font(.largeTitle)

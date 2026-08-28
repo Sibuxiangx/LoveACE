@@ -19,8 +19,11 @@ struct ContentView: View {
                     .onAppear { authVM.restoreSession() }
             case .loading:
                 LoadingView(message: "登录中...")
+            case .reconnecting:
+                LoadingView(message: "正在恢复连接...")
             case .authenticated:
                 MainTabView()
+                    .id(authVM.sessionGeneration)
             case .unauthenticated, .error:
                 LoginView()
             }

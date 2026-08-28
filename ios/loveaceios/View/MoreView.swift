@@ -29,9 +29,6 @@ struct MoreView: View {
                                 FeatureCard(title: feature.title, icon: feature.icon, tint: feature.tint)
                             }
                             .buttonStyle(.plain)
-                            .simultaneousGesture(TapGesture().onEnded {
-                                Analytics.shared.trackFeature(feature.title)
-                            })
                         }
                     }
                 }
@@ -79,6 +76,6 @@ struct FeatureCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .glassInteractiveCard(cornerRadius: 18)
+        .glassCard(cornerRadius: 18)
     }
 }

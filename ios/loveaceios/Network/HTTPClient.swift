@@ -78,13 +78,13 @@ actor HTTPClient {
 
     private func execute(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let reqUrl = request.url?.absoluteString ?? ""
-        logger.info("🌐 \(request.httpMethod ?? "?") \(reqUrl)")
+        logger.info("🌐 \(request.httpMethod ?? "?") \(self.safeLogURL(request.url))")
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw HTTPError.invalidResponse
         }
         let respUrl = httpResponse.url?.absoluteString ?? reqUrl
-        logger.info("✅ \(httpResponse.statusCode) \(respUrl) [\(data.count) bytes]")
+        logger.info("✅ \(httpResponse.statusCode) \(self.safeLogURL(httpResponse.url)) [\(data.count) bytes]")
 
         let isLoginRequest = reqUrl.contains("/por/login_auth.csp") || reqUrl.contains("/por/login_psw.csp")
         if !isLoginRequest, let peek = String(data: data.prefix(512), encoding: .utf8) {
@@ -94,6 +94,16 @@ actor HTTPClient {
             }
         }
         return (data, httpResponse)
+    }
+
+    private func safeLogURL(_ url: URL?) -> String {
+        guard let url else { return "unknown" }
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        components.port = url.port
+        components.path = url.path
+        return components.string ?? url.path
     }
 
     private func isVpnLoginPage(body: String, url: String) -> Bool {
