@@ -151,9 +151,10 @@ cd desktop
 flutter pub get
 flutter run -d macos      # macOS
 flutter run -d windows    # Windows
+flutter run -d linux      # Linux
 ```
 
-桌面端发布通过手动 workflow 完成。macOS 会完成 Developer ID 签名、公证与 stapling；Windows 会生成 Inno Setup 安装器。两个桌面端的 manifest 写入由统一并发组自动串行化。
+桌面端发布通过手动 workflow 完成。macOS 会完成 Developer ID 签名、公证与 stapling；Windows 会生成 Inno Setup 安装器；Linux 会打包为 AppImage（`.desktop/appimage/build-appimage.sh`，产物在 `desktop/build/appimage/`）。各桌面端的 manifest 写入由统一并发组自动串行化。
 
 ```bash
 gh workflow run build-desktop-macos.yml \
@@ -169,7 +170,22 @@ gh workflow run build-desktop-windows.yml \
   -f changelog="更新内容" \
   -f content="发现新版本" \
   -f force=false
+
+gh workflow run build-desktop-linux-appimage.yml \
+  --ref main \
+  -f dry_run=false \
+  -f changelog="更新内容" \
+  -f content="发现新版本" \
+  -f force=false
 ```
+
+本地打包 AppImage：
+
+```bash
+desktop/appimage/build-appimage.sh
+```
+
+产物位于 `desktop/build/appimage/LoveACE-<版本>-x86_64.AppImage`，可直接 `./xxx.AppImage` 运行；发布到 `release.loveace.top` 的流程与 macOS/Windows 一致，`linux` 平台已由 `utils/manifest_v2` 支持。
 
 所有公开安装包固定通过 `https://release.loveace.top` 分发。
 
