@@ -111,6 +111,82 @@ class LaborClubService(private val connection: AUFEConnection) {
         } catch (e: Exception) { Log.e(TAG, "getJoinedClubs", e); UniResponse.failure(e.message ?: "获取俱乐部列表失败", retryable = true) }
     }
 
+    suspend fun getClubDirectory(): UniResponse<List<LaborClubDirectoryItem>> = withContext(Dispatchers.IO) {
+        try {
+            ensureTicket()
+            if (ticket == null) throw Exception("无法获取劳动俱乐部 ticket")
+            val pageSize = 100
+            var pageIndex = 1
+            var totalItemCount = Int.MAX_VALUE
+            val clubs = mutableListOf<LaborClubDirectoryItem>()
+
+            while (clubs.size < totalItemCount) {
+                val resp = connection.simpleClient.post(
+                    "$BASE_URL/User/Club/DoGetPageList?sf_request_type=ajax",
+                    formData = mapOf("pageIndex" to pageIndex.toString(), "pageSize" to pageSize.toString()),
+                    headers = apiHeaders() + ("Content-Type" to FORM_URLENCODED_UTF8),
+                )
+                val root = parseRoot(resp.body?.string() ?: throw Exception("响应为空"))
+                val rows = rowsFrom(root)
+                val pageInfo = root["pageInfo"] as? JsonObject
+                totalItemCount = pageInfo?.get("TotalItemCount")?.jsonPrimitive?.intOrNull ?: clubs.size + rows.size
+                clubs += rows.map { json.decodeFromJsonElement<LaborClubDirectoryItem>(it) }
+                if (rows.isEmpty() || pageIndex >= 1_000) break
+                pageIndex++
+            }
+
+            UniResponse.success(
+                clubs
+                    .filter { it.id.isNotBlank() && it.name.isNotBlank() }
+                    .distinctBy { it.id.trim().lowercase() },
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "getClubDirectory", e)
+            UniResponse.failure(e.message ?: "获取可申请俱乐部失败", retryable = true)
+        }
+    }
+
+    suspend fun getLatestClubApplication(): UniResponse<LaborClubApplication?> = withContext(Dispatchers.IO) {
+        try {
+            ensureTicket()
+            if (ticket == null) throw Exception("无法获取劳动俱乐部 ticket")
+            val resp = connection.simpleClient.post(
+                "$BASE_URL/User/Center/DoGetApplyClubList",
+                formData = mapOf("pageIndex" to "1", "pageSize" to "10"),
+                headers = apiHeaders(),
+            )
+            val root = parseRoot(resp.body?.string() ?: throw Exception("响应为空"))
+            val applications = rowsFrom(root).map(::decodeLaborClubApplication)
+            UniResponse.success(latestLaborClubApplication(applications))
+        } catch (e: Exception) {
+            Log.e(TAG, "getLatestClubApplication", e)
+            UniResponse.failure(e.message ?: "获取俱乐部申请状态失败", retryable = true)
+        }
+    }
+
+    suspend fun applyClub(clubId: String, reason: String): UniResponse<String> = withContext(Dispatchers.IO) {
+        try {
+            ensureTicket()
+            if (ticket == null) throw Exception("无法获取劳动俱乐部 ticket")
+            val resp = connection.simpleClient.post(
+                "$BASE_URL/User/Club/DoApplyJoin",
+                formData = mapOf("clubID" to clubId, "Reason" to reason),
+                headers = apiHeaders(),
+            )
+            val root = json.parseToJsonElement(resp.body?.string() ?: throw Exception("响应为空")).jsonObject
+            val code = root["code"]?.jsonPrimitive?.intOrNull
+            val msg = root["msg"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            if (code == 0) {
+                UniResponse.success(msg.ifBlank { "申请已提交" }, message = msg)
+            } else {
+                UniResponse.failure(msg.ifBlank { "申请提交失败" }, retryable = false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "applyClub", e)
+            UniResponse.failure(e.message ?: "申请提交失败", retryable = false)
+        }
+    }
+
     // ── 俱乐部活动列表 ──
     suspend fun getClubActivities(clubId: String): UniResponse<List<LaborClubActivity>> = withContext(Dispatchers.IO) {
         try {
@@ -210,8 +286,19 @@ class LaborClubService(private val connection: AUFEConnection) {
 
     companion object {
         private const val TAG = "LaborClubService"
+        private const val FORM_URLENCODED_UTF8 = "application/x-www-form-urlencoded;charset=UTF-8"
         const val BASE_URL = "http://api-ldjlb-ac-acxk-net.vpn2.aufe.edu.cn:8118"
         const val LOGIN_SERVICE_URL =
             "http://uaap-aufe-edu-cn.vpn2.aufe.edu.cn:8118/cas/login?service=http%3a%2f%2fapi.ldjlb.ac.acxk.net%2fUser%2fIndex%2fCoreLoginCallback%3fisCASGateway%3dtrue"
+        const val DEFAULT_CLUB_APPLICATION_REASON = "希望加入俱乐部参与劳动实践活动。"
+    }
+
+    private fun rowsFrom(root: JsonObject): JsonArray {
+        val dataElement = root["data"]
+        return when {
+            dataElement is JsonArray -> dataElement
+            dataElement is JsonObject -> dataElement["rows"] as? JsonArray ?: JsonArray(emptyList())
+            else -> JsonArray(emptyList())
+        }
     }
 }

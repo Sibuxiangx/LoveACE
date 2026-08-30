@@ -6,6 +6,12 @@ struct LaborClubView: View {
     @State private var selectedTab = 0
     @State private var selectedActivity: LaborClubActivity?
     @State private var showScanner = false
+    @State private var showClubApplicationSheet = false
+    @State private var completedClubApplication = false
+
+    private var laborClubServiceIdentity: ObjectIdentifier? {
+        authVM.laborClubService.map(ObjectIdentifier.init)
+    }
 
     var body: some View {
         NavigationStack {
@@ -14,7 +20,8 @@ struct LaborClubView: View {
                 else {
                     List {
                         if let progress = vm.progress { progressSection(progress) }
-                        if !vm.clubs.isEmpty { clubsSection }
+                        if vm.clubs.isEmpty { clubMembershipSection }
+                        else { clubsSection }
                         tabPickerSection
                         if selectedTab == 0 { myActivitiesSection }
                         else { addActivitiesSection }
@@ -38,6 +45,15 @@ struct LaborClubView: View {
             .sheet(isPresented: $showScanner) {
                 LaborScanSheet(vm: vm, isPresented: $showScanner)
             }
+            .sheet(isPresented: $showClubApplicationSheet, onDismiss: {
+                if completedClubApplication {
+                    completedClubApplication = false
+                } else {
+                    vm.clearClubActionResult()
+                }
+            }) {
+                LaborClubApplicationSheet(vm: vm)
+            }
             .alert("报名结果", isPresented: Binding(get: { vm.applyResult != nil }, set: { _ in vm.clearApplyResult() })) {
                 Button("确定") { vm.clearApplyResult() }
             } message: { Text(vm.applyResult ?? "") }
@@ -46,8 +62,31 @@ struct LaborClubView: View {
             } message: {
                 if let r = vm.signInResult { Text(r.isSuccess ? "签到成功" : r.msg) }
             }
+            .alert(
+                "俱乐部申请",
+                isPresented: Binding(
+                    get: { !showClubApplicationSheet && vm.clubActionResult != nil },
+                    set: { if !$0 { vm.clearClubActionResult() } }
+                )
+            ) {
+                Button("确定") { vm.clearClubActionResult() }
+            } message: {
+                Text(vm.clubActionResult ?? "")
+            }
             .onAppear {
-                if let svc = authVM.laborClubService { vm.initialize(service: svc); vm.loadAll() }
+                initializeForCurrentUser()
+            }
+            .onChange(of: authVM.userId) { _, _ in
+                initializeForCurrentUser()
+            }
+            .onChange(of: laborClubServiceIdentity) { _, _ in
+                initializeForCurrentUser()
+            }
+            .onChange(of: vm.clubSubmissionSucceeded) { _, succeeded in
+                guard succeeded else { return }
+                completedClubApplication = true
+                showClubApplicationSheet = false
+                vm.consumeClubSubmissionSuccess()
             }
         }
     }
@@ -121,6 +160,138 @@ struct LaborClubView: View {
                     Text("\(vm.clubs.count) 个").font(.caption).foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var clubMembershipSection: some View {
+        Section {
+            if let statusError = vm.clubStatusError {
+                membershipRow(
+                    title: "俱乐部状态加载失败",
+                    detail: statusError,
+                    icon: "exclamationmark.triangle.fill",
+                    color: .red,
+                    trailingIcon: "arrow.clockwise",
+                    trailingAction: vm.loadAll
+                )
+            } else if vm.submittedStatusSyncing {
+                membershipRow(
+                    title: "申请已提交，状态同步中",
+                    detail: "服务器状态尚未同步",
+                    icon: "arrow.triangle.2.circlepath",
+                    color: .blue,
+                    trailingIcon: "arrow.clockwise",
+                    trailingAction: vm.loadAll
+                )
+            } else {
+                switch vm.membership.status {
+                case .pending:
+                    membershipRow(
+                        title: "俱乐部正在审批",
+                        detail: applicationSummary(vm.membership.latestApplication),
+                        icon: "hourglass",
+                        color: .orange,
+                        trailingIcon: "arrow.clockwise",
+                        trailingAction: vm.loadAll
+                    )
+                case .approvedSyncing:
+                    membershipRow(
+                        title: "审核已通过，正在同步俱乐部信息",
+                        detail: applicationSummary(vm.membership.latestApplication),
+                        icon: "checkmark.circle.fill",
+                        color: .green,
+                        trailingIcon: "arrow.clockwise",
+                        trailingAction: vm.loadAll
+                    )
+                case .submitting:
+                    HStack(spacing: 12) {
+                        ProgressView().controlSize(.small)
+                        Text("正在提交申请").fontWeight(.medium)
+                    }
+                case .rejected:
+                    Button {
+                        vm.clearClubActionResult()
+                        showClubApplicationSheet = true
+                    } label: {
+                        membershipRow(
+                            title: "上次申请未通过",
+                            detail: applicationSummary(vm.membership.latestApplication),
+                            icon: "xmark.circle.fill",
+                            color: .red,
+                            trailingIcon: "chevron.right"
+                        )
+                    }
+                case .notJoined:
+                    Button {
+                        vm.clearClubActionResult()
+                        showClubApplicationSheet = true
+                    } label: {
+                        membershipRow(
+                            title: "申请加入劳动俱乐部",
+                            detail: "当前尚未加入俱乐部",
+                            icon: "person.3.sequence.fill",
+                            color: .blue,
+                            trailingIcon: "chevron.right"
+                        )
+                    }
+                case .joined:
+                    EmptyView()
+                }
+            }
+        }
+    }
+
+    private func membershipRow(
+        title: String,
+        detail: String,
+        icon: String,
+        color: Color,
+        trailingIcon: String,
+        trailingAction: (() -> Void)? = nil
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(color)
+                .frame(width: 34, height: 34)
+                .background(color.opacity(0.12), in: .circle)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).fontWeight(.medium).foregroundStyle(.primary)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(4)
+                }
+            }
+            Spacer(minLength: 8)
+            if let trailingAction {
+                Button(action: trailingAction) {
+                    Image(systemName: trailingIcon)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("刷新俱乐部状态")
+            } else {
+                Image(systemName: trailingIcon).foregroundStyle(.tertiary)
+            }
+        }
+        .contentShape(.rect)
+    }
+
+    private func applicationSummary(_ application: LaborClubApplication?) -> String {
+        guard let application else { return "" }
+        return [application.clubName, application.addTime, application.replyComment]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private func initializeForCurrentUser() {
+        guard let service = authVM.laborClubService else { return }
+        vm.initialize(service: service, userId: authVM.userId)
+        vm.loadAll()
+        if showClubApplicationSheet {
+            vm.loadClubDirectory()
         }
     }
 
@@ -222,6 +393,225 @@ struct LaborClubView: View {
             .padding(.vertical, 4)
         }
         .tint(.primary)
+    }
+}
+
+private struct LaborClubApplicationSheet: View {
+    @Bindable var vm: LaborClubViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+    @State private var selectedClubId: String?
+    @State private var reason = LaborClubService.defaultClubApplicationReason
+
+    private var selectedClub: LaborClubDirectoryItem? {
+        vm.clubDirectory.first { $0.id == selectedClubId }
+    }
+
+    private var filteredClubs: [LaborClubDirectoryItem] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return vm.clubDirectory }
+        return vm.clubDirectory.filter {
+            $0.name.localizedCaseInsensitiveContains(query) ||
+            $0.typeName.localizedCaseInsensitiveContains(query) ||
+            $0.projectName.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            if let selectedClub {
+                applicationForm(selectedClub)
+            } else {
+                directoryList
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(vm.isSubmittingClub)
+        .task { vm.loadClubDirectory() }
+    }
+
+    @ViewBuilder
+    private var directoryList: some View {
+        Group {
+            if vm.isDirectoryLoading && vm.clubDirectory.isEmpty {
+                ProgressView("正在加载俱乐部")
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = vm.directoryError, vm.clubDirectory.isEmpty {
+                ContentUnavailableView {
+                    Label("目录加载失败", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("重试") { vm.loadClubDirectory(force: true) }
+                }
+            } else {
+                List(filteredClubs) { club in
+                    Button {
+                        guard club.canApply else { return }
+                        selectedClubId = club.id
+                        vm.clearClubActionResult()
+                    } label: {
+                        directoryRow(club)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!club.canApply)
+                }
+                .overlay {
+                    if filteredClubs.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                    }
+                }
+            }
+        }
+        .navigationTitle("选择劳动俱乐部")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, prompt: "搜索俱乐部")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("取消") { dismiss() }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { vm.loadClubDirectory(force: true) } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(vm.isDirectoryLoading)
+                .accessibilityLabel("刷新俱乐部目录")
+            }
+        }
+    }
+
+    private func directoryRow(_ club: LaborClubDirectoryItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "person.3.fill")
+                .foregroundStyle(.teal)
+                .frame(width: 36, height: 36)
+                .background(.teal.opacity(0.12), in: .rect(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(club.name)
+                        .font(.body).fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    availabilityBadge(club)
+                }
+                let metadata = [club.typeName, club.projectName].filter { !$0.isEmpty }
+                if !metadata.isEmpty {
+                    Text(metadata.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Label("\(club.memberNum)/\(club.peopleNum) 人", systemImage: "person.2")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+                if let description = club.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
+                }
+            }
+            if club.canApply {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 8)
+            }
+        }
+        .padding(.vertical, 5)
+        .contentShape(.rect)
+    }
+
+    private func availabilityBadge(_ club: LaborClubDirectoryItem) -> some View {
+        let label: String
+        let color: Color
+        if club.isJoined {
+            label = "已加入"; color = .green
+        } else if !club.isEnabled {
+            label = "暂停申请"; color = .red
+        } else {
+            label = "可申请"; color = .blue
+        }
+        return Text(label)
+            .font(.caption2).fontWeight(.semibold)
+            .foregroundStyle(color)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(color.opacity(0.12), in: .capsule)
+    }
+
+    private func applicationForm(_ club: LaborClubDirectoryItem) -> some View {
+        Form {
+            Section("目标俱乐部") {
+                LabeledContent("名称", value: club.name)
+                if !club.typeName.isEmpty { LabeledContent("类型", value: club.typeName) }
+                if !club.projectName.isEmpty { LabeledContent("项目", value: club.projectName) }
+                LabeledContent("人数", value: "\(club.memberNum)/\(club.peopleNum)")
+            }
+
+            Section("申请理由") {
+                TextField("申请理由", text: $reason, axis: .vertical)
+                    .lineLimit(5...8)
+                    .disabled(vm.isSubmittingClub)
+                HStack {
+                    Spacer()
+                    Text("\(reason.count)/200")
+                        .font(.caption2)
+                        .foregroundStyle(reason.count > 200 ? .red : .secondary)
+                }
+            }
+
+            if let message = vm.clubActionResult, !message.isEmpty, !vm.clubSubmissionSucceeded {
+                Section {
+                    Label(message, systemImage: "exclamationmark.circle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button {
+                    vm.applyClub(clubId: club.id, reason: reason)
+                } label: {
+                    HStack {
+                        Spacer()
+                        if vm.isSubmittingClub {
+                            ProgressView().controlSize(.small)
+                            Text("正在提交")
+                        } else {
+                            Image(systemName: "paperplane.fill")
+                            Text("提交申请")
+                        }
+                        Spacer()
+                    }
+                    .fontWeight(.semibold)
+                }
+                .disabled(
+                    reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    reason.count > 200 ||
+                    vm.isSubmittingClub
+                )
+            }
+        }
+        .navigationTitle("确认入会申请")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    vm.clearClubActionResult()
+                    selectedClubId = nil
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .disabled(vm.isSubmittingClub)
+                .accessibilityLabel("返回俱乐部目录")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("取消") { dismiss() }
+                    .disabled(vm.isSubmittingClub)
+            }
+        }
     }
 }
 
