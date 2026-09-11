@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.util.toHalfWidth
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -191,7 +192,7 @@ private fun ManualLoginView(
         ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
-                    value = userId, onValueChange = { userId = it },
+                    value = userId, onValueChange = { userId = it.toHalfWidth() },
                     label = { Text("学号") }, leadingIcon = { Icon(Icons.Default.Person, null) },
                     singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
@@ -199,7 +200,7 @@ private fun ManualLoginView(
                     enabled = !isLoading,
                 )
                 OutlinedTextField(
-                    value = ecPassword, onValueChange = { ecPassword = it },
+                    value = ecPassword, onValueChange = { ecPassword = it.toHalfWidth() },
                     label = { Text("VPN密码") }, leadingIcon = { Icon(Icons.Default.VpnKey, null) },
                     trailingIcon = { IconButton(onClick = { showEcPwd = !showEcPwd }) { Icon(if (showEcPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
                     visualTransformation = if (showEcPwd) VisualTransformation.None else PasswordVisualTransformation(),
@@ -209,7 +210,7 @@ private fun ManualLoginView(
                     enabled = !isLoading,
                 )
                 OutlinedTextField(
-                    value = password, onValueChange = { password = it },
+                    value = password, onValueChange = { password = it.toHalfWidth() },
                     label = { Text("教务密码") }, leadingIcon = { Icon(Icons.Default.Lock, null) },
                     trailingIcon = { IconButton(onClick = { showPwd = !showPwd }) { Icon(if (showPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
                     visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
