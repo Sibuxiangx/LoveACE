@@ -34,8 +34,6 @@ import kotlinx.coroutines.launch
 
 /** 全局可读的深色模式状态，由 RibbonTheme 提供 */
 val LocalIsDarkTheme = staticCompositionLocalOf { false }
-/** 全局可读的进度条风格，由 RibbonTheme 提供 */
-val LocalProgressBarStyle = staticCompositionLocalOf { ProgressBarStyle.WAVY }
 
 class ThemeViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = ThemePreferences(application)
@@ -48,7 +46,6 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
     fun setDarkMode(mode: DarkMode) = viewModelScope.launch { prefs.setDarkMode(mode) }
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { prefs.setDynamicColor(enabled) }
     fun setCourseNotification(enabled: Boolean) = viewModelScope.launch { prefs.setCourseNotification(enabled) }
-    fun setProgressBarStyle(style: ProgressBarStyle) = viewModelScope.launch { prefs.setProgressBarStyle(style) }
 }
 
 /**
@@ -200,7 +197,6 @@ fun RibbonTheme(
             LocalExtendedColors provides extendedColors,
             LocalDensity provides scaledDensity,
             LocalIsDarkTheme provides isDark,
-            LocalProgressBarStyle provides config.progressBarStyle,
         ) {
         // 同步 window 背景色，防止深色模式切换时闪白
         val view = LocalView.current

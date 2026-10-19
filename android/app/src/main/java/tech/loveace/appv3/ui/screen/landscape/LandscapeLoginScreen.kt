@@ -35,8 +35,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import tech.loveace.appv3.R
 import tech.loveace.appv3.data.model.UserCredentials
+import tech.loveace.appv3.util.describeFullWidthChars
+import tech.loveace.appv3.util.hasFullWidthChars
 import tech.loveace.appv3.ui.viewmodel.AuthState
 import tech.loveace.appv3.ui.viewmodel.AuthUiState
 
@@ -180,7 +183,14 @@ private fun LandscapeManualLoginForm(
     var useSeparatePwd by remember { mutableStateOf(savedSeparatePwd) }
     var showAdvanced by remember { mutableStateOf(savedSeparatePwd) }
     val effectiveEcPassword = if (useSeparatePwd) ecPassword else password
-    val canLogin = !isLoading && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank())
+    // 全角字符校验：中文输入法容易混入全角数字/字母/标点，教务系统只认半角
+    val fullWidthHint = when {
+        hasFullWidthChars(userId) -> "学号含全角字符 ${describeFullWidthChars(userId)}，请切换为英文半角输入"
+        hasFullWidthChars(password) -> "教务密码含全角字符 ${describeFullWidthChars(password)}，请切换为英文半角输入"
+        useSeparatePwd && hasFullWidthChars(ecPassword) -> "VPN密码含全角字符 ${describeFullWidthChars(ecPassword)}，请切换为英文半角输入"
+        else -> null
+    }
+    val canLogin = !isLoading && fullWidthHint == null && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank())
 
     fun tryLogin() {
         focusManager.clearFocus()
@@ -207,6 +217,10 @@ private fun LandscapeManualLoginForm(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                     keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
                     enabled = !isLoading,
+                    isError = hasFullWidthChars(userId),
+                    supportingText = {
+                        if (hasFullWidthChars(userId)) Text("含全角字符 ${describeFullWidthChars(userId)}，请用英文半角", fontSize = 12.sp)
+                    },
                 )
                 OutlinedTextField(
                     value = password, onValueChange = { password = it },
@@ -217,6 +231,10 @@ private fun LandscapeManualLoginForm(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { tryLogin() }),
                     enabled = !isLoading,
+                    isError = hasFullWidthChars(password),
+                    supportingText = {
+                        if (hasFullWidthChars(password)) Text("含全角字符 ${describeFullWidthChars(password)}，请用英文半角", fontSize = 12.sp)
+                    },
                 )
                 // ── 高级选项：VPN密码默认与教务密码相同，默认折叠 ──
                 Row(
@@ -265,6 +283,10 @@ private fun LandscapeManualLoginForm(
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = { tryLogin() }),
                                 enabled = !isLoading,
+                                isError = hasFullWidthChars(ecPassword),
+                                supportingText = {
+                                    if (hasFullWidthChars(ecPassword)) Text("含全角字符 ${describeFullWidthChars(ecPassword)}，请用英文半角", fontSize = 12.sp)
+                                },
                             )
                         }
                     }

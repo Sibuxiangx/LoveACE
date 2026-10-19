@@ -9,14 +9,11 @@ import kotlinx.coroutines.flow.map
 
 private val Context.themeDataStore: DataStore<Preferences> by preferencesDataStore(name = "theme_prefs")
 
-enum class ProgressBarStyle { WAVY, STANDARD }
-
 data class ThemeConfig(
     val presetId: String = ThemePresets.DEFAULT.id,
     val darkMode: DarkMode = DarkMode.SYSTEM,
     val useDynamicColor: Boolean = false,
     val courseNotificationEnabled: Boolean = false,
-    val progressBarStyle: ProgressBarStyle = ProgressBarStyle.WAVY,
 )
 
 enum class DarkMode { SYSTEM, LIGHT, DARK }
@@ -30,7 +27,6 @@ class ThemePreferences(private val context: Context) {
         val DARK_MODE = stringPreferencesKey("dark_mode")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val COURSE_NOTIFICATION = booleanPreferencesKey("course_notification")
-        val PROGRESS_BAR_STYLE = stringPreferencesKey("progress_bar_style")
     }
 
     val themeConfig: Flow<ThemeConfig> = context.themeDataStore.data.map { prefs ->
@@ -43,7 +39,6 @@ class ThemePreferences(private val context: Context) {
             darkMode = try { DarkMode.valueOf(prefs[Keys.DARK_MODE] ?: "SYSTEM") } catch (_: Exception) { DarkMode.SYSTEM },
             useDynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: false,
             courseNotificationEnabled = prefs[Keys.COURSE_NOTIFICATION] ?: false,
-            progressBarStyle = try { ProgressBarStyle.valueOf(prefs[Keys.PROGRESS_BAR_STYLE] ?: "WAVY") } catch (_: Exception) { ProgressBarStyle.WAVY },
         )
     }
 
@@ -61,9 +56,5 @@ class ThemePreferences(private val context: Context) {
 
     suspend fun setCourseNotification(enabled: Boolean) {
         context.themeDataStore.edit { it[Keys.COURSE_NOTIFICATION] = enabled }
-    }
-
-    suspend fun setProgressBarStyle(style: ProgressBarStyle) {
-        context.themeDataStore.edit { it[Keys.PROGRESS_BAR_STYLE] = style.name }
     }
 }

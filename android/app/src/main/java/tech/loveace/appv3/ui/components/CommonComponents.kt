@@ -11,13 +11,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import tech.loveace.appv3.ui.md3e.RibbonShapeLoader
-import tech.loveace.appv3.ui.theme.LocalProgressBarStyle
-import tech.loveace.appv3.ui.theme.ProgressBarStyle
 
 @Composable
 fun LoadingScreen(message: String = "加载中...") {
@@ -90,22 +89,16 @@ fun StatCard(
     }
 }
 
-/** 根据用户偏好选择波浪或标准风格的圆形进度指示器 */
+/** 不确定进度的 loading：M3E 花形 morph loader */
 @Composable
 fun AppCircularProgressIndicator(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
-    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
 ) {
-    val style = LocalProgressBarStyle.current
-    when (style) {
-        // 不确定进度的 loading 用 M3E 花形 morph loader
-        ProgressBarStyle.WAVY -> RibbonShapeLoader(modifier = modifier, color = color)
-        ProgressBarStyle.STANDARD -> CircularProgressIndicator(modifier = modifier, color = color)
-    }
+    RibbonShapeLoader(modifier = modifier, color = color)
 }
 
-/** 根据用户偏好选择波浪或标准风格的圆形进度指示器（确定进度） */
+/** 确定进度的圆形指示器（标准线条） */
 @Composable
 fun AppCircularProgressIndicator(
     progress: () -> Float,
@@ -113,28 +106,16 @@ fun AppCircularProgressIndicator(
     color: Color = MaterialTheme.colorScheme.primary,
     trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
 ) {
-    val style = LocalProgressBarStyle.current
-    when (style) {
-        ProgressBarStyle.WAVY -> WavyCircularProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
-        ProgressBarStyle.STANDARD -> CircularProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
-    }
+    CircularProgressIndicator(
+        progress = progress,
+        modifier = modifier,
+        color = color,
+        trackColor = trackColor,
+        strokeCap = StrokeCap.Round,
+    )
 }
 
-/** 根据用户偏好选择波浪或标准风格的线性进度条 */
-@Composable
-fun AppLinearProgressIndicator(
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-) {
-    val style = LocalProgressBarStyle.current
-    when (style) {
-        ProgressBarStyle.WAVY -> WavyLinearProgressIndicator(progress = null, modifier = modifier, color = color, trackColor = trackColor)
-        ProgressBarStyle.STANDARD -> LinearProgressIndicator(modifier = modifier, color = color, trackColor = trackColor)
-    }
-}
-
-/** 根据用户偏好选择波浪或标准风格的线性进度条（确定进度） */
+/** 线性进度条（标准线条） */
 @Composable
 fun AppLinearProgressIndicator(
     progress: () -> Float,
@@ -142,11 +123,13 @@ fun AppLinearProgressIndicator(
     color: Color = MaterialTheme.colorScheme.primary,
     trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
 ) {
-    val style = LocalProgressBarStyle.current
-    when (style) {
-        ProgressBarStyle.WAVY -> WavyLinearProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
-        ProgressBarStyle.STANDARD -> LinearProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
-    }
+    LinearProgressIndicator(
+        progress = progress,
+        modifier = modifier,
+        color = color,
+        trackColor = trackColor,
+        strokeCap = StrokeCap.Round,
+    )
 }
 
 /** 带图标背景的 Tonal 图标容器 */
