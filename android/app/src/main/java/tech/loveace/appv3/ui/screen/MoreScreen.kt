@@ -71,7 +71,7 @@ private data class FeatureTile(
 private val ACADEMIC_TILES = listOf(
     FeatureTile("成绩查询", Icons.Default.Grade, "成绩查询", "各学期成绩与绩点", RibbonTone.PRIMARY, RibbonShape.COOKIE_8, ScoresRoute),
     FeatureTile("考试安排", Icons.Default.EventNote, "考试安排", "时间、地点和倒计时", RibbonTone.SECONDARY, RibbonShape.CLOVER_4, ExamRoute),
-    FeatureTile("课表查询", Icons.Default.CalendarMonth, "我的课表", "按天查看课程", RibbonTone.SECONDARY, RibbonShape.PEBBLE_3, ScheduleRoute),
+    FeatureTile("课表查询", Icons.Default.CalendarMonth, "我的课表", "整学期总览，支持分周查看", RibbonTone.SECONDARY, RibbonShape.PEBBLE_3, ScheduleRoute),
     FeatureTile("培养方案", Icons.AutoMirrored.Filled.MenuBook, "培养方案", "学分与课程完成度", RibbonTone.TERTIARY, RibbonShape.COOKIE_6, PlanRoute),
     FeatureTile("自动教师评价", Icons.Default.RateReview, "自动评教", "批量完成教务系统教师评价", RibbonTone.PRIMARY, RibbonShape.FLOWER_5, TeacherEvaluationRoute),
 )

@@ -3,6 +3,10 @@ package tech.loveace.appv3.ui.screen
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,10 +36,14 @@ import kotlinx.coroutines.launch
 import tech.loveace.appv3.data.model.ScheduleCourse
 import tech.loveace.appv3.data.model.ScheduleTimePlace
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.RibbonChip
 import tech.loveace.appv3.ui.md3e.RibbonState
 import tech.loveace.appv3.ui.md3e.RibbonStateKind
+import tech.loveace.appv3.ui.md3e.RibbonTone
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.ScheduleViewModel
+import tech.loveace.appv3.ui.viewmodel.SemesterStatus
+import tech.loveace.appv3.ui.viewmodel.SemesterViewModel
 import tech.loveace.appv3.util.ScheduleImageExporter
 
 // DataStore for schedule tips preference
@@ -121,6 +129,21 @@ private fun isCoveredByAbove(grid: Map<String, List<GridCell>>, day: Int, sessio
     return false
 }
 
+/** 按教学周过滤课程：classWeek 是 01 串（第 i 位 = 第 i+1 周），空/越界视为不限周 */
+private fun filterCoursesByWeek(courses: List<ScheduleCourse>, week: Int): List<ScheduleCourse> =
+    courses.mapNotNull { course ->
+        val filtered = course.timeAndPlaceList.filter { tp ->
+            tp.classWeek.isEmpty() || week <= 0 || week > tp.classWeek.length || tp.classWeek[week - 1] == '1'
+        }
+        if (filtered.isEmpty()) null else course.copy(timeAndPlaceList = filtered)
+    }
+
+/** 今天是周几（1=周一 … 7=周日） */
+private fun todayDayIndex(): Int {
+    val dow = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK)
+    return if (dow == 1) 7 else dow - 1
+}
+
 private fun getMaxUsedSession(grid: Map<String, List<GridCell>>): Int {
     var max = 0
     for ((key, cells) in grid) {
@@ -133,11 +156,28 @@ private fun getMaxUsedSession(grid: Map<String, List<GridCell>>): Int {
 // ==================== 主界面 ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: ScheduleViewModel = viewModel()) {
+fun ScheduleScreen(
+    authViewModel: AuthViewModel,
+    onBack: () -> Unit,
+    vm: ScheduleViewModel = viewModel(),
+    semesterVm: SemesterViewModel = viewModel(),
+) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val semesterState by semesterVm.uiState.collectAsStateWithLifecycle()
     var selectedCell by remember { mutableStateOf<GridCell?>(null) }
     var showTipsDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    // 0 = 整学期总览（默认），1 = 分周视图
+    var viewMode by remember { mutableIntStateOf(0) }
+    var selectedWeek by remember { mutableIntStateOf(0) }
+
+    val semStatus = semesterState.status
+    val currentWeek = (semStatus as? SemesterStatus.InSession)?.currentWeek ?: 0
+    val totalWeeks = (semStatus as? SemesterStatus.InSession)?.totalWeeks ?: 0
+    // 教学周数据到位后把分周视图定位到本周（仅首次/学期周变化时）
+    LaunchedEffect(currentWeek) {
+        if (currentWeek > 0) selectedWeek = currentWeek
+    }
 
     // 读取"不再提示"偏好
     val context = LocalContext.current
@@ -206,10 +246,61 @@ fun ScheduleScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Schedul
                 )
                 state.courses.isEmpty() -> RibbonState(kind = RibbonStateKind.EMPTY, title = "该学期暂无课表")
                 else -> {
-                    val grid = remember(state.courses) { buildGrid(state.courses) }
-                    val maxSession = remember(grid) { getMaxUsedSession(grid) }
-                    SwipeHintRow(courseCount = state.courses.size, totalUnits = state.totalUnits)
-                    ScheduleGrid(grid = grid, maxSession = maxSession, onCellClick = { selectedCell = it })
+                    // 视图切换：整学期总览 / 分周视图
+                    SingleChoiceSegmentedButtonRow(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        SegmentedButton(
+                            selected = viewMode == 0,
+                            onClick = { viewMode = 0 },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2),
+                        ) { Text("整学期") }
+                        SegmentedButton(
+                            selected = viewMode == 1,
+                            onClick = { viewMode = 1 },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2),
+                        ) { Text("分周") }
+                    }
+                    if (viewMode == 1) {
+                        val effectiveWeek = selectedWeek.coerceAtLeast(1)
+                        val weekCourses = remember(state.courses, effectiveWeek) {
+                            filterCoursesByWeek(state.courses, effectiveWeek)
+                        }
+                        val grid = remember(weekCourses) { buildGrid(weekCourses) }
+                        val maxSession = remember(grid) { getMaxUsedSession(grid) }
+                        WeekPicker(
+                            selectedWeek = effectiveWeek,
+                            currentWeek = currentWeek,
+                            totalWeeks = totalWeeks.coerceAtLeast(effectiveWeek),
+                            onSelect = { selectedWeek = it },
+                        )
+                        // 周统计条：第 X 周 · N 门课 · M 节 + 本周标记
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "第 $effectiveWeek 周 · ${weekCourses.size} 门课 · ${weekCourses.sumOf { it.timeAndPlaceList.size }} 节",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (currentWeek == effectiveWeek) {
+                                RibbonChip("本周", tone = RibbonTone.PRIMARY, filled = true)
+                            }
+                        }
+                        ScheduleGrid(
+                            grid = grid,
+                            maxSession = maxSession,
+                            highlightToday = currentWeek == effectiveWeek,
+                            onCellClick = { selectedCell = it },
+                        )
+                    } else {
+                        val grid = remember(state.courses) { buildGrid(state.courses) }
+                        val maxSession = remember(grid) { getMaxUsedSession(grid) }
+                        SwipeHintRow(courseCount = state.courses.size, totalUnits = state.totalUnits)
+                        ScheduleGrid(grid = grid, maxSession = maxSession, onCellClick = { selectedCell = it })
+                    }
                 }
             }
         }
@@ -295,17 +386,101 @@ private fun SwipeHintRow(courseCount: Int, totalUnits: Double) {
 }
 
 // ==================== 网格组件 ====================
+
+/** 分周模式的周选择器：横向 pill，当前周描边、选中填充，自动滚动居中 */
 @Composable
-private fun ScheduleGrid(grid: Map<String, List<GridCell>>, maxSession: Int, onCellClick: (GridCell) -> Unit) {
+private fun WeekPicker(
+    selectedWeek: Int,
+    currentWeek: Int,
+    totalWeeks: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(selectedWeek, totalWeeks) {
+        if (totalWeeks > 0) {
+            listState.animateScrollToItem(index = (selectedWeek - 1).coerceIn(0, totalWeeks - 1))
+        }
+    }
+    LazyRow(
+        state = listState,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(count = totalWeeks) { index ->
+            val week = index + 1
+            val selected = week == selectedWeek
+            val isCurrent = week == currentWeek
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    )
+                    .then(
+                        if (!selected && isCurrent) {
+                            Modifier.border(
+                                1.5.dp,
+                                MaterialTheme.colorScheme.primary,
+                                RoundedCornerShape(10.dp),
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .clickable { onSelect(week) }
+                    .size(width = 36.dp, height = 44.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "$week",
+                        fontSize = 14.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary
+                            else if (isCurrent) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "周",
+                        fontSize = 9.sp,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleGrid(
+    grid: Map<String, List<GridCell>>,
+    maxSession: Int,
+    onCellClick: (GridCell) -> Unit,
+    highlightToday: Boolean = false,
+) {
     val horizontalScroll = rememberScrollState()
     val verticalScroll = rememberScrollState()
+    val today = if (highlightToday) todayDayIndex() else 0
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth()) {
             Box(Modifier.width(TIME_COL_WIDTH).height(HEADER_HEIGHT), contentAlignment = Alignment.Center) {}
             Row(Modifier.horizontalScroll(horizontalScroll)) {
                 for (d in 1..TOTAL_DAYS) {
-                    Box(Modifier.width(DAY_COL_WIDTH).height(HEADER_HEIGHT), contentAlignment = Alignment.Center) {
-                        Text("周${WEEKDAYS[d - 1]}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    val isToday = d == today
+                    Column(
+                        Modifier.width(DAY_COL_WIDTH).height(HEADER_HEIGHT),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            "周${WEEKDAYS[d - 1]}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isToday) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                        )
+                        if (isToday) {
+                            Box(Modifier.size(4.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+                        }
                     }
                 }
             }
