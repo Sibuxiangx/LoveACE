@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlin.math.abs
 import kotlin.math.sin
@@ -43,7 +44,7 @@ fun RibbonShapeLoader(
     )
 
     // 缩放 1 → 0.86 → 1（sin 一个完整周期内两次压缩）
-    val scale = 1f - 0.14f * abs(sin(phase * 2.0 * Math.PI))
+    val scale = 1f - 0.14f * abs(sin(phase * 2.0 * Math.PI).toFloat())
     // 每 1/3 周期换一个形状：cookie8 → clover4 → flower5
     val shapes = listOf(RibbonShape.COOKIE_8, RibbonShape.CLOVER_4, RibbonShape.FLOWER_5)
     val shapeIndex = ((phase * 3.0).toInt()) % shapes.size
