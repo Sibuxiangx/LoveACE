@@ -50,17 +50,17 @@ import tech.loveace.appv3.util.ScheduleImageExporter
 private val android.content.Context.scheduleTipsStore by preferencesDataStore("schedule_tips")
 private val KEY_HIDE_TIPS = booleanPreferencesKey("hide_schedule_tips")
 
-private val WEEKDAYS = listOf("一", "二", "三", "四", "五", "六", "日")
-private const val MAX_SESSION = 12
-private const val TOTAL_DAYS = 7
-private val TIME_COL_WIDTH = 36.dp
-private val ROW_HEIGHT = 62.dp
-private val HEADER_HEIGHT = 32.dp
-private val DAY_COL_WIDTH = 72.dp
+internal val WEEKDAYS = listOf("一", "二", "三", "四", "五", "六", "日")
+internal const val MAX_SESSION = 12
+internal const val TOTAL_DAYS = 7
+internal val TIME_COL_WIDTH = 36.dp
+internal val ROW_HEIGHT = 62.dp
+internal val HEADER_HEIGHT = 32.dp
+internal val DAY_COL_WIDTH = 72.dp
 
-private data class CourseColor(val bg: Color, val border: Color, val text: Color)
+internal data class CourseColor(val bg: Color, val border: Color, val text: Color)
 
-private val COURSE_COLORS = listOf(
+internal val COURSE_COLORS = listOf(
     CourseColor(Color(0x2E0078D4), Color(0x800078D4), Color(0xFF0063B1.toInt())),
     CourseColor(Color(0x2E107C10), Color(0x80107C10), Color(0xFF0E6E0E.toInt())),
     CourseColor(Color(0x2E881798), Color(0x80881798), Color(0xFF6B1076.toInt())),
@@ -73,7 +73,7 @@ private val COURSE_COLORS = listOf(
     CourseColor(Color(0x2E7A7574), Color(0x807A7574), Color(0xFF3B3A39.toInt())),
 )
 
-private data class GridCell(
+internal data class GridCell(
     val course: ScheduleCourse,
     val timePlace: ScheduleTimePlace,
     val rowSpan: Int,
@@ -81,7 +81,7 @@ private data class GridCell(
     val mergedWeeks: String,
 )
 
-private fun buildGrid(courses: List<ScheduleCourse>): Map<String, List<GridCell>> {
+internal fun buildGrid(courses: List<ScheduleCourse>): Map<String, List<GridCell>> {
     val courseColorMap = mutableMapOf<String, Int>()
     var colorIdx = 0
     data class TempEntry(val course: ScheduleCourse, val tp: ScheduleTimePlace)
@@ -114,14 +114,14 @@ private fun buildGrid(courses: List<ScheduleCourse>): Map<String, List<GridCell>
     return grid
 }
 
-private fun mergeWeeks(weeks: List<String>): String {
+internal fun mergeWeeks(weeks: List<String>): String {
     val unique = weeks.distinct()
     if (unique.size == 1) return unique[0]
     val joined = unique.joinToString(",")
     return if (joined.length > 15) "${unique[0]}等" else joined
 }
 
-private fun isCoveredByAbove(grid: Map<String, List<GridCell>>, day: Int, session: Int): Boolean {
+internal fun isCoveredByAbove(grid: Map<String, List<GridCell>>, day: Int, session: Int): Boolean {
     for (s in (session - 1) downTo 1) {
         val cells = grid["$day-$s"] ?: continue
         if (cells.any { s + it.rowSpan > session }) return true
@@ -129,22 +129,7 @@ private fun isCoveredByAbove(grid: Map<String, List<GridCell>>, day: Int, sessio
     return false
 }
 
-/** 按教学周过滤课程：classWeek 是 01 串（第 i 位 = 第 i+1 周），空/越界视为不限周 */
-private fun filterCoursesByWeek(courses: List<ScheduleCourse>, week: Int): List<ScheduleCourse> =
-    courses.mapNotNull { course ->
-        val filtered = course.timeAndPlaceList.filter { tp ->
-            tp.classWeek.isEmpty() || week <= 0 || week > tp.classWeek.length || tp.classWeek[week - 1] == '1'
-        }
-        if (filtered.isEmpty()) null else course.copy(timeAndPlaceList = filtered)
-    }
-
-/** 今天是周几（1=周一 … 7=周日） */
-private fun todayDayIndex(): Int {
-    val dow = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK)
-    return if (dow == 1) 7 else dow - 1
-}
-
-private fun getMaxUsedSession(grid: Map<String, List<GridCell>>): Int {
+internal fun getMaxUsedSession(grid: Map<String, List<GridCell>>): Int {
     var max = 0
     for ((key, cells) in grid) {
         val session = key.split("-").getOrNull(1)?.toIntOrNull() ?: continue
@@ -156,28 +141,11 @@ private fun getMaxUsedSession(grid: Map<String, List<GridCell>>): Int {
 // ==================== 主界面 ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleScreen(
-    authViewModel: AuthViewModel,
-    onBack: () -> Unit,
-    vm: ScheduleViewModel = viewModel(),
-    semesterVm: SemesterViewModel = viewModel(),
-) {
+fun ScheduleScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: ScheduleViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
-    val semesterState by semesterVm.uiState.collectAsStateWithLifecycle()
     var selectedCell by remember { mutableStateOf<GridCell?>(null) }
     var showTipsDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
-    // 0 = 整学期总览（默认），1 = 分周视图
-    var viewMode by remember { mutableIntStateOf(0) }
-    var selectedWeek by remember { mutableIntStateOf(0) }
-
-    val semStatus = semesterState.status
-    val currentWeek = (semStatus as? SemesterStatus.InSession)?.currentWeek ?: 0
-    val totalWeeks = (semStatus as? SemesterStatus.InSession)?.totalWeeks ?: 0
-    // 教学周数据到位后把分周视图定位到本周（仅首次/学期周变化时）
-    LaunchedEffect(currentWeek) {
-        if (currentWeek > 0) selectedWeek = currentWeek
-    }
 
     // 读取"不再提示"偏好
     val context = LocalContext.current
@@ -246,61 +214,10 @@ fun ScheduleScreen(
                 )
                 state.courses.isEmpty() -> RibbonState(kind = RibbonStateKind.EMPTY, title = "该学期暂无课表")
                 else -> {
-                    // 视图切换：整学期总览 / 分周视图
-                    SingleChoiceSegmentedButtonRow(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    ) {
-                        SegmentedButton(
-                            selected = viewMode == 0,
-                            onClick = { viewMode = 0 },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2),
-                        ) { Text("整学期") }
-                        SegmentedButton(
-                            selected = viewMode == 1,
-                            onClick = { viewMode = 1 },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2),
-                        ) { Text("分周") }
-                    }
-                    if (viewMode == 1) {
-                        val effectiveWeek = selectedWeek.coerceAtLeast(1)
-                        val weekCourses = remember(state.courses, effectiveWeek) {
-                            filterCoursesByWeek(state.courses, effectiveWeek)
-                        }
-                        val grid = remember(weekCourses) { buildGrid(weekCourses) }
-                        val maxSession = remember(grid) { getMaxUsedSession(grid) }
-                        WeekPicker(
-                            selectedWeek = effectiveWeek,
-                            currentWeek = currentWeek,
-                            totalWeeks = totalWeeks.coerceAtLeast(effectiveWeek),
-                            onSelect = { selectedWeek = it },
-                        )
-                        // 周统计条：第 X 周 · N 门课 · M 节 + 本周标记
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "第 $effectiveWeek 周 · ${weekCourses.size} 门课 · ${weekCourses.sumOf { it.timeAndPlaceList.size }} 节",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (currentWeek == effectiveWeek) {
-                                RibbonChip("本周", tone = RibbonTone.PRIMARY, filled = true)
-                            }
-                        }
-                        ScheduleGrid(
-                            grid = grid,
-                            maxSession = maxSession,
-                            highlightToday = currentWeek == effectiveWeek,
-                            onCellClick = { selectedCell = it },
-                        )
-                    } else {
-                        val grid = remember(state.courses) { buildGrid(state.courses) }
-                        val maxSession = remember(grid) { getMaxUsedSession(grid) }
-                        SwipeHintRow(courseCount = state.courses.size, totalUnits = state.totalUnits)
-                        ScheduleGrid(grid = grid, maxSession = maxSession, onCellClick = { selectedCell = it })
-                    }
+                    val grid = remember(state.courses) { buildGrid(state.courses) }
+                    val maxSession = remember(grid) { getMaxUsedSession(grid) }
+                    SwipeHintRow(courseCount = state.courses.size, totalUnits = state.totalUnits)
+                    ScheduleGrid(grid = grid, maxSession = maxSession, onCellClick = { selectedCell = it })
                 }
             }
         }
@@ -387,72 +304,8 @@ private fun SwipeHintRow(courseCount: Int, totalUnits: Double) {
 
 // ==================== 网格组件 ====================
 
-/** 分周模式的周选择器：横向 pill，当前周描边、选中填充，自动滚动居中 */
 @Composable
-private fun WeekPicker(
-    selectedWeek: Int,
-    currentWeek: Int,
-    totalWeeks: Int,
-    onSelect: (Int) -> Unit,
-) {
-    val listState = rememberLazyListState()
-    LaunchedEffect(selectedWeek, totalWeeks) {
-        if (totalWeeks > 0) {
-            listState.animateScrollToItem(index = (selectedWeek - 1).coerceIn(0, totalWeeks - 1))
-        }
-    }
-    LazyRow(
-        state = listState,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        items(count = totalWeeks) { index ->
-            val week = index + 1
-            val selected = week == selectedWeek
-            val isCurrent = week == currentWeek
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                    )
-                    .then(
-                        if (!selected && isCurrent) {
-                            Modifier.border(
-                                1.5.dp,
-                                MaterialTheme.colorScheme.primary,
-                                RoundedCornerShape(10.dp),
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .clickable { onSelect(week) }
-                    .size(width = 36.dp, height = 44.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "$week",
-                        fontSize = 14.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary
-                            else if (isCurrent) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        "周",
-                        fontSize = 9.sp,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleGrid(
+internal fun ScheduleGrid(
     grid: Map<String, List<GridCell>>,
     maxSession: Int,
     onCellClick: (GridCell) -> Unit,
@@ -502,7 +355,7 @@ private fun ScheduleGrid(
 }
 
 @Composable
-private fun ScheduleDayColumn(grid: Map<String, List<GridCell>>, day: Int, maxSession: Int, colWidth: Dp, rowHeight: Dp, onCellClick: (GridCell) -> Unit) {
+internal fun ScheduleDayColumn(grid: Map<String, List<GridCell>>, day: Int, maxSession: Int, colWidth: Dp, rowHeight: Dp, onCellClick: (GridCell) -> Unit) {
     Column(Modifier.width(colWidth)) {
         var session = 1
         while (session <= maxSession) {
@@ -525,7 +378,7 @@ private fun ScheduleDayColumn(grid: Map<String, List<GridCell>>, day: Int, maxSe
 /** 多课程切换块：底部数字指示重叠，点击切换，长按详情 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MultiCourseBlock(cells: List<GridCell>, modifier: Modifier, onLongClick: (GridCell) -> Unit) {
+internal fun MultiCourseBlock(cells: List<GridCell>, modifier: Modifier, onLongClick: (GridCell) -> Unit) {
     var currentIndex by remember { mutableIntStateOf(0) }
     val idx = currentIndex % cells.size
     val cell = cells[idx]
@@ -554,7 +407,7 @@ private fun MultiCourseBlock(cells: List<GridCell>, modifier: Modifier, onLongCl
 }
 
 @Composable
-private fun CourseBlock(cell: GridCell, modifier: Modifier, onClick: () -> Unit) {
+internal fun CourseBlock(cell: GridCell, modifier: Modifier, onClick: () -> Unit) {
     val color = COURSE_COLORS[cell.colorIndex % COURSE_COLORS.size]
     Box(modifier.clip(RoundedCornerShape(6.dp)).background(color.bg).clickable(onClick = onClick).padding(start = 3.dp)) {
         Box(Modifier.align(Alignment.CenterStart).width(3.dp).fillMaxHeight().padding(vertical = 4.dp).clip(RoundedCornerShape(2.dp)).background(color.border))
@@ -563,7 +416,7 @@ private fun CourseBlock(cell: GridCell, modifier: Modifier, onClick: () -> Unit)
 }
 
 @Composable
-private fun CourseBlockContent(cell: GridCell, color: CourseColor) {
+internal fun CourseBlockContent(cell: GridCell, color: CourseColor) {
     val infoStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, lineHeight = 10.sp)
     Text(
         cell.course.courseName,
@@ -585,7 +438,7 @@ private fun CourseBlockContent(cell: GridCell, color: CourseColor) {
 // ==================== 课程详情 BottomSheet ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CourseDetailSheet(cell: GridCell, onDismiss: () -> Unit) {
+internal fun CourseDetailSheet(cell: GridCell, onDismiss: () -> Unit) {
     val color = COURSE_COLORS[cell.colorIndex % COURSE_COLORS.size]
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -273,6 +273,9 @@ fun RibbonApp(
         composable<ScheduleRoute> {
             ScheduleScreen(authViewModel, onBack = { navController.popBackStack() })
         }
+        composable<SemesterScheduleRoute> {
+            SemesterScheduleScreen(authViewModel, onBack = { navController.popBackStack() })
+        }
         composable<PlanRoute> {
             PlanScreen(authViewModel, onBack = { navController.popBackStack() })
         }
