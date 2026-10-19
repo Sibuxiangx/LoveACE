@@ -279,9 +279,6 @@ fun RibbonApp(
         composable<RepairRoute> {
             RepairScreen(authViewModel, onBack = { navController.popBackStack() })
         }
-        composable<DoorCardRoute> {
-            DoorCardScreen(authViewModel, onBack = { navController.popBackStack() })
-        }
         composable<TeacherEvaluationRoute> {
             TeacherEvaluationScreen(authViewModel, onBack = { navController.popBackStack() })
         }

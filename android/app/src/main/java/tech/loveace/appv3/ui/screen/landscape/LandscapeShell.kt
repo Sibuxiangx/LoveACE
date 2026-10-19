@@ -72,7 +72,6 @@ fun LandscapeShell(
         LandscapeNavItem("一卡通", Icons.Filled.CreditCard, Icons.Outlined.CreditCard, "校园生活", trackFeature = true),
         LandscapeNavItem("电费查询", Icons.Filled.ElectricBolt, Icons.Outlined.ElectricBolt, trackFeature = true),
         LandscapeNavItem("零星维修", Icons.Filled.Build, Icons.Outlined.Build, trackFeature = true),
-        LandscapeNavItem("宿舍门卡", Icons.Filled.Key, Icons.Outlined.Key, trackFeature = true),
         LandscapeNavItem("竞赛信息", Icons.Filled.EmojiEvents, Icons.Outlined.EmojiEvents, "素质拓展", trackFeature = true),
         LandscapeNavItem("劳动俱乐部", Icons.Filled.Handshake, Icons.Outlined.Handshake, trackFeature = true),
         LandscapeNavItem("我的", Icons.Filled.Person, Icons.Outlined.Person, "设置"),
@@ -180,10 +179,9 @@ fun LandscapeShell(
                 7 -> LandscapeYKTScreen(authViewModel)
                 8 -> LandscapeElectricityScreen(authViewModel)
                 9 -> LandscapeRepairScreen(authViewModel)
-                10 -> LandscapeDoorCardScreen(authViewModel)
-                11 -> LandscapeCompetitionScreen(authViewModel)
-                12 -> LandscapeLaborClubScreen(authViewModel, profileViewModel)
-                13 -> LandscapeSettingsScreen(
+                10 -> LandscapeCompetitionScreen(authViewModel)
+                11 -> LandscapeLaborClubScreen(authViewModel, profileViewModel)
+                12 -> LandscapeSettingsScreen(
                     authViewModel,
                     themeViewModel,
                     profileViewModel,

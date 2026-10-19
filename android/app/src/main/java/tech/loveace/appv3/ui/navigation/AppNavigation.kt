@@ -22,5 +22,4 @@ import kotlinx.serialization.Serializable
 @Serializable object PlanRoute
 @Serializable object QRScanRoute
 @Serializable object RepairRoute
-@Serializable object DoorCardRoute
 @Serializable object TeacherEvaluationRoute

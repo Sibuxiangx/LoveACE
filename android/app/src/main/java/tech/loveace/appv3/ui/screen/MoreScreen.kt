@@ -111,15 +111,6 @@ fun MoreScreen(onNavigateToDetail: (Any) -> Unit) {
                     iconBg = MaterialTheme.colorScheme.secondaryContainer,
                     onClick = { navigateFeature("电费查询", ElectricityRoute, onNavigateToDetail) },
                 )
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                FeatureListItem(
-                    icon = Icons.Default.Key,
-                    title = "宿舍门卡",
-                    subtitle = "蓝牙开门和门卡管理",
-                    iconColor = MaterialTheme.colorScheme.tertiary,
-                    iconBg = MaterialTheme.colorScheme.tertiaryContainer,
-                    onClick = { navigateFeature("宿舍门卡", DoorCardRoute, onNavigateToDetail) },
-                )
             }
 
 

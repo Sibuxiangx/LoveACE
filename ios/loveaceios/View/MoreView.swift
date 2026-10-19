@@ -13,7 +13,6 @@ struct MoreView: View {
         ("一卡通", "creditcard.fill", .teal, "ykt"),
         ("宿舍电费", "bolt.fill", .yellow, "electricity"),
         ("报修", "wrench.and.screwdriver.fill", .red, "repair"),
-        ("门卡", "key.fill", .teal, "doorcard"),
         ("教师评价", "checklist.checked", .purple, "teacherEvaluation"),
         ("竞赛信息", "trophy.fill", .orange, "competition"),
         ("劳动俱乐部", "figure.walk", .pink, "labor"),
@@ -50,7 +49,6 @@ struct MoreView: View {
         case "ykt": YKTView()
         case "electricity": ElectricityView()
         case "repair": RepairView()
-        case "doorcard": DoorCardView()
         case "teacherEvaluation": TeacherEvaluationView()
         case "competition": CompetitionView()
         case "labor": LaborClubView()
