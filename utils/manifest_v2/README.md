@@ -79,9 +79,39 @@ uv run python cli.py announce \
   --platform android \
   --surface download
 
+# Pre-login notice (mobile login banner; used for school outages, forced
+# password change, etc. Desktop clients ignore it)
+uv run python cli.py prelogin-notice \
+  --title "校园网维护中" \
+  --content "登录可能失败，请稍后再试" \
+  --level warning
+
+# Disable and remove the pre-login notice
+uv run python cli.py clear-prelogin-notice
+
 # Publish the checked-in semester data into manifest v2
 uv run python cli.py sync-semesters
 ```
+
+## Pre-login notice
+
+`manifest_v2.json` 顶层的可选字段 `prelogin_notice`，仅在移动端（Android/iOS）
+登录页显示，桌面端客户端会忽略它：
+
+```json
+{
+  "prelogin_notice": {
+    "enabled": true,
+    "level": "warning",
+    "title": "校园网维护中",
+    "content": "登录可能失败，请稍后再试",
+    "updated_at": "2026-10-19T12:00:00Z"
+  }
+}
+```
+
+`level` 支持 `info` / `warning` / `critical`。`enabled` 为 `false` 或字段缺失时
+客户端不显示。拉取失败时客户端静默隐藏，不阻塞登录。
 
 All GitHub Actions jobs that mutate a manifest use the
 `loveace-manifest-publish` concurrency group. Local publication must not run in

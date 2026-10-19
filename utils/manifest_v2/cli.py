@@ -14,6 +14,7 @@ from rich.table import Table
 
 from manifest import (
     ArtifactChecksums,
+    PreloginNotice,
     SemesterDataFile,
     LoveACEManifest,
     ManifestAnnouncement,
@@ -373,6 +374,38 @@ def set_force(
     platform_manifest.minimum_supported_build = latest.build if force else None
     save_manifest_outputs(client, manifest)
     console.print(f"[green]{platform} force policy updated[/]")
+
+
+@app.command("prelogin-notice")
+def prelogin_notice(
+    title: str = typer.Option(..., "--title", "-t"),
+    content: str = typer.Option(..., "--content", "-c"),
+    level: str = typer.Option("warning", "--level"),
+):
+    """Publish the mobile pre-login notice (shown before sign-in)."""
+    if level not in {"info", "warning", "critical"}:
+        raise typer.BadParameter("--level must be info, warning, or critical")
+    client = S3Client()
+    manifest, _ = load_manifest_v2(client)
+    manifest.prelogin_notice = PreloginNotice(
+        enabled=True,
+        level=level,
+        title=title,
+        content=content,
+        updated_at=utc_now(),
+    )
+    save_manifest_outputs(client, manifest)
+    console.print("[green]Pre-login notice published[/]")
+
+
+@app.command("clear-prelogin-notice")
+def clear_prelogin_notice():
+    """Disable and remove the mobile pre-login notice."""
+    client = S3Client()
+    manifest, _ = load_manifest_v2(client)
+    manifest.prelogin_notice = None
+    save_manifest_outputs(client, manifest)
+    console.print("[green]Pre-login notice cleared[/]")
 
 
 @app.command()

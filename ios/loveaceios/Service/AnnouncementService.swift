@@ -14,13 +14,23 @@ struct AppAnnouncement: Decodable, Identifiable, Sendable {
     }
 }
 
+/// 登录前公告（移动端登录页横幅）；缺失或 enabled=false 时隐藏。桌面端忽略该字段。
+struct PreloginNotice: Decodable, Sendable {
+    let enabled: Bool?
+    let level: String?
+    let title: String?
+    let content: String?
+}
+
 private struct AnnouncementManifest: Decodable {
     let schemaVersion: Int
     let announcements: [AppAnnouncement]
+    let preloginNotice: PreloginNotice?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
         case announcements
+        case preloginNotice = "prelogin_notice"
     }
 }
 
@@ -43,6 +53,26 @@ enum AnnouncementService {
     ]
 
     static func fetchAnnouncements() async throws -> [AppAnnouncement] {
+        let manifest = try await fetchManifest()
+        return manifest.announcements.filter(isVisibleInIOSApp)
+    }
+
+    /// 拉取登录前公告；任何失败（网络、字段缺失、未启用）都静默返回 nil，不影响登录
+    static func fetchPreloginNotice() async -> PreloginNotice? {
+        guard let manifest = try? await fetchManifest() else { return nil }
+        guard let notice = manifest.preloginNotice, notice.enabled ?? false else { return nil }
+        let title = notice.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let content = notice.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !title.isEmpty || !content.isEmpty else { return nil }
+        return PreloginNotice(
+            enabled: true,
+            level: notice.level,
+            title: title.isEmpty ? nil : title,
+            content: content.isEmpty ? nil : content
+        )
+    }
+
+    private static func fetchManifest() async throws -> AnnouncementManifest {
         var lastError: Error = AnnouncementServiceError.invalidResponse
 
         for url in manifestURLs {
@@ -63,7 +93,7 @@ enum AnnouncementService {
                 guard manifest.schemaVersion == 2 else {
                     throw AnnouncementServiceError.unsupportedManifest
                 }
-                return manifest.announcements.filter(isVisibleInIOSApp)
+                return manifest
             } catch is CancellationError {
                 throw CancellationError()
             } catch {

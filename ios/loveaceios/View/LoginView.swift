@@ -9,11 +9,18 @@ struct LoginView: View {
     @State private var showAdvancedOptions = false
     @State private var usesSeparateGatewayPassword = false
     @State private var showPasswordHelp = false
+    @State private var preloginNotice: PreloginNotice?
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 Spacer(minLength: 80)
+
+                if let notice = preloginNotice {
+                    preloginBanner(notice)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 20)
+                }
 
                 VStack(spacing: 14) {
                     Image(systemName: "graduationcap.fill")
@@ -117,6 +124,10 @@ struct LoginView: View {
             PasswordHelpView()
                 .presentationDetents([.medium, .large])
         }
+        .task {
+            // 登录前公告：拉取失败或未启用时静默隐藏
+            preloginNotice = await AnnouncementService.fetchPreloginNotice()
+        }
         .alert(
             "学校要求修改密码",
             isPresented: Binding(
@@ -144,6 +155,33 @@ struct LoginView: View {
     private var canLogin: Bool {
         !userId.isEmpty && !password.isEmpty
             && (!usesSeparateGatewayPassword || !ecPassword.isEmpty)
+    }
+
+    // MARK: - Pre-login Notice
+
+    private func preloginBanner(_ notice: PreloginNotice) -> some View {
+        let tint: Color = {
+            switch notice.level ?? "warning" {
+            case "critical": return .red
+            case "info": return .blue
+            default: return .orange
+            }
+        }()
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "megaphone.fill")
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 4) {
+                if let title = notice.title, !title.isEmpty {
+                    Text(title).font(.subheadline.weight(.semibold))
+                }
+                if let content = notice.content, !content.isEmpty {
+                    Text(content).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(tint.opacity(0.12), in: .rect(cornerRadius: 12))
     }
 
     private func passwordField(placeholder: String, text: Binding<String>) -> some View {

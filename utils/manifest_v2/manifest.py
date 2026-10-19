@@ -117,6 +117,20 @@ class SemesterManifest(BaseModel):
         )
 
 
+class PreloginNotice(BaseModel):
+    """Pre-login notice shown on mobile login screens (school outage, forced
+    password change, etc). Optional; absent or disabled means hidden.
+
+    Desktop clients ignore this field entirely.
+    """
+
+    enabled: bool = False
+    level: Literal["info", "warning", "critical"] = "warning"
+    title: str = ""
+    content: str = ""
+    updated_at: str = Field(default_factory=utc_now)
+
+
 class ManifestAnnouncement(BaseModel):
     id: str
     title: str
@@ -203,6 +217,7 @@ class ManifestV2(BaseModel):
     revision: str = Field(default_factory=lambda: uuid4().hex)
     generated_at: str = Field(default_factory=utc_now)
     announcements: list[ManifestAnnouncement] = Field(default_factory=list)
+    prelogin_notice: Optional[PreloginNotice] = None
     platforms: dict[str, PlatformManifest] = Field(default_factory=dict)
     semester: SemesterManifest
     legacy_projection: LegacyProjectionState = Field(

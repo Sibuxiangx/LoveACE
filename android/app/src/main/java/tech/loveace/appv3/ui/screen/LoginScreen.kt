@@ -62,29 +62,32 @@ fun LoginScreen(
     }
 
     Surface(Modifier.fillMaxSize()) {
-        if (!showManualLogin && rememberedCredentials != null) {
-            // ── 快速登录界面 ──
-            QuickLoginView(
-                userId = rememberedCredentials.userId,
-                isLoading = isLoading,
-                enterScale = enterTransition.value,
-                onQuickLogin = onQuickLogin,
-                onSwitchUser = {
-                    onSwitchUser()
-                    showManualLogin = true
-                },
-            )
-        } else {
-            // ── 手动登录表单 ──
-            ManualLoginView(
-                uiState = uiState,
-                initialUserId = rememberedCredentials?.userId ?: "",
-                initialEcPassword = rememberedCredentials?.ecPassword ?: "",
-                initialPassword = rememberedCredentials?.password ?: "",
-                isLoading = isLoading,
-                enterScale = enterTransition.value,
-                onLogin = onLogin,
-            )
+        Column {
+            PreloginNoticeBanner()
+            if (!showManualLogin && rememberedCredentials != null) {
+                // ── 快速登录界面 ──
+                QuickLoginView(
+                    userId = rememberedCredentials.userId,
+                    isLoading = isLoading,
+                    enterScale = enterTransition.value,
+                    onQuickLogin = onQuickLogin,
+                    onSwitchUser = {
+                        onSwitchUser()
+                        showManualLogin = true
+                    },
+                )
+            } else {
+                // ── 手动登录表单 ──
+                ManualLoginView(
+                    uiState = uiState,
+                    initialUserId = rememberedCredentials?.userId ?: "",
+                    initialEcPassword = rememberedCredentials?.ecPassword ?: "",
+                    initialPassword = rememberedCredentials?.password ?: "",
+                    isLoading = isLoading,
+                    enterScale = enterTransition.value,
+                    onLogin = onLogin,
+                )
+            }
         }
     }
 

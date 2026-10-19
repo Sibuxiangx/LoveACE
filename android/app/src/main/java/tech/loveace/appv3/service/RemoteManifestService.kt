@@ -40,8 +40,19 @@ private val remoteManifestClient = OkHttpClient.Builder()
 data class ManifestV2(
     @SerialName("schema_version") val schemaVersion: Int = 0,
     val announcements: List<ManifestAnnouncement> = emptyList(),
+    @SerialName("prelogin_notice") val preloginNotice: ManifestPreloginNotice? = null,
     val platforms: Map<String, ManifestPlatform> = emptyMap(),
     val semester: ManifestSemester? = null,
+)
+
+/** 登录前公告（移动端登录页横幅）；缺失或 enabled=false 时隐藏 */
+@Serializable
+data class ManifestPreloginNotice(
+    val enabled: Boolean = false,
+    val level: String = "warning",
+    val title: String = "",
+    val content: String = "",
+    @SerialName("updated_at") val updatedAt: String = "",
 )
 
 @Serializable
