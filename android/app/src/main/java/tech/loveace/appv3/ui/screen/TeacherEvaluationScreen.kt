@@ -15,10 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +45,9 @@ import tech.loveace.appv3.ui.components.EmptyScreen
 import tech.loveace.appv3.ui.components.ErrorScreen
 import tech.loveace.appv3.ui.components.LoadingScreen
 import tech.loveace.appv3.ui.components.AppLinearProgressIndicator
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationTaskState
 import tech.loveace.appv3.ui.viewmodel.TeacherEvaluationTaskStatus
@@ -121,8 +120,8 @@ fun TeacherEvaluationContent(
         state.error != null && state.courses.isEmpty() -> ErrorScreen(state.error ?: "加载失败", onRetry)
         else -> LazyColumn(
             modifier = modifier,
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (state.protectionWaitSeconds > 0) {
                 item {
@@ -148,7 +147,7 @@ fun TeacherEvaluationContent(
 
             if (state.tasks.isNotEmpty()) {
                 item {
-                    SectionHeader("任务状态（${state.tasks.count { it.status.isTerminal() }} / ${state.tasks.size}）")
+                    RibbonSectionTitle("任务状态（${state.tasks.count { it.status.isTerminal() }} / ${state.tasks.size}）")
                 }
                 items(state.tasks, key = { "task_${it.course.displayId}" }) { task -> TaskCard(task) }
             }
@@ -156,12 +155,12 @@ fun TeacherEvaluationContent(
             if (state.courses.isEmpty()) {
                 item { InfoCard("暂无评教课程", "如果评教已开启，可以稍后刷新重试。") }
             } else {
-                item { SectionHeader("课程列表（待评 ${state.pendingCourses.size} / 总计 ${state.courses.size}）") }
+                item { RibbonSectionTitle("课程列表（待评 ${state.pendingCourses.size} / 总计 ${state.courses.size}）") }
                 items(state.courses, key = { it.displayId }) { course -> CourseCard(course) }
             }
 
             if (state.logs.isNotEmpty()) {
-                item { SectionHeader("日志") }
+                item { RibbonSectionTitle("日志") }
                 items(state.logs.reversed()) { log ->
                     Text(log, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -182,11 +181,16 @@ private fun NoticeCard(
     onStart: () -> Unit,
     onStop: () -> Unit,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    RibbonCard(
+        variant = RibbonCardVariant.PRIMARY_CONTAINER,
+        radius = 32.dp,
+        padding = PaddingValues(22.dp),
+    ) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("批量自动评教", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("批量自动评教", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text(
                         if (isRunning) "正在执行任务，请保持 App 前台" else "仅处理待评课程，已提交评价无法撤回",
                         style = MaterialTheme.typography.bodySmall,
@@ -212,6 +216,7 @@ private fun NoticeCard(
                 Text(
                     "任务进度 $finished / $taskTotal${if (failed > 0) " · 失败 $failed" else ""}",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
 
@@ -232,39 +237,32 @@ private fun NoticeCard(
 private fun SummaryStat(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.08f),
         shape = MaterialTheme.shapes.medium,
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.labelSmall)
+            Text(value, style = RibbonNumeric.Medium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(label, style = RibbonNumeric.Caption, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f))
         }
     }
 }
 
 @Composable
 private fun StatusPill(text: String) {
-    Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = MaterialTheme.shapes.medium) {
-        Text(
-            text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-    }
+    RibbonChip(text, tone = RibbonTone.PRIMARY, filled = true)
 }
 
 @Composable
 private fun CourseCard(course: TeacherEvaluationCourse) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    RibbonCard(variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(16.dp)) {
+        Column(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(course.name.ifBlank { "未命名课程" }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     Text(course.teacher.ifBlank { "教师信息为空" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                AssistChip(onClick = {}, label = { Text(if (course.isEvaluated) "已评" else "待评") })
+                RibbonChip(if (course.isEvaluated) "已评" else "待评", tone = if (course.isEvaluated) RibbonTone.SUCCESS else RibbonTone.PRIMARY)
             }
             Spacer(Modifier.height(6.dp))
             Text(course.displayId, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -274,14 +272,20 @@ private fun CourseCard(course: TeacherEvaluationCourse) {
 
 @Composable
 private fun TaskCard(task: TeacherEvaluationTaskState) {
-    val color = when (task.status) {
-        TeacherEvaluationTaskStatus.Success -> Color(0xFF2E7D32)
-        TeacherEvaluationTaskStatus.Failed -> MaterialTheme.colorScheme.error
-        TeacherEvaluationTaskStatus.Cancelled -> MaterialTheme.colorScheme.outline
+    val tone = when (task.status) {
+        TeacherEvaluationTaskStatus.Success -> RibbonTone.SUCCESS
+        TeacherEvaluationTaskStatus.Failed -> RibbonTone.ERROR
+        TeacherEvaluationTaskStatus.Cancelled -> RibbonTone.NEUTRAL
+        else -> RibbonTone.PRIMARY
+    }
+    val color = when (tone) {
+        RibbonTone.SUCCESS -> LocalExtendedColors.current.success
+        RibbonTone.ERROR -> MaterialTheme.colorScheme.error
+        RibbonTone.NEUTRAL -> MaterialTheme.colorScheme.outline
         else -> MaterialTheme.colorScheme.primary
     }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    RibbonCard(variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(task.course.name.ifBlank { task.course.displayId }, style = MaterialTheme.typography.titleSmall)
                 Text(task.course.teacher, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -307,17 +311,17 @@ private fun TaskCard(task: TeacherEvaluationTaskState) {
 
 @Composable
 private fun InfoCard(title: String, message: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    RibbonCard(
+        variant = RibbonCardVariant.PRIMARY_CONTAINER,
+        radius = 32.dp,
+        padding = PaddingValues(22.dp),
+    ) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f))
         }
     }
-}
-
-@Composable
-private fun SectionHeader(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 }
 
 private fun TeacherEvaluationTaskStatus.label(): String = when (this) {

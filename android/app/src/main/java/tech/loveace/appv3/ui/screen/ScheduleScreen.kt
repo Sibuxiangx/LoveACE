@@ -32,6 +32,8 @@ import kotlinx.coroutines.launch
 import tech.loveace.appv3.data.model.ScheduleCourse
 import tech.loveace.appv3.data.model.ScheduleTimePlace
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.RibbonState
+import tech.loveace.appv3.ui.md3e.RibbonStateKind
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.ScheduleViewModel
 import tech.loveace.appv3.util.ScheduleImageExporter
@@ -195,8 +197,14 @@ fun ScheduleScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Schedul
             }
             when {
                 state.isLoading -> LoadingScreen()
-                state.error != null -> ErrorScreen(state.error!!) { state.selectedTerm?.let { vm.loadSchedule(it.termCode) } }
-                state.courses.isEmpty() -> EmptyScreen("该学期暂无课表")
+                state.error != null -> RibbonState(
+                    kind = RibbonStateKind.ERROR,
+                    title = "加载失败",
+                    description = state.error,
+                    actionText = "重试",
+                    onAction = { state.selectedTerm?.let { vm.loadSchedule(it.termCode) } },
+                )
+                state.courses.isEmpty() -> RibbonState(kind = RibbonStateKind.EMPTY, title = "该学期暂无课表")
                 else -> {
                     val grid = remember(state.courses) { buildGrid(state.courses) }
                     val maxSession = remember(grid) { getMaxUsedSession(grid) }

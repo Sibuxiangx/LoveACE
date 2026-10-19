@@ -12,17 +12,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ChevronRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
 import tech.loveace.appv3.ui.screen.*
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.RepairViewModel
@@ -141,10 +144,9 @@ private fun LandscapeDetailPanel(vm: RepairViewModel, taskId: String) {
                 contentPadding = PaddingValues(bottom = 16.dp),
             ) {
                 item {
-                    SectionTitle("报修信息")
-                    Card(shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    RibbonSectionTitle("报修信息")
+                    RibbonCard(variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             RepairDetailRow("故障区域", detail.faultArea)
                             RepairDetailRow("维修项目", detail.repairProject)
                             RepairDetailRow("联系电话", detail.phone)
@@ -154,19 +156,17 @@ private fun LandscapeDetailPanel(vm: RepairViewModel, taskId: String) {
                 }
                 if (detail.description.isNotEmpty()) {
                     item {
-                        SectionTitle("故障详情")
-                        Card(shape = MaterialTheme.shapes.extraLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                            Text(detail.description, Modifier.padding(20.dp), style = MaterialTheme.typography.bodyMedium)
+                        RibbonSectionTitle("故障详情")
+                        RibbonCard(variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+                            Text(detail.description, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
                 if (detail.progress.isNotEmpty()) {
                     item {
-                        SectionTitle("维修进度")
-                        Card(shape = MaterialTheme.shapes.extraLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        RibbonSectionTitle("维修进度")
+                        RibbonCard(variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 detail.progress.forEachIndexed { index, item ->
                                     Row {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp)) {
@@ -188,10 +188,9 @@ private fun LandscapeDetailPanel(vm: RepairViewModel, taskId: String) {
                 }
                 if (detail.settlements.isNotEmpty()) {
                     item {
-                        SectionTitle("决算单")
-                        Card(shape = MaterialTheme.shapes.extraLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                            Column(Modifier.padding(20.dp)) {
+                        RibbonSectionTitle("决算单")
+                        RibbonCard(variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+                            Column {
                                 Row(Modifier.fillMaxWidth()) {
                                     Text("服务内容", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
                                     Text("材料", Modifier.width(80.dp), style = MaterialTheme.typography.labelMedium)
@@ -258,45 +257,49 @@ private fun LandscapeSubmitForm(vm: RepairViewModel, authViewModel: AuthViewMode
                 // 横屏两列布局
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionTitle("故障区域")
-                        OutlinedCard(onClick = { showAreaPicker = true }, shape = MaterialTheme.shapes.large) {
+                        RibbonSectionTitle("故障区域")
+                        RibbonCard(interactive = true, onClick = { showAreaPicker = true }, radius = 28.dp, padding = PaddingValues(vertical = 6.dp)) {
                             ListItem(
                                 headlineContent = {
                                     Text(if (selectedArea != null) "$selectedAreaGroupName/${selectedArea!!.name}" else "请选择",
                                         color = if (selectedArea != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                                 },
-                                trailingContent = { Icon(Icons.Default.ChevronRight, null) })
+                                trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
                         }
-                        SectionTitle("联系电话")
+                        RibbonSectionTitle("联系电话")
                         OutlinedTextField(value = phone, onValueChange = { phone = it.take(11) },
                             modifier = Modifier.fillMaxWidth(), placeholder = { Text("联系电话") },
                             singleLine = true, shape = MaterialTheme.shapes.large)
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionTitle("维修项目")
-                        OutlinedCard(onClick = { showProjectPicker = true }, shape = MaterialTheme.shapes.large) {
+                        RibbonSectionTitle("维修项目")
+                        RibbonCard(interactive = true, onClick = { showProjectPicker = true }, radius = 28.dp, padding = PaddingValues(vertical = 6.dp)) {
                             ListItem(
                                 headlineContent = {
                                     Text(if (selectedProject != null) "$selectedProjectGroupName/${selectedProject!!.name}" else "请选择",
                                         color = if (selectedProject != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                                 },
-                                trailingContent = { Icon(Icons.Default.ChevronRight, null) })
+                                trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
                         }
-                        SectionTitle("故障地址")
+                        RibbonSectionTitle("故障地址")
                         OutlinedTextField(value = address, onValueChange = { address = it },
                             modifier = Modifier.fillMaxWidth(), placeholder = { Text("详细地址") },
                             singleLine = true, shape = MaterialTheme.shapes.large)
                     }
                 }
 
-                SectionTitle("故障详情")
+                RibbonSectionTitle("故障详情")
                 OutlinedTextField(value = description, onValueChange = { description = it.take(200) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
                     placeholder = { Text("请详细描述故障信息") },
                     supportingText = { Text("${description.length}/200") },
                     shape = MaterialTheme.shapes.large)
 
-                SectionTitle("故障图片")
+                RibbonSectionTitle("故障图片")
                 RepairImagePicker(
                     imageUrls = state.uploadedImageUrls,
                     isUploading = state.isUploading,

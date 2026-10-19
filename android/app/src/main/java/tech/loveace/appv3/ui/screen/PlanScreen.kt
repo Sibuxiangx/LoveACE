@@ -25,6 +25,9 @@ import tech.loveace.appv3.data.model.PlanCategory
 import tech.loveace.appv3.data.model.PlanCourse
 import tech.loveace.appv3.data.model.PlanCompletionInfo
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.PlanViewModel
 import tech.loveace.appv3.util.CsvExporter
@@ -92,8 +95,8 @@ fun PlanScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: PlanViewMod
                     val plan = state.planInfo!!
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         item { PlanSummaryCard(plan) }
                         items(plan.categories, key = { it.categoryId }) { category ->
@@ -111,19 +114,22 @@ fun PlanScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: PlanViewMod
 
 @Composable
 private fun PlanSummaryCard(plan: PlanCompletionInfo) {
+    val extended = LocalExtendedColors.current
     val totalPassedCredits = plan.categories.sumOf { it.completedCredits }
     val creditProgress = if (plan.estimatedGraduationCredits > 0)
         (totalPassedCredits / plan.estimatedGraduationCredits).toFloat().coerceIn(0f, 1f) else 0f
-    val creditColor = when {
-        creditProgress >= 1f -> Color(0xFF2E7D32)
-        creditProgress >= 0.8f -> Color(0xFF1565C0)
-        else -> MaterialTheme.colorScheme.primary
-    }
+    val creditColor = if (creditProgress >= 1f) extended.success else MaterialTheme.colorScheme.primary
 
-    ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    RibbonCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = if (plan.failedCourses > 0) RibbonCardVariant.ERROR_CONTAINER else RibbonCardVariant.PRIMARY_CONTAINER,
+        radius = 32.dp,
+        padding = PaddingValues(22.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // 方案名称
-            Text(plan.planName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(plan.planName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer)
 
             // 专业 + 年级 chips
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -138,19 +144,18 @@ private fun PlanSummaryCard(plan: PlanCompletionInfo) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                     Column {
                         Text("学分进度", style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f))
                         Row(verticalAlignment = Alignment.Bottom) {
                             Text("${"%.1f".format(totalPassedCredits)}",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold, color = creditColor)
+                                style = RibbonNumeric.Large, color = creditColor)
                             Text(" / ${"%.1f".format(plan.estimatedGraduationCredits)} 学分",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f))
                         }
                     }
                     Text("${"%.0f".format(creditProgress * 100)}%",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold, color = creditColor)
+                        style = RibbonNumeric.Medium,
+                        color = creditColor)
                 }
                 AppLinearProgressIndicator(
                     progress = { creditProgress },
@@ -164,18 +169,19 @@ private fun PlanSummaryCard(plan: PlanCompletionInfo) {
 
             // 统计信息 — 每行一个，横向线性进度
             LinearStatRow("总分类", plan.totalCategories, plan.totalCategories, "个")
-            LinearStatRow("已修课程", plan.totalCourses, plan.totalCourses, "门")
+            LinearStatRow("已修课程", plan.totalCourses, plan.totalCourses, "门",
+                valueColor = MaterialTheme.colorScheme.tertiary, barColor = MaterialTheme.colorScheme.tertiary)
             LinearStatRow("已过", plan.passedCourses, plan.totalCourses, "门",
-                valueColor = Color(0xFF2E7D32), barColor = Color(0xFF2E7D32))
+                valueColor = extended.success, barColor = extended.success)
             LinearStatRow("尚不及格", plan.failedCourses, plan.totalCourses, "门",
-                valueColor = if (plan.failedCourses > 0) Color(0xFFD32F2F) else null,
-                barColor = if (plan.failedCourses > 0) Color(0xFFD32F2F) else null)
+                valueColor = if (plan.failedCourses > 0) MaterialTheme.colorScheme.error else null,
+                barColor = if (plan.failedCourses > 0) MaterialTheme.colorScheme.error else null)
             if (plan.missingRequiredCourses > 0) {
                 LinearStatRow("必修缺修", plan.missingRequiredCourses, plan.totalCourses, "门",
-                    valueColor = Color(0xFFE65100), barColor = Color(0xFFE65100))
+                    valueColor = extended.warning, barColor = extended.warning)
                 Text("* 必修缺修数据来源于教务处标记",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
             }
         }
     }
@@ -203,7 +209,7 @@ private fun LinearStatRow(
     label: String, value: Int, total: Int, unit: String,
     valueColor: Color? = null, barColor: Color? = null,
 ) {
-    val color = valueColor ?: MaterialTheme.colorScheme.onSurface
+    val color = valueColor ?: MaterialTheme.colorScheme.onPrimaryContainer
     val bar = barColor ?: MaterialTheme.colorScheme.primary
     val progress = if (total > 0) (value.toFloat() / total).coerceIn(0f, 1f) else 0f
 
@@ -213,7 +219,7 @@ private fun LinearStatRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
             maxLines = 1,
             modifier = Modifier.widthIn(min = 48.dp))
         AppLinearProgressIndicator(
@@ -223,10 +229,9 @@ private fun LinearStatRow(
             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         )
         Row(verticalAlignment = Alignment.Bottom) {
-            Text("$value", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold, color = color)
-            Text(unit, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$value", style = RibbonNumeric.Medium, color = color)
+            Text(unit, style = RibbonNumeric.Caption,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f))
         }
     }
 }
@@ -239,13 +244,11 @@ private fun PlanCategoryCard(category: PlanCategory, depth: Int) {
     var expanded by remember { mutableStateOf(false) }
     val hasChildren = category.courses.isNotEmpty() || category.subcategories.isNotEmpty()
 
-    Card(
+    RibbonCard(
         modifier = Modifier.fillMaxWidth().padding(start = (depth * 12).dp).animateContentSize(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = if (depth == 0) MaterialTheme.colorScheme.surfaceContainerLow
-            else MaterialTheme.colorScheme.surfaceContainer,
-        ),
+        variant = if (depth == 0) RibbonCardVariant.SURFACE_LOW else RibbonCardVariant.SURFACE_CONTAINER,
+        radius = 28.dp,
+        padding = PaddingValues(0.dp),
     ) {
         Column {
             // 标题区域
@@ -261,15 +264,7 @@ private fun PlanCategoryCard(category: PlanCategory, depth: Int) {
                     Text(category.categoryName, Modifier.weight(1f),
                         style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     if (category.isCompleted) {
-                        Surface(color = Color(0xFF2E7D32).copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                            Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
-                                Text("已达标", style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                            }
-                        }
+                        RibbonChip("已达标", tone = RibbonTone.SUCCESS, icon = Icons.Default.CheckCircle)
                     }
                     if (hasChildren) {
                         Icon(
@@ -312,13 +307,13 @@ private fun PlanCategoryCard(category: PlanCategory, depth: Int) {
 
                 // 统计 chips
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatChip("已修", "${category.totalCourses}门")
-                    StatChip("已过", "${category.passedCourses}门", Color(0xFF2E7D32))
+                    RibbonChip("已修 ${category.totalCourses}门", tone = RibbonTone.NEUTRAL)
+                    RibbonChip("已过 ${category.passedCourses}门", tone = RibbonTone.SUCCESS)
                     if (category.failedCourses > 0) {
-                        StatChip("尚不及格", "${category.failedCourses}门", Color(0xFFD32F2F))
+                        RibbonChip("尚不及格 ${category.failedCourses}门", tone = RibbonTone.ERROR)
                     }
                     if (category.missingRequiredCourses > 0) {
-                        StatChip("必修缺修", "${category.missingRequiredCourses}门", Color(0xFFE65100))
+                        RibbonChip("必修缺修 ${category.missingRequiredCourses}门", tone = RibbonTone.WARNING)
                     }
                 }
             }
@@ -344,30 +339,24 @@ private fun PlanCategoryCard(category: PlanCategory, depth: Int) {
 }
 
 @Composable
-private fun StatChip(label: String, value: String, color: Color? = null) {
-    val chipColor = color ?: MaterialTheme.colorScheme.onSurfaceVariant
-    val bg = color?.copy(alpha = 0.10f) ?: MaterialTheme.colorScheme.surfaceContainerHigh
-    Surface(color = bg, shape = RoundedCornerShape(50)) {
-        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
-            Text("$label ", style = MaterialTheme.typography.labelSmall, color = chipColor)
-            Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = chipColor)
-        }
-    }
-}
-
 private fun progressColor(percentage: Double): Color = when {
-    percentage >= 100 -> Color(0xFF2E7D32)
-    percentage >= 80 -> Color(0xFF1565C0)
-    else -> Color(0xFFE65100)
+    percentage >= 100 -> LocalExtendedColors.current.success
+    percentage >= 80 -> MaterialTheme.colorScheme.primary
+    else -> LocalExtendedColors.current.warning
 }
 
 // ── 课程行 ──
 
 @Composable
 private fun PlanCourseRow(course: PlanCourse) {
-    val statusColor = when (course.statusDescription) {
-        "已通过" -> Color(0xFF2E7D32)
-        "未通过" -> Color(0xFFD32F2F)
+    val statusTone = when (course.statusDescription) {
+        "已通过" -> RibbonTone.SUCCESS
+        "未通过" -> RibbonTone.ERROR
+        else -> RibbonTone.NEUTRAL
+    }
+    val statusColor = when (statusTone) {
+        RibbonTone.SUCCESS -> LocalExtendedColors.current.success
+        RibbonTone.ERROR -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.outline
     }
     val statusIcon = when (course.statusDescription) {
@@ -407,10 +396,7 @@ private fun PlanCourseRow(course: PlanCourse) {
             Icon(statusIcon, course.statusDescription, modifier = Modifier.size(20.dp), tint = statusColor)
         },
         trailingContent = {
-            Surface(color = statusColor.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                Text(course.statusDescription, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = statusColor)
-            }
+            RibbonChip(course.statusDescription, tone = statusTone)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )

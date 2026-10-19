@@ -25,6 +25,9 @@ import tech.loveace.appv3.data.model.ElectricityBalance
 import tech.loveace.appv3.data.model.ElectricityUsageRecord
 import tech.loveace.appv3.data.model.PaymentRecord
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.ElectricityViewModel
 
@@ -78,8 +81,8 @@ fun ElectricityScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Elec
                 val info = state.electricityInfo
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     // 房间信息
                     state.boundRoomDisplay?.let { display ->
@@ -163,13 +166,13 @@ fun ElectricityScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Elec
 private fun UnboundRoomContent(modifier: Modifier, onBind: () -> Unit) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Box(
-                Modifier.size(80.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.Home, null, modifier = Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
+            ShapeBadge(
+                shape = RibbonShape.COOKIE_12,
+                size = 80.dp,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                icon = Icons.Default.Home,
+                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
             Spacer(Modifier.height(24.dp))
             Text("未绑定房间", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
@@ -192,24 +195,24 @@ private fun UnboundRoomContent(modifier: Modifier, onBind: () -> Unit) {
 
 @Composable
 private fun BalanceCard(balance: ElectricityBalance) {
-    ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-        Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.PRIMARY_CONTAINER, radius = 32.dp, padding = PaddingValues(22.dp)) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("剩余电量", style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = ribbonContentColor(RibbonCardVariant.PRIMARY_CONTAINER).copy(alpha = 0.8f))
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text("${"%.1f".format(balance.total)}",
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    style = RibbonNumeric.Large,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Spacer(Modifier.width(4.dp))
-                Text("度", style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 6.dp))
+                Text("度", style = RibbonNumeric.Caption,
+                    color = ribbonContentColor(RibbonCardVariant.PRIMARY_CONTAINER).copy(alpha = 0.8f),
+                    modifier = Modifier.padding(bottom = 5.dp))
             }
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                BalanceChip("购电", balance.remainingPurchased, Color(0xFF1565C0), Modifier.weight(1f))
-                BalanceChip("补助", balance.remainingSubsidy, Color(0xFF2E7D32), Modifier.weight(1f))
+                BalanceChip("购电", balance.remainingPurchased, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                BalanceChip("补助", balance.remainingSubsidy, LocalExtendedColors.current.success, Modifier.weight(1f))
             }
         }
     }
@@ -217,20 +220,15 @@ private fun BalanceCard(balance: ElectricityBalance) {
 
 @Composable
 private fun BalanceChip(label: String, value: Double, color: Color, modifier: Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        shape = MaterialTheme.shapes.medium,
-    ) {
-        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    RibbonCard(modifier = modifier, variant = RibbonCardVariant.SURFACE_CONTAINER, radius = 24.dp, padding = PaddingValues(12.dp)) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("${"%.1f".format(value)}", style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold, color = color)
+                Text("${"%.1f".format(value)}", style = RibbonNumeric.Medium, color = color)
                 Spacer(Modifier.width(2.dp))
-                Text("度", style = MaterialTheme.typography.labelSmall,
+                Text("度", style = RibbonNumeric.Caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp))
             }
@@ -246,13 +244,16 @@ private fun UsageSection(records: List<ElectricityUsageRecord>, expanded: Boolea
     val displayRecords = if (expanded) records else records.take(6)
     val hasMore = records.size > 6
 
-    ElevatedCard(Modifier.fillMaxWidth().animateContentSize(), shape = MaterialTheme.shapes.extraLarge) {
-        Column(Modifier.padding(20.dp)) {
+    RibbonCard(Modifier.fillMaxWidth().animateContentSize(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(36.dp).background(Color(0xFFFFF3E0), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.Bolt, null, modifier = Modifier.size(18.dp), tint = Color(0xFFE65100)) }
+                ShapeBadge(
+                    shape = RibbonShape.COOKIE_6,
+                    size = 36.dp,
+                    color = LocalExtendedColors.current.warningContainer,
+                    icon = Icons.Default.Bolt,
+                    iconTint = LocalExtendedColors.current.onWarningContainer,
+                )
                 Spacer(Modifier.width(10.dp))
                 Text("用电记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f))
@@ -280,11 +281,8 @@ private fun UsageSection(records: List<ElectricityUsageRecord>, expanded: Boolea
 
 @Composable
 private fun UsageItem(record: ElectricityUsageRecord) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.medium,
-    ) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    RibbonCard(variant = RibbonCardVariant.SURFACE_CONTAINER, radius = 24.dp, padding = PaddingValues(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(record.recordTime, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 if (record.meterName.isNotEmpty()) {
@@ -292,12 +290,7 @@ private fun UsageItem(record: ElectricityUsageRecord) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Surface(color = Color(0xFFFFF3E0), shape = RoundedCornerShape(50)) {
-                Text("-${"%.1f".format(record.usageAmount)} 度",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
-            }
+            RibbonChip("-${"%.1f".format(record.usageAmount)} 度", tone = RibbonTone.WARNING, filled = true)
         }
     }
 }
@@ -309,13 +302,16 @@ private fun PaymentSection(records: List<PaymentRecord>, expanded: Boolean, onTo
     val displayRecords = if (expanded) records else records.take(6)
     val hasMore = records.size > 6
 
-    ElevatedCard(Modifier.fillMaxWidth().animateContentSize(), shape = MaterialTheme.shapes.extraLarge) {
-        Column(Modifier.padding(20.dp)) {
+    RibbonCard(Modifier.fillMaxWidth().animateContentSize(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(36.dp).background(Color(0xFFE8F5E9), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.Paid, null, modifier = Modifier.size(18.dp), tint = Color(0xFF2E7D32)) }
+                ShapeBadge(
+                    shape = RibbonShape.COOKIE_8,
+                    size = 36.dp,
+                    color = LocalExtendedColors.current.successContainer,
+                    icon = Icons.Default.Paid,
+                    iconTint = LocalExtendedColors.current.onSuccessContainer,
+                )
                 Spacer(Modifier.width(10.dp))
                 Text("充值记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f))
@@ -343,11 +339,8 @@ private fun PaymentSection(records: List<PaymentRecord>, expanded: Boolean, onTo
 
 @Composable
 private fun PaymentItem(record: PaymentRecord) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.medium,
-    ) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    RibbonCard(variant = RibbonCardVariant.SURFACE_CONTAINER, radius = 24.dp, padding = PaddingValues(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(record.paymentTime, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 if (record.paymentType.isNotEmpty()) {
@@ -355,12 +348,7 @@ private fun PaymentItem(record: PaymentRecord) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(50)) {
-                Text("+${"%.2f".format(record.amount)} 元",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-            }
+            RibbonChip("+${"%.2f".format(record.amount)} 元", tone = RibbonTone.SUCCESS, filled = true)
         }
     }
 }

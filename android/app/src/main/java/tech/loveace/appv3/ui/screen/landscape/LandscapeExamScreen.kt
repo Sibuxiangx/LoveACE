@@ -8,7 +8,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.components.LoadingScreen
+import tech.loveace.appv3.ui.md3e.RibbonState
+import tech.loveace.appv3.ui.md3e.RibbonStateKind
 import tech.loveace.appv3.ui.screen.ExamCard
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.ExamViewModel
@@ -30,8 +32,14 @@ fun LandscapeExamScreen(authViewModel: AuthViewModel, vm: ExamViewModel = viewMo
 
         when {
             state.isLoading -> LoadingScreen()
-            state.error != null -> ErrorScreen(state.error!!) { vm.loadExams() }
-            state.exams.isEmpty() -> EmptyScreen("暂无考试安排")
+            state.error != null -> RibbonState(
+                kind = RibbonStateKind.ERROR,
+                title = "加载失败",
+                description = state.error,
+                actionText = "重试",
+                onAction = { vm.loadExams() },
+            )
+            state.exams.isEmpty() -> RibbonState(kind = RibbonStateKind.EMPTY, title = "暂无考试安排")
             else -> LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),

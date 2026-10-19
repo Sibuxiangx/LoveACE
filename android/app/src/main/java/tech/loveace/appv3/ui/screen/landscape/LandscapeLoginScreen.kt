@@ -15,6 +15,10 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.ShapeBadge
+import tech.loveace.appv3.ui.md3e.RibbonCard
+import tech.loveace.appv3.ui.md3e.RibbonCardVariant
+import tech.loveace.appv3.ui.md3e.RibbonShape
 import tech.loveace.appv3.ui.screen.PreloginNoticeCard
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,12 +75,19 @@ fun LandscapeLoginScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(
-                        painter = painterResource(R.drawable.logo),
-                        contentDescription = "Logo",
-                        modifier = Modifier.size(120.dp).clip(CircleShape).scale(enterTransition.value),
-                        contentScale = ContentScale.Crop,
-                    )
+                    ShapeBadge(
+                        shape = RibbonShape.COOKIE_8,
+                        size = 120.dp,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.scale(enterTransition.value),
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.logo),
+                            contentDescription = "Logo",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                     Spacer(Modifier.height(24.dp))
                     Text("彩带小工具", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
@@ -187,8 +198,8 @@ private fun LandscapeManualLoginForm(
 
         Spacer(Modifier.height(20.dp))
 
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        RibbonCard(modifier = Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 32.dp, padding = PaddingValues(horizontal = 24.dp, vertical = 28.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = userId, onValueChange = { userId = it },
                     label = { Text("学号") }, leadingIcon = { Icon(Icons.Default.Person, null) },

@@ -1,24 +1,17 @@
 package tech.loveace.appv3.ui.screen
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +22,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.AACCreditCategory
 import tech.loveace.appv3.data.model.AACCreditItem
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AACViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.util.CsvExporter
@@ -106,8 +102,8 @@ fun AACScreen(authViewModel: AuthViewModel, vm: AACViewModel = viewModel()) {
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (info != null) {
                         item { GraduationProgressCard(info.totalScore, practiceScore, laborScore, effectiveTotal, isOverflow, info.isTypeAdopt, info.typeAdoptResult) }
@@ -135,36 +131,28 @@ private fun GraduationProgressCard(
     isTypeAdopt: Boolean,
     typeAdoptResult: String,
 ) {
-    ElevatedCard(
+    val extended = LocalExtendedColors.current
+    RibbonCard(
         Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        variant = RibbonCardVariant.PRIMARY_CONTAINER,
+        radius = 32.dp,
+        padding = PaddingValues(22.dp),
     ) {
-        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // 标题行 + 达标状态
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("毕业要求", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("毕业要求", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text("毕业需 ${GRADUATION_TOTAL.toInt()} 分",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f))
                 }
-                val adoptColor = if (isTypeAdopt) Color(0xFF2E7D32) else Color(0xFFE65100)
-                val adoptBg = if (isTypeAdopt) Color(0xFF2E7D32).copy(alpha = 0.12f) else Color(0xFFE65100).copy(alpha = 0.12f)
-                AssistChip(
-                    onClick = {},
-                    label = { Text(if (isTypeAdopt) "已达标" else "未达标", fontWeight = FontWeight.SemiBold) },
-                    leadingIcon = {
-                        Icon(
-                            if (isTypeAdopt) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                            null, modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = adoptBg,
-                        labelColor = adoptColor,
-                        leadingIconContentColor = adoptColor,
-                    ),
-                    border = null,
+                RibbonChip(
+                    if (isTypeAdopt) "已达标" else "未达标",
+                    tone = if (isTypeAdopt) RibbonTone.SUCCESS else RibbonTone.WARNING,
+                    filled = true,
+                    icon = if (isTypeAdopt) Icons.Default.CheckCircle else Icons.Default.Cancel,
                 )
             }
 
@@ -172,8 +160,7 @@ private fun GraduationProgressCard(
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     "%.1f".format(totalScore),
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
+                    style = RibbonNumeric.Large,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 if (practiceScore > 0) {
@@ -186,7 +173,7 @@ private fun GraduationProgressCard(
                 Text(
                     " / ${GRADUATION_TOTAL.toInt()} 分",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
                 )
             }
 
@@ -195,14 +182,14 @@ private fun GraduationProgressCard(
                 AppLinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(12.dp),
                     color = MaterialTheme.colorScheme.tertiary,
-                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f),
                 )
             } else {
                 AppLinearProgressIndicator(
                     progress = { (effectiveTotal / GRADUATION_TOTAL).toFloat().coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth().height(12.dp),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f),
                 )
             }
 
@@ -224,16 +211,14 @@ private fun GraduationProgressCard(
 
             // 未达标原因
             if (!isTypeAdopt && typeAdoptResult.isNotEmpty()) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFE65100).copy(alpha = 0.08f),
-                    ),
+                Surface(
+                    color = extended.warningContainer,
                     shape = MaterialTheme.shapes.medium,
                 ) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, null, modifier = Modifier.size(16.dp), tint = Color(0xFFE65100))
+                        Icon(Icons.Default.Info, null, modifier = Modifier.size(16.dp), tint = extended.onWarningContainer)
                         Spacer(Modifier.width(8.dp))
-                        Text(typeAdoptResult, style = MaterialTheme.typography.bodySmall, color = Color(0xFFE65100))
+                        Text(typeAdoptResult, style = MaterialTheme.typography.bodySmall, color = extended.onWarningContainer)
                     }
                 }
             }
@@ -248,16 +233,17 @@ private fun GraduationProgressCard(
 private fun RequirementWavyCard(label: String, current: Double, required: Double, modifier: Modifier = Modifier) {
     val met = current >= required
     val progress = (current / required).toFloat().coerceIn(0f, 1f)
-    val color = if (met) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
-    val bg = if (met) Color(0xFF2E7D32).copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainerHigh
+    val variant = if (met) RibbonCardVariant.SUCCESS_CONTAINER else RibbonCardVariant.SURFACE_CONTAINER
+    val color = if (met) LocalExtendedColors.current.success else MaterialTheme.colorScheme.primary
+    val contentColor = ribbonContentColor(variant)
 
-    Card(
+    RibbonCard(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = bg),
-        shape = MaterialTheme.shapes.medium,
+        variant = variant,
+        radius = 24.dp,
+        padding = PaddingValues(12.dp),
     ) {
         Row(
-            Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -267,7 +253,7 @@ private fun RequirementWavyCard(label: String, current: Double, required: Double
                     AppCircularProgressIndicator(
                         modifier = Modifier.size(40.dp),
                         color = color,
-                        trackColor = color.copy(alpha = 0.3f),
+                        trackColor = contentColor.copy(alpha = 0.3f),
                     )
                 } else {
                     AppCircularProgressIndicator(
@@ -279,16 +265,15 @@ private fun RequirementWavyCard(label: String, current: Double, required: Double
                 }
             }
             Column(Modifier.weight(1f)) {
-                Text(label, style = MaterialTheme.typography.labelMedium, color = color)
+                Text(label, style = MaterialTheme.typography.labelMedium, color = contentColor)
                 Text(
                     "${"%.1f".format(current)}/${required.let { if (it == it.toLong().toDouble()) it.toInt().toString() else "%.1f".format(it) }}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = color,
+                    style = RibbonNumeric.Medium,
+                    color = contentColor,
                 )
             }
             if (met) {
-                Icon(Icons.Default.CheckCircle, null, tint = color, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.CheckCircle, null, tint = contentColor, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -299,29 +284,30 @@ private fun RequirementWavyCard(label: String, current: Double, required: Double
 @Composable
 private fun CategoryCard(category: AACCreditCategory, index: Int = 0) {
     var expanded by remember { mutableStateOf(false) }
-    
-    // 根据索引选择不同的形状、颜色和图标
-    val (shape, containerColor, icon) = remember(index) {
+
+    // 根据索引选择不同的花形徽章、颜色和图标（相邻不同形）
+    val (badgeShape, containerColor, icon) = remember(index) {
         val shapes = listOf(
-            Triple(CircleShape, Color(0xFF1976D2), Icons.Default.School),
-            Triple(RoundedCornerShape(12.dp), Color(0xFF7B1FA2), Icons.Default.EmojiEvents),
-            Triple(CutCornerShape(topStart = 12.dp, bottomEnd = 12.dp), Color(0xFF00796B), Icons.Default.VolunteerActivism),
-            Triple(RoundedCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomStart = 4.dp, bottomEnd = 16.dp), Color(0xFFE64A19), Icons.Default.Groups),
-            Triple(RoundedCornerShape(8.dp), Color(0xFF5D4037), Icons.Default.WorkspacePremium),
-            Triple(CircleShape, Color(0xFF0288D1), Icons.Default.AutoAwesome),
+            Triple(RibbonShape.COOKIE_12, Color(0xFF1976D2), Icons.Default.School),
+            Triple(RibbonShape.FLOWER_5, Color(0xFF7B1FA2), Icons.Default.EmojiEvents),
+            Triple(RibbonShape.PEBBLE_3, Color(0xFF00796B), Icons.Default.VolunteerActivism),
+            Triple(RibbonShape.CLOVER_4, Color(0xFFE64A19), Icons.Default.Groups),
+            Triple(RibbonShape.COOKIE_8, Color(0xFF5D4037), Icons.Default.WorkspacePremium),
+            Triple(RibbonShape.COOKIE_6, Color(0xFF0288D1), Icons.Default.AutoAwesome),
         )
         shapes[index % shapes.size]
     }
 
-    Card(
+    RibbonCard(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        variant = RibbonCardVariant.SURFACE_LOW,
+        radius = 28.dp,
+        padding = PaddingValues(0.dp),
     ) {
         Column {
             // 标题行 - 可点击展开
             ListItem(
-                modifier = Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(enabled = category.children.isNotEmpty()) { expanded = !expanded },
+                modifier = Modifier.clickable(enabled = category.children.isNotEmpty()) { expanded = !expanded },
                 headlineContent = {
                     Text(category.typeName, fontWeight = FontWeight.SemiBold)
                 },
@@ -329,15 +315,15 @@ private fun CategoryCard(category: AACCreditCategory, index: Int = 0) {
                     Text("${category.children.size} 项记录")
                 },
                 leadingContent = {
-                    Box(
-                        Modifier.size(48.dp).background(containerColor.copy(alpha = 0.15f), shape),
-                        contentAlignment = Alignment.Center,
+                    ShapeBadge(
+                        shape = badgeShape,
+                        size = 48.dp,
+                        color = containerColor.copy(alpha = 0.15f),
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "%.0f".format(category.totalScore),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                style = RibbonNumeric.Caption,
                                 color = containerColor,
                             )
                             Text(
@@ -376,12 +362,19 @@ private fun CategoryCard(category: AACCreditCategory, index: Int = 0) {
 /** 单条学分记录 - 使用 ListItem */
 @Composable
 private fun CreditItemRow(item: AACCreditItem) {
+    val extended = LocalExtendedColors.current
     val isPractice = item.typeName.contains("三下乡") || item.title.contains("三下乡") || item.title.contains("社会实践")
-    val scoreColor = when {
-        item.score >= 10 -> Color(0xFFC62828)
-        item.score >= 5 -> Color(0xFFE65100)
-        item.score >= 2 -> Color(0xFF1565C0)
-        else -> Color(0xFF2E7D32)
+    val scoreTone = when {
+        item.score >= 10 -> RibbonTone.ERROR
+        item.score >= 5 -> RibbonTone.WARNING
+        item.score >= 2 -> RibbonTone.PRIMARY
+        else -> RibbonTone.SUCCESS
+    }
+    val scoreColor = when (scoreTone) {
+        RibbonTone.ERROR -> MaterialTheme.colorScheme.error
+        RibbonTone.WARNING -> extended.warning
+        RibbonTone.PRIMARY -> MaterialTheme.colorScheme.primary
+        else -> extended.success
     }
 
     ListItem(
@@ -413,18 +406,7 @@ private fun CreditItemRow(item: AACCreditItem) {
             }
         },
         trailingContent = {
-            Surface(
-                color = scoreColor.copy(alpha = 0.12f),
-                shape = MaterialTheme.shapes.small,
-            ) {
-                Text(
-                    "+${"%.1f".format(item.score)}",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = scoreColor,
-                )
-            }
+            RibbonChip("+${"%.1f".format(item.score)}", tone = scoreTone)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )

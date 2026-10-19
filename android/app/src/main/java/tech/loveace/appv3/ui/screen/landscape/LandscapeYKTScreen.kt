@@ -24,6 +24,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.YKTUiState
 import tech.loveace.appv3.ui.viewmodel.YKTViewModel
@@ -65,20 +68,18 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     state.balance?.let { balance ->
-                        ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-                            Column(Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.PRIMARY_CONTAINER, radius = 32.dp, padding = PaddingValues(22.dp)) {
+                            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                                    }
+                                    ShapeBadge(shape = RibbonShape.COOKIE_8, size = 44.dp, color = MaterialTheme.colorScheme.primary, icon = Icons.Default.CreditCard, iconTint = MaterialTheme.colorScheme.onPrimary)
                                     Spacer(Modifier.width(12.dp))
-                                    Text("校园卡余额", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("校园卡余额", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                 }
                                 Spacer(Modifier.height(16.dp))
                                 Row(verticalAlignment = Alignment.Bottom) {
-                                    Text("%.2f".format(balance.balance), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Text("%.2f".format(balance.balance), style = RibbonNumeric.Large, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     Spacer(Modifier.width(4.dp))
-                                    Text("元", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+                                    Text("元", style = RibbonNumeric.Caption, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f), modifier = Modifier.padding(bottom = 4.dp))
                                 }
                             }
                         }
@@ -92,22 +93,12 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                         state.isTransactionsLoading -> {
                             // 加载中
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    AppCircularProgressIndicator(modifier = Modifier.size(40.dp))
-                                    Spacer(Modifier.height(16.dp))
-                                    Text("消费记录加载中，请稍候...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("一卡通消费记录加载较慢，请耐心等待", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                                }
+                                RibbonState(RibbonStateKind.LOADING, "消费记录加载中，请稍候...", description = "一卡通消费记录加载较慢，请耐心等待")
                             }
                         }
                         state.transactionsError != null -> {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.ErrorOutline, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
-                                    Spacer(Modifier.height(12.dp))
-                                    Text("消费记录加载失败", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(state.transactionsError!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                                }
+                                RibbonState(RibbonStateKind.ERROR, "消费记录加载失败", description = state.transactionsError)
                             }
                         }
                         state.transactions.isNotEmpty() -> {
@@ -117,9 +108,7 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                             ) {
                                 item {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                                        Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Receipt, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                        }
+                                        ShapeBadge(shape = RibbonShape.COOKIE_12, size = 44.dp, color = MaterialTheme.colorScheme.tertiaryContainer, icon = Icons.Default.Receipt, iconTint = MaterialTheme.colorScheme.onTertiaryContainer)
                                         Spacer(Modifier.width(12.dp))
                                         Column {
                                             Text("近期交易", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -128,15 +117,20 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                                     }
                                 }
                                 items(state.transactions.take(20), key = { "${it.transactionTime}_${it.accountingTime}_${it.balance}" }) { tx ->
+                                    val extended = LocalExtendedColors.current
                                     ListItem(
                                         headlineContent = { Text(tx.area.ifEmpty { tx.operationType }, style = MaterialTheme.typography.bodyMedium) },
                                         supportingContent = { Text(tx.transactionTime.ifEmpty { tx.accountingTime }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                         leadingContent = {
-                                            Box(Modifier.size(36.dp).background(if (tx.isIncome) Color(0xFF2E7D32).copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape), contentAlignment = Alignment.Center) {
-                                                Icon(if (tx.isIncome) Icons.Default.Add else Icons.Default.Remove, null, modifier = Modifier.size(16.dp), tint = if (tx.isIncome) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
+                                            ShapeBadge(
+                                                shape = if (tx.isIncome) RibbonShape.FLOWER_5 else RibbonShape.PEBBLE_3,
+                                                size = 36.dp,
+                                                color = if (tx.isIncome) extended.successContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                icon = if (tx.isIncome) Icons.Default.Add else Icons.Default.Remove,
+                                                iconTint = if (tx.isIncome) extended.onSuccessContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
                                         },
-                                        trailingContent = { Text(tx.amountText, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = if (tx.isIncome) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface) },
+                                        trailingContent = { Text(tx.amountText, style = RibbonNumeric.Medium, color = if (tx.isIncome) extended.success else MaterialTheme.colorScheme.onSurface) },
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                     )
                                 }
@@ -145,11 +139,7 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                         else -> {
                             // 余额已加载但消费记录还没开始加载
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.ReceiptLong, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-                                    Spacer(Modifier.height(12.dp))
-                                    Text("暂无消费记录", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                                }
+                                RibbonState(RibbonStateKind.EMPTY, "暂无消费记录")
                             }
                         }
                     }
@@ -163,24 +153,15 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
 private fun LandscapePaymentCard(state: YKTUiState, vm: YKTViewModel, authViewModel: AuthViewModel) {
     var showPasswordDialog by remember { mutableStateOf(false) }
 
-    Card(
-        Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.ElectricBolt, null, modifier = Modifier.size(20.dp), tint = if (state.isPaymentUnlocked) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Default.ElectricBolt, null, modifier = Modifier.size(20.dp), tint = if (state.isPaymentUnlocked) LocalExtendedColors.current.warning else MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(12.dp))
                 Text("电费充值", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 if (!state.isPaymentUnlocked) {
-                    Surface(color = Color(0xFFE65100).copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Lock, null, modifier = Modifier.size(12.dp), tint = Color(0xFFE65100))
-                            Spacer(Modifier.width(4.dp))
-                            Text("已锁定", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE65100))
-                        }
-                    }
+                    RibbonChip("已锁定", tone = RibbonTone.WARNING, filled = true, icon = Icons.Default.Lock)
                 }
             }
 
@@ -266,12 +247,13 @@ private fun LandscapePasswordVerifyDialog(onVerify: (String) -> Boolean, onDismi
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Box(
-                Modifier.size(48.dp).background(Color(0xFFE65100).copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.Lock, null, modifier = Modifier.size(24.dp), tint = Color(0xFFE65100))
-            }
+            ShapeBadge(
+                shape = RibbonShape.COOKIE_8,
+                size = 48.dp,
+                color = LocalExtendedColors.current.warningContainer,
+                icon = Icons.Default.Lock,
+                iconTint = LocalExtendedColors.current.onWarningContainer,
+            )
         },
         title = { Text("解锁充值功能") },
         text = {

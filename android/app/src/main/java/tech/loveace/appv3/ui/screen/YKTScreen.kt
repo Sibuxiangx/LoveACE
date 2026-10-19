@@ -23,6 +23,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.YKTUiState
 import tech.loveace.appv3.ui.viewmodel.YKTViewModel
@@ -60,8 +63,8 @@ fun YKTScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: YKTViewModel
             state.error != null && state.balance == null -> ErrorScreen(state.error!!) { vm.loadAll() }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 state.balance?.let { balance -> item { BalanceCard(balance) } }
                 item { PaymentCard(state, vm, authViewModel) }
@@ -89,28 +92,33 @@ fun YKTScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: YKTViewModel
 
 @Composable
 private fun BalanceCard(balance: CardBalance) {
-    ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-        Column(Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+    RibbonCard(modifier = Modifier.fillMaxWidth(), variant = RibbonCardVariant.PRIMARY_CONTAINER, radius = 32.dp, padding = PaddingValues(22.dp)) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
+                ShapeBadge(
+                    shape = RibbonShape.COOKIE_12,
+                    size = 40.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    icon = Icons.Default.CreditCard,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                )
                 Spacer(Modifier.width(12.dp))
-                Text("校园卡余额", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("校园卡余额", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                    color = ribbonContentColor(RibbonCardVariant.PRIMARY_CONTAINER))
             }
             Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("%.2f".format(balance.balance),
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(4.dp))
-                Text("元", style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text("¥",
+                    style = RibbonNumeric.Medium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(bottom = 4.dp))
+                Text("%.2f".format(balance.balance),
+                    style = RibbonNumeric.Large,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Spacer(Modifier.width(4.dp))
+                Text("元", style = RibbonNumeric.Caption,
+                    color = ribbonContentColor(RibbonCardVariant.PRIMARY_CONTAINER).copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 5.dp))
             }
         }
     }
@@ -122,35 +130,25 @@ private fun BalanceCard(balance: CardBalance) {
 private fun PaymentCard(state: YKTUiState, vm: YKTViewModel, authViewModel: AuthViewModel) {
     var showPasswordDialog by remember { mutableStateOf(false) }
 
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // 标题行
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(40.dp).background(
-                        if (state.isPaymentUnlocked) Color(0xFFE65100).copy(alpha = 0.12f)
-                        else MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape
-                    ), contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Default.ElectricBolt, null, modifier = Modifier.size(20.dp),
-                        tint = if (state.isPaymentUnlocked) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                val extended = LocalExtendedColors.current
+                ShapeBadge(
+                    shape = RibbonShape.COOKIE_6,
+                    size = 40.dp,
+                    color = if (state.isPaymentUnlocked) extended.warningContainer
+                    else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    icon = Icons.Default.ElectricBolt,
+                    iconTint = if (state.isPaymentUnlocked) extended.onWarningContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.width(12.dp))
                 Text("电费充值", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 if (!state.isPaymentUnlocked) {
-                    Surface(color = Color(0xFFE65100).copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Lock, null, modifier = Modifier.size(12.dp), tint = Color(0xFFE65100))
-                            Spacer(Modifier.width(4.dp))
-                            Text("已锁定", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE65100))
-                        }
-                    }
+                    RibbonChip("已锁定", tone = RibbonTone.WARNING, filled = true, icon = Icons.Default.Lock)
                 }
             }
 
@@ -208,12 +206,13 @@ private fun PasswordVerifyDialog(onVerify: (String) -> Boolean, onDismiss: () ->
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Box(
-                Modifier.size(48.dp).background(Color(0xFFE65100).copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.Lock, null, modifier = Modifier.size(24.dp), tint = Color(0xFFE65100))
-            }
+            ShapeBadge(
+                shape = RibbonShape.COOKIE_6,
+                size = 48.dp,
+                color = LocalExtendedColors.current.warningContainer,
+                icon = Icons.Default.Lock,
+                iconTint = LocalExtendedColors.current.onWarningContainer,
+            )
         },
         title = { Text("解锁充值功能") },
         text = {
@@ -438,8 +437,8 @@ private fun PurchaseHistorySection(history: ElectricPurchaseQueryResult) {
                     headlineContent = { Text(record.roomInfo, style = MaterialTheme.typography.bodyMedium) },
                     supportingContent = { Text(record.purchaseDate) },
                     trailingContent = {
-                        Text("${"%.2f".format(record.amount)} 元", style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                        Text("${"%.2f".format(record.amount)} 元", style = RibbonNumeric.Medium,
+                            color = LocalExtendedColors.current.success)
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
@@ -453,13 +452,9 @@ private fun PurchaseHistorySection(history: ElectricPurchaseQueryResult) {
 
 @Composable
 private fun TransactionLoadingIndicator() {
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
+    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
         Row(
-            Modifier.padding(20.dp).fillMaxWidth(),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
@@ -475,13 +470,9 @@ private fun TransactionLoadingIndicator() {
 
 @Composable
 private fun TransactionErrorHint(error: String) {
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)),
-    ) {
+    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.ERROR_CONTAINER, radius = 28.dp, padding = PaddingValues(16.dp)) {
         Row(
-            Modifier.padding(16.dp).fillMaxWidth(),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Default.ErrorOutline, null, modifier = Modifier.size(20.dp),
@@ -498,13 +489,13 @@ private fun TransactionErrorHint(error: String) {
 @Composable
 private fun TransactionHeader(transactions: List<TransactionRecord>) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(40.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Default.Receipt, null, modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onTertiaryContainer)
-        }
+        ShapeBadge(
+            shape = RibbonShape.COOKIE_8,
+            size = 40.dp,
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            icon = Icons.Default.Receipt,
+            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+        )
         Spacer(Modifier.width(12.dp))
         Column {
             Text("近期交易", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -528,23 +519,21 @@ private fun TransactionItem(tx: TransactionRecord) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         },
         leadingContent = {
-            Box(
-                Modifier.size(36.dp).background(
-                    if (tx.isIncome) Color(0xFF2E7D32).copy(alpha = 0.12f)
-                    else MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape
-                ), contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (tx.isIncome) Icons.Default.Add else Icons.Default.Remove,
-                    null, modifier = Modifier.size(16.dp),
-                    tint = if (tx.isIncome) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            val extended = LocalExtendedColors.current
+            ShapeBadge(
+                shape = if (tx.isIncome) RibbonShape.COOKIE_6 else RibbonShape.FLOWER_5,
+                size = 36.dp,
+                color = if (tx.isIncome) extended.successContainer
+                else MaterialTheme.colorScheme.surfaceContainerHigh,
+                icon = if (tx.isIncome) Icons.Default.Add else Icons.Default.Remove,
+                iconTint = if (tx.isIncome) extended.onSuccessContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         },
         trailingContent = {
-            Text(tx.amountText, style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (tx.isIncome) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface)
+            val extended = LocalExtendedColors.current
+            Text(tx.amountText, style = RibbonNumeric.Medium,
+                color = if (tx.isIncome) extended.success else MaterialTheme.colorScheme.onSurface)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )

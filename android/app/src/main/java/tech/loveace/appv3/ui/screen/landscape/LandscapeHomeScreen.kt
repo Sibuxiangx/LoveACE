@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,7 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -37,6 +35,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import tech.loveace.appv3.data.model.AcademicInfo
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.*
 
 /**
@@ -132,23 +133,20 @@ fun LandscapeHomeScreen(
                         LandscapeStatCard(
                             label = "本学期课程", value = "${info.pendingCourses}",
                             icon = Icons.Default.MenuBook,
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            variant = RibbonCardVariant.SECONDARY_CONTAINER,
                             modifier = Modifier.weight(1f),
                         )
                         LandscapeStatCard(
                             label = "已修课程", value = "${info.completedCourses}",
                             icon = Icons.Default.CheckCircle,
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            variant = RibbonCardVariant.TERTIARY_CONTAINER,
                             modifier = Modifier.weight(1f),
                         )
                         val hasFailures = info.failedCourses > 0
                         LandscapeStatCard(
                             label = "不及格", value = "${info.failedCourses}",
                             icon = if (hasFailures) Icons.Default.Error else Icons.Default.Verified,
-                            containerColor = if (hasFailures) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
-                            contentColor = if (hasFailures) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer,
+                            variant = if (hasFailures) RibbonCardVariant.ERROR_CONTAINER else RibbonCardVariant.PRIMARY_CONTAINER,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -164,19 +162,21 @@ fun LandscapeHomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     val balance = yktState.balance
-                    Card(
+                    RibbonCard(
                         modifier = Modifier.weight(1f),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        variant = RibbonCardVariant.SURFACE_LOW,
+                        radius = 28.dp,
+                        padding = PaddingValues(16.dp),
                     ) {
-                        Column(Modifier.padding(16.dp)) {
+                        Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier.size(36.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                                }
+                                ShapeBadge(
+                                    shape = RibbonShape.CLOVER_4,
+                                    size = 36.dp,
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    icon = Icons.Default.CreditCard,
+                                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Text("一卡通", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -184,32 +184,34 @@ fun LandscapeHomeScreen(
                             if (balance != null) {
                                 Text(
                                     "¥${"%.2f".format(balance.balance)}",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
+                                    style = RibbonNumeric.Medium,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                             } else if (yktState.isLoading) {
                                 AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
                             } else {
-                                Text("--", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("--", style = RibbonNumeric.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
 
                     val aacInfo = aacState.creditInfo
-                    Card(
+                    val extended = LocalExtendedColors.current
+                    RibbonCard(
                         modifier = Modifier.weight(1f),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        variant = RibbonCardVariant.SURFACE_LOW,
+                        radius = 28.dp,
+                        padding = PaddingValues(16.dp),
                     ) {
-                        Column(Modifier.padding(16.dp)) {
+                        Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier.size(36.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(Icons.Default.VolunteerActivism, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                }
+                                ShapeBadge(
+                                    shape = RibbonShape.COOKIE_8,
+                                    size = 36.dp,
+                                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                                    icon = Icons.Default.VolunteerActivism,
+                                    iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Text("爱安财", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -218,9 +220,8 @@ fun LandscapeHomeScreen(
                                 Row(verticalAlignment = Alignment.Bottom) {
                                     Text(
                                         "${"%.1f".format(aacInfo.totalScore)}",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (aacInfo.isTypeAdopt) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
+                                        style = RibbonNumeric.Medium,
+                                        color = if (aacInfo.isTypeAdopt) extended.success else MaterialTheme.colorScheme.primary,
                                     )
                                     Text(" / 10", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
@@ -228,13 +229,13 @@ fun LandscapeHomeScreen(
                                 AppLinearProgressIndicator(
                                     progress = { (aacInfo.totalScore / 10.0).toFloat().coerceIn(0f, 1f) },
                                     modifier = Modifier.fillMaxWidth().height(6.dp),
-                                    color = if (aacInfo.isTypeAdopt) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                                    color = if (aacInfo.isTypeAdopt) extended.success else MaterialTheme.colorScheme.primary,
                                     trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 )
                             } else if (aacState.isLoading) {
                                 AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
                             } else {
-                                Text("--", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("--", style = RibbonNumeric.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -242,12 +243,13 @@ fun LandscapeHomeScreen(
 
                 // ── 学期 + 小日历 ──
                 val semStatus = semesterState.status
-                Card(
+                RibbonCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    variant = RibbonCardVariant.SURFACE_LOW,
+                    radius = 28.dp,
+                    padding = PaddingValues(20.dp),
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         // 学期状态行
                         when (semStatus) {
                             is SemesterStatus.Loading -> {
@@ -257,12 +259,13 @@ fun LandscapeHomeScreen(
                             }
                             is SemesterStatus.Vacation -> {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        Modifier.size(36.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(Icons.Default.BeachAccess, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                    }
+                                    ShapeBadge(
+                                        shape = RibbonShape.COOKIE_12,
+                                        size = 36.dp,
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                        icon = Icons.Default.BeachAccess,
+                                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    )
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text("假期中", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -278,19 +281,13 @@ fun LandscapeHomeScreen(
                             }
                             is SemesterStatus.InSession -> {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        Modifier.size(36.dp).background(
-                                            if (semStatus.isEnding) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                                            CircleShape,
-                                        ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            if (semStatus.isEnding) Icons.Default.Timer else Icons.Default.School,
-                                            null, modifier = Modifier.size(18.dp),
-                                            tint = if (semStatus.isEnding) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
-                                        )
-                                    }
+                                    ShapeBadge(
+                                        shape = RibbonShape.COOKIE_8,
+                                        size = 36.dp,
+                                        color = if (semStatus.isEnding) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                                        icon = if (semStatus.isEnding) Icons.Default.Timer else Icons.Default.School,
+                                        iconTint = if (semStatus.isEnding) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(semStatus.semesterName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -302,8 +299,7 @@ fun LandscapeHomeScreen(
                                     }
                                     Text(
                                         "${semStatus.currentWeek}/${semStatus.totalWeeks}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
+                                        style = RibbonNumeric.Large,
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
@@ -331,15 +327,17 @@ fun LandscapeHomeScreen(
             ) {
                 if (profileState.homeImageUri != null) {
                     // 已选图片 — 填满右栏
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxSize(),
-                        shape = MaterialTheme.shapes.extraLarge,
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow),
                     ) {
                         Box(Modifier.fillMaxSize()) {
                             AsyncImage(
                                 model = profileState.homeImageUri,
                                 contentDescription = "自选图片",
-                                modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.extraLarge),
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)),
                                 contentScale = ContentScale.Crop,
                             )
                             Row(
@@ -371,40 +369,34 @@ fun LandscapeHomeScreen(
                     }
                 } else {
                     // 空状态 — 大型画框占位
-                    OutlinedCard(
-                        modifier = Modifier.fillMaxSize().clickable { imagePicker.launch("image/*") },
-                        shape = MaterialTheme.shapes.extraLarge,
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(
-                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            ),
-                        ),
-                        colors = CardDefaults.outlinedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f),
-                        ),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f))
+                            .clickable { imagePicker.launch("image/*") },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.Image,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(72.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                                )
-                                Spacer(Modifier.height(16.dp))
-                                Text(
-                                    "我的画框",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "点击选择一张喜欢的图片",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                )
-                            }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Image,
+                                contentDescription = null,
+                                modifier = Modifier.size(72.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                "我的画框",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "点击选择一张喜欢的图片",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                            )
                         }
                     }
                 }
@@ -416,8 +408,13 @@ fun LandscapeHomeScreen(
 
 @Composable
 private fun LandscapeAcademicOverviewCard(info: AcademicInfo) {
-    ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    RibbonCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = RibbonCardVariant.PRIMARY_CONTAINER,
+        radius = 32.dp,
+        padding = PaddingValues(22.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(contentAlignment = Alignment.Center) {
                     AppCircularProgressIndicator(
@@ -428,8 +425,7 @@ private fun LandscapeAcademicOverviewCard(info: AcademicInfo) {
                     )
                     Text(
                         "%.2f".format(info.gpa),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        style = RibbonNumeric.Large,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -482,8 +478,8 @@ private fun LandscapeAcademicNumber(
             Modifier.widthIn(min = 96.dp).padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(label, style = RibbonNumeric.Caption)
+            Text(value, style = RibbonNumeric.Medium)
             Text(supporting, style = MaterialTheme.typography.bodySmall, color = LocalContentColor.current.copy(alpha = 0.72f))
         }
     }
@@ -494,20 +490,24 @@ private fun LandscapeStatCard(
     label: String,
     value: String,
     icon: ImageVector,
-    containerColor: Color,
-    contentColor: Color,
+    variant: RibbonCardVariant,
     modifier: Modifier = Modifier,
 ) {
-    Card(
+    val contentColor = ribbonContentColor(variant)
+    RibbonCard(
         modifier = modifier,
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
+        variant = variant,
+        radius = 24.dp,
+        padding = PaddingValues(16.dp),
     ) {
-        Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, modifier = Modifier.size(24.dp), tint = contentColor)
-            Spacer(Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = contentColor)
-            Text(label, style = MaterialTheme.typography.labelMedium, color = contentColor)
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, modifier = Modifier.size(16.dp), tint = contentColor)
+                Spacer(Modifier.width(6.dp))
+                Text(label, style = MaterialTheme.typography.labelMedium, color = contentColor)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(value, style = RibbonNumeric.Large, color = contentColor)
         }
     }
 }

@@ -1,13 +1,12 @@
 package tech.loveace.appv3.ui.screen
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ChevronRight
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +22,8 @@ import tech.loveace.appv3.data.model.ScoreRecord
 import tech.loveace.appv3.data.model.ScoreDetail
 import tech.loveace.appv3.data.model.hasPublishedScore
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AcademicViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.util.CsvExporter
@@ -100,10 +101,10 @@ fun ScoresScreen(authViewModel: AuthViewModel, onBack: (() -> Unit)? = null, vm:
 
             when {
                 state.scoresLoading -> LoadingScreen()
-                state.scores?.records.isNullOrEmpty() -> EmptyScreen("该学期暂无成绩")
+                state.scores?.records.isNullOrEmpty() -> RibbonState(kind = RibbonStateKind.EMPTY, title = "该学期暂无成绩")
                 else -> LazyColumn(
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(state.scores!!.records, key = { "${it.termId}_${it.courseCode}_${it.courseClass}_${it.sequence}" }) { record ->
                         ScoreCard(record, onClick = if (state.selectedTerm?.isCurrent == true && record.hasPublishedScore) {
@@ -121,14 +122,11 @@ fun ScoresScreen(authViewModel: AuthViewModel, onBack: (() -> Unit)? = null, vm:
 @Composable
 fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
     val scoreNum = record.score.toDoubleOrNull()
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    RibbonListCard(
+        interactive = onClick != null,
+        onClick = onClick ?: {},
     ) {
-        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     record.courseNameCn,
@@ -138,8 +136,8 @@ fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("${record.credits} 学分", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    record.courseType?.takeIf { it.isNotBlank() }?.let { type -> ScoreMetaBadge(type, MaterialTheme.colorScheme.secondaryContainer) }
-                    record.examType?.takeIf { it.isNotBlank() }?.let { type -> ScoreMetaBadge(type, MaterialTheme.colorScheme.tertiaryContainer) }
+                    record.courseType?.takeIf { it.isNotBlank() }?.let { type -> RibbonChip(type, tone = RibbonTone.SECONDARY) }
+                    record.examType?.takeIf { it.isNotBlank() }?.let { type -> RibbonChip(type, tone = RibbonTone.TERTIARY) }
                 }
                 if (record.courseNameEn.isNotBlank()) {
                     Text(
@@ -155,30 +153,19 @@ fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         record.score.ifBlank { "暂无成绩" },
-                        style = if (record.hasPublishedScore) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = if (record.hasPublishedScore) RibbonNumeric.Large else MaterialTheme.typography.titleSmall,
+                        fontWeight = if (record.hasPublishedScore) null else FontWeight.Bold,
                         color = if (record.hasPublishedScore) scoreGradientColor(scoreNum) else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (record.hasPublishedScore) {
-                        Text("分", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("分", style = RibbonNumeric.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (onClick != null) {
-                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "查看成绩明细")
+                    Icon(Icons.AutoMirrored.Filled.ChevronRight, contentDescription = "查看成绩明细")
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ScoreMetaBadge(text: String, color: Color) {
-    Surface(
-        color = color,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        shape = MaterialTheme.shapes.small,
-    ) {
-        Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
     }
 }
 

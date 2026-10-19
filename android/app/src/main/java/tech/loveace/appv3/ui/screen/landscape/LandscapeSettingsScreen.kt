@@ -10,6 +10,11 @@ import androidx.core.content.ContextCompat
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
@@ -18,6 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -212,20 +219,35 @@ fun LandscapeSettingsScreen(
                 Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Column(Modifier.padding(20.dp)) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            SeedColors.ALL.forEach { option ->
-                                val isSelected = themeConfig.seedColorArgb == option.argb
+                            ThemePresets.ALL.forEach { option ->
+                                val isSelected = themeConfig.presetId == option.id
+                                // 选中 swatch 从圆 morph 成圆角方并放大（M3E 按压动效）
+                                val swatchCorner by animateDpAsState(
+                                    if (isSelected) 14.dp else 24.dp,
+                                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                                    label = "swatchCorner",
+                                )
+                                val swatchScale by animateFloatAsState(
+                                    if (isSelected) 1.08f else 1f,
+                                    label = "swatchScale",
+                                )
                                 Box(
-                                    modifier = Modifier.size(48.dp).clip(CircleShape).background(option.color, CircleShape)
-                                        .then(if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
-                                        .clickable { themeViewModel.setSeedColor(option.argb) },
+                                    modifier = Modifier.size(48.dp)
+                                        .graphicsLayer {
+                                            scaleX = swatchScale
+                                            scaleY = swatchScale
+                                        }
+                                        .clip(RoundedCornerShape(swatchCorner))
+                                        .background(Color(option.seedArgb))
+                                        .clickable { themeViewModel.setPreset(option.id) },
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    if (isSelected) Icon(Icons.Default.Check, null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(22.dp))
+                                    if (isSelected) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(22.dp))
                                 }
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        val selectedName = SeedColors.ALL.find { it.argb == themeConfig.seedColorArgb }?.name ?: ""
+                        val selectedName = ThemePresets.byId(themeConfig.presetId).name
                         Text(selectedName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

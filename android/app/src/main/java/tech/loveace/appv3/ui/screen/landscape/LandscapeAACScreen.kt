@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ChevronRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +29,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.AACCreditCategory
 import tech.loveace.appv3.data.model.AACCreditItem
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AACViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.util.CsvExporter
@@ -109,23 +113,20 @@ fun LandscapeAACScreen(authViewModel: AuthViewModel, vm: AACViewModel = viewMode
                     ) {
                         if (info != null) {
                             // 总分卡片
-                            ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-                                Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.PRIMARY_CONTAINER, radius = 32.dp, padding = PaddingValues(22.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                        Text("毕业要求", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                                        val adoptColor = if (info.isTypeAdopt) Color(0xFF2E7D32) else Color(0xFFE65100)
-                                        AssistChip(
-                                            onClick = {},
-                                            label = { Text(if (info.isTypeAdopt) "已达标" else "未达标", fontWeight = FontWeight.SemiBold) },
-                                            leadingIcon = { Icon(if (info.isTypeAdopt) Icons.Default.CheckCircle else Icons.Default.Cancel, null, modifier = Modifier.size(16.dp)) },
-                                            colors = AssistChipDefaults.assistChipColors(containerColor = adoptColor.copy(alpha = 0.12f), labelColor = adoptColor, leadingIconContentColor = adoptColor),
-                                            border = null,
+                                        Text("毕业要求", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.weight(1f))
+                                        RibbonChip(
+                                            if (info.isTypeAdopt) "已达标" else "未达标",
+                                            tone = if (info.isTypeAdopt) RibbonTone.SUCCESS else RibbonTone.WARNING,
+                                            filled = true,
                                         )
                                     }
                                     Row(verticalAlignment = Alignment.Bottom) {
-                                        Text("%.1f".format(info.totalScore), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                        if (practiceScore > 0) Text(" + %.1f".format(practiceScore), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                                        Text(" / ${GRADUATION_TOTAL.toInt()} 分", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("%.1f".format(info.totalScore), style = RibbonNumeric.Large, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                        if (practiceScore > 0) Text(" + %.1f".format(practiceScore), style = RibbonNumeric.Medium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
+                                        Text(" / ${GRADUATION_TOTAL.toInt()} 分", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
                                     }
                                     if (effectiveTotal >= GRADUATION_TOTAL) {
                                         AppLinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(12.dp), color = MaterialTheme.colorScheme.tertiary)
@@ -214,12 +215,11 @@ private val CATEGORY_STYLES = listOf(
 @Composable
 private fun LandscapeCategorySelectorItem(category: AACCreditCategory, index: Int, isSelected: Boolean, onClick: () -> Unit) {
     val style = CATEGORY_STYLES[index % CATEGORY_STYLES.size]
-    val containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surfaceContainerLow
-    Card(
+    RibbonCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
+        variant = if (isSelected) RibbonCardVariant.PRIMARY_CONTAINER else RibbonCardVariant.SURFACE_LOW,
+        radius = 24.dp,
+        padding = PaddingValues(vertical = 4.dp),
     ) {
         ListItem(
             modifier = Modifier.clickable(onClick = onClick),
@@ -244,7 +244,7 @@ private fun LandscapeCategorySelectorItem(category: AACCreditCategory, index: In
                 }
             },
             trailingContent = {
-                if (isSelected) Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
+                if (isSelected) Icon(Icons.AutoMirrored.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
@@ -256,12 +256,16 @@ private fun LandscapeCategorySelectorItem(category: AACCreditCategory, index: In
 private fun LandscapeRequirementWavyCard(label: String, current: Double, required: Double, modifier: Modifier) {
     val met = current >= required
     val progress = (current / required).toFloat().coerceIn(0f, 1f)
-    val color = if (met) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
-    val bg = if (met) Color(0xFF2E7D32).copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainerHigh
-    
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = bg), shape = MaterialTheme.shapes.medium) {
+    val extended = LocalExtendedColors.current
+    val color = if (met) extended.success else MaterialTheme.colorScheme.primary
+
+    RibbonCard(
+        modifier = modifier,
+        variant = if (met) RibbonCardVariant.SUCCESS_CONTAINER else RibbonCardVariant.SURFACE_CONTAINER,
+        radius = 24.dp,
+        padding = PaddingValues(12.dp),
+    ) {
         Row(
-            Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -285,8 +289,7 @@ private fun LandscapeRequirementWavyCard(label: String, current: Double, require
                 Text(label, style = MaterialTheme.typography.labelSmall, color = color)
                 Text(
                     "${"%.1f".format(current)}/${required.let { if (it == it.toLong().toDouble()) it.toInt().toString() else "%.1f".format(it) }}",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
+                    style = RibbonNumeric.Medium,
                     color = color,
                 )
             }
@@ -299,11 +302,11 @@ private fun LandscapeRequirementWavyCard(label: String, current: Double, require
 
 @Composable
 private fun LandscapeCreditItemRow(item: AACCreditItem) {
-    val scoreColor = when {
-        item.score >= 10 -> Color(0xFFC62828)
-        item.score >= 5 -> Color(0xFFE65100)
-        item.score >= 2 -> Color(0xFF1565C0)
-        else -> Color(0xFF2E7D32)
+    val scoreTone = when {
+        item.score >= 10 -> RibbonTone.ERROR
+        item.score >= 5 -> RibbonTone.WARNING
+        item.score >= 2 -> RibbonTone.PRIMARY
+        else -> RibbonTone.SUCCESS
     }
     ListItem(
         headlineContent = { Text(item.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium) },
@@ -314,9 +317,7 @@ private fun LandscapeCreditItemRow(item: AACCreditItem) {
             }
         },
         trailingContent = {
-            Surface(color = scoreColor.copy(alpha = 0.12f), shape = MaterialTheme.shapes.small) {
-                Text("+${"%.1f".format(item.score)}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = scoreColor)
-            }
+            RibbonChip("+${"%.1f".format(item.score)}", tone = scoreTone)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )

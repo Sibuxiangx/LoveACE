@@ -24,6 +24,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.AwardProject
 import tech.loveace.appv3.data.model.CreditsSummary
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.CompetitionViewModel
 
@@ -61,20 +64,18 @@ fun LandscapeCompetitionScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         data.creditsSummary?.let { summary ->
-                            ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-                                Column(Modifier.padding(24.dp)) {
+                            RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.PRIMARY_CONTAINER, radius = 32.dp, padding = PaddingValues(22.dp)) {
+                                Column {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.School, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                                        }
+                                        ShapeBadge(shape = RibbonShape.FLOWER_5, size = 44.dp, color = MaterialTheme.colorScheme.primary, icon = Icons.Default.School, iconTint = MaterialTheme.colorScheme.onPrimary)
                                         Spacer(Modifier.width(12.dp))
-                                        Text("创新学分汇总", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("创新学分汇总", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     }
                                     Spacer(Modifier.height(20.dp))
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Bottom) {
-                                        Text("${"%.1f".format(summary.totalCredits)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        Text("${"%.1f".format(summary.totalCredits)}", style = RibbonNumeric.Large, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                         Spacer(Modifier.width(4.dp))
-                                        Text("学分", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+                                        Text("学分", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f), modifier = Modifier.padding(bottom = 4.dp))
                                     }
                                     Spacer(Modifier.height(20.dp))
                                     val categories = listOfNotNull(
@@ -90,10 +91,10 @@ fun LandscapeCompetitionScreen(
                                             categories.chunked(2).forEach { row ->
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                     row.forEach { (label, value) ->
-                                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh), shape = MaterialTheme.shapes.medium) {
-                                                            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                        RibbonCard(modifier = Modifier.weight(1f), variant = RibbonCardVariant.SURFACE_CONTAINER, radius = 24.dp, padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                                Text("${"%.1f".format(value)}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                                Text("${"%.1f".format(value)}", style = RibbonNumeric.Medium, color = MaterialTheme.colorScheme.primary)
                                                             }
                                                         }
                                                     }
@@ -116,9 +117,7 @@ fun LandscapeCompetitionScreen(
                         if (data.awards.isNotEmpty()) {
                             item {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                    }
+                                    ShapeBadge(shape = RibbonShape.COOKIE_8, size = 44.dp, color = MaterialTheme.colorScheme.tertiaryContainer, icon = Icons.Default.EmojiEvents, iconTint = MaterialTheme.colorScheme.onTertiaryContainer)
                                     Spacer(Modifier.width(12.dp))
                                     Column {
                                         Text("获奖项目", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -138,28 +137,27 @@ fun LandscapeCompetitionScreen(
 @Composable
 private fun LandscapeAwardCard(award: AwardProject) {
     var expanded by remember { mutableStateOf(false) }
-    val statusColor = when {
-        award.status.contains("通过") || award.status.contains("认定") -> Color(0xFF2E7D32)
-        award.status.contains("审核") || award.status.contains("待") -> Color(0xFFE65100)
-        award.status.contains("驳回") || award.status.contains("拒") -> Color(0xFFC62828)
-        else -> Color(0xFF757575)
+    val extended = LocalExtendedColors.current
+    val statusTone = when {
+        award.status.contains("通过") || award.status.contains("认定") -> RibbonTone.SUCCESS
+        award.status.contains("审核") || award.status.contains("待") -> RibbonTone.WARNING
+        award.status.contains("驳回") || award.status.contains("拒") -> RibbonTone.ERROR
+        else -> RibbonTone.NEUTRAL
     }
-    OutlinedCard(Modifier.fillMaxWidth().animateContentSize(), shape = MaterialTheme.shapes.large) {
-        Column(Modifier.clickable { expanded = !expanded }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    RibbonCard(Modifier.fillMaxWidth().animateContentSize(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(16.dp)) {
+        Column(Modifier.clickable { expanded = !expanded }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(award.projectName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (award.status.isNotEmpty()) {
-                    Surface(color = statusColor.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                        Text(award.status, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = statusColor)
-                    }
+                    RibbonChip(award.status, tone = statusTone)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (award.level.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(50)) { Text(award.level, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-                if (award.grade.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(50)) { Text(award.grade, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer) }
+                if (award.level.isNotEmpty()) RibbonChip(award.level, tone = RibbonTone.PRIMARY)
+                if (award.grade.isNotEmpty()) RibbonChip(award.grade, tone = RibbonTone.SECONDARY)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (award.credits > 0) Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, modifier = Modifier.size(14.dp), tint = Color(0xFFFFA000)); Spacer(Modifier.width(2.dp)); Text("${award.credits} 学分", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (award.credits > 0) Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, modifier = Modifier.size(14.dp), tint = extended.warning); Spacer(Modifier.width(2.dp)); Text("${award.credits} 学分", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (award.awardDate.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(2.dp)); Text(award.awardDate, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             if (expanded) {

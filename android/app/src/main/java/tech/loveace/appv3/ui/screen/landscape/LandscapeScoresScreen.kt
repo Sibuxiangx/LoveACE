@@ -12,6 +12,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.RibbonState
+import tech.loveace.appv3.ui.md3e.RibbonStateKind
 import tech.loveace.appv3.ui.screen.ScoreCard
 import tech.loveace.appv3.ui.screen.ScoreDetailSheet
 import tech.loveace.appv3.ui.viewmodel.AcademicViewModel
@@ -88,7 +90,7 @@ fun LandscapeScoresScreen(authViewModel: AuthViewModel, vm: AcademicViewModel = 
         // 成绩双列网格
         when {
             state.scoresLoading -> LoadingScreen()
-            state.scores?.records.isNullOrEmpty() -> EmptyScreen("该学期暂无成绩")
+            state.scores?.records.isNullOrEmpty() -> RibbonState(kind = RibbonStateKind.EMPTY, title = "该学期暂无成绩")
             else -> {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),

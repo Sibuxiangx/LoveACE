@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import tech.loveace.appv3.R
 import tech.loveace.appv3.data.model.UserCredentials
+import tech.loveace.appv3.ui.md3e.*
 import tech.loveace.appv3.ui.viewmodel.AuthState
 import tech.loveace.appv3.ui.viewmodel.AuthUiState
 
@@ -108,12 +110,19 @@ private fun QuickLoginView(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Image(
-            painter = painterResource(R.drawable.logo),
-            contentDescription = "Logo",
-            modifier = Modifier.size(100.dp).clip(CircleShape).scale(enterScale),
-            contentScale = ContentScale.Crop,
-        )
+        ShapeBadge(
+            shape = RibbonShape.COOKIE_8,
+            size = 100.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.scale(enterScale),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.logo),
+                contentDescription = "Logo",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
         Spacer(Modifier.height(24.dp))
         Text("彩带小工具", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
@@ -196,12 +205,19 @@ private fun ManualLoginView(
     ) {
         Spacer(Modifier.height(72.dp))
 
-        Image(
-            painter = painterResource(R.drawable.logo),
-            contentDescription = "Logo",
-            modifier = Modifier.size(88.dp).clip(CircleShape).scale(enterScale),
-            contentScale = ContentScale.Crop,
-        )
+        ShapeBadge(
+            shape = RibbonShape.COOKIE_8,
+            size = 88.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.scale(enterScale),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.logo),
+                contentDescription = "Logo",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Text("彩带小工具", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
@@ -210,7 +226,7 @@ private fun ManualLoginView(
         PreloginNoticeCard()
         Spacer(Modifier.height(20.dp))
 
-        ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+        ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(32.dp)) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = userId, onValueChange = { userId = it },

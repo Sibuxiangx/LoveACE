@@ -35,6 +35,7 @@ import coil.compose.AsyncImage
 import tech.loveace.appv3.data.model.LaborClubActivity
 import tech.loveace.appv3.data.model.SignItem
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.LaborClubUiState
 import tech.loveace.appv3.ui.viewmodel.LaborClubViewModel
@@ -121,36 +122,37 @@ fun LandscapeLaborClubScreen(
                         // 进度卡片
                         state.progress?.let { progress ->
                             val isCompleted = progress.isCompleted
-                            ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-                                Column(Modifier.padding(24.dp)) {
+                            val variant = if (isCompleted) RibbonCardVariant.SUCCESS_CONTAINER else RibbonCardVariant.WARNING_CONTAINER
+                            val onVariant = ribbonContentColor(variant)
+                            RibbonCard(Modifier.fillMaxWidth(), variant = variant, radius = 32.dp, padding = PaddingValues(22.dp)) {
+                                Column {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("劳动修课进度", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("劳动修课进度", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = onVariant)
                                         Spacer(Modifier.weight(1f))
-                                        Surface(color = (if (isCompleted) Color(0xFF2E7D32) else Color(0xFFE65100)).copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                                            Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(if (isCompleted) Icons.Default.CheckCircle else Icons.Default.Cancel, null, modifier = Modifier.size(14.dp), tint = if (isCompleted) Color(0xFF2E7D32) else Color(0xFFE65100))
-                                                Spacer(Modifier.width(4.dp))
-                                                Text(if (isCompleted) "已达标" else "未达标", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (isCompleted) Color(0xFF2E7D32) else Color(0xFFE65100))
-                                            }
-                                        }
+                                        RibbonChip(
+                                            if (isCompleted) "已达标" else "未达标",
+                                            tone = if (isCompleted) RibbonTone.SUCCESS else RibbonTone.WARNING,
+                                            filled = true,
+                                            icon = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                        )
                                     }
                                     Spacer(Modifier.height(16.dp))
                                     Row(verticalAlignment = Alignment.Bottom) {
-                                        Text("${progress.finishCount}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                        Text(" / 10 次", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("${progress.finishCount}", style = RibbonNumeric.Large, color = onVariant)
+                                        Text(" / 10 次", style = RibbonNumeric.Medium, color = onVariant.copy(alpha = 0.7f))
                                     }
                                     Spacer(Modifier.height(12.dp))
                                     AppLinearProgressIndicator(progress = { (progress.progress / 100.0).coerceIn(0.0, 1.0).toFloat() }, modifier = Modifier.fillMaxWidth().height(8.dp))
                                     Spacer(Modifier.height(4.dp))
-                                    Text("${"%.0f".format(progress.progress)}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${"%.0f".format(progress.progress)}%", style = RibbonNumeric.Caption, color = onVariant.copy(alpha = 0.7f))
                                 }
                             }
                         }
 
                         // 俱乐部列表
                         if (state.clubs.isNotEmpty()) {
-                            Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(16.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("已加入俱乐部 (${state.clubs.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                     state.clubs.forEach { club ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -298,34 +300,55 @@ private fun LandscapeActivityCard(
     onClick: () -> Unit = {},
 ) {
     var showConfirm by remember { mutableStateOf(false) }
-    val (statusColor, statusLabel) = remember(activity.startTime, activity.endTime, activity.stateName) {
+    val statusTone = remember(activity.startTime, activity.endTime, activity.stateName) {
         val now = java.time.LocalDateTime.now()
         try {
             val start = java.time.LocalDateTime.parse(activity.startTime.replace(" ", "T"))
             val end = java.time.LocalDateTime.parse(activity.endTime.replace(" ", "T"))
             when {
-                now.isBefore(start) -> Color(0xFF00897B) to "待开始"
-                now.isAfter(end) -> Color(0xFF757575) to "已结束"
-                else -> Color(0xFF2E7D32) to "进行中"
+                now.isBefore(start) -> RibbonTone.TERTIARY
+                now.isAfter(end) -> RibbonTone.NEUTRAL
+                else -> RibbonTone.SUCCESS
             }
-        } catch (_: Exception) { Color(0xFF757575) to activity.stateName.ifEmpty { "未知" } }
+        } catch (_: Exception) { RibbonTone.NEUTRAL }
+    }
+    val statusLabel = remember(activity.startTime, activity.endTime, activity.stateName) {
+        val now = java.time.LocalDateTime.now()
+        try {
+            val start = java.time.LocalDateTime.parse(activity.startTime.replace(" ", "T"))
+            val end = java.time.LocalDateTime.parse(activity.endTime.replace(" ", "T"))
+            when {
+                now.isBefore(start) -> "待开始"
+                now.isAfter(end) -> "已结束"
+                else -> "进行中"
+            }
+        } catch (_: Exception) { activity.stateName.ifEmpty { "未知" } }
     }
 
-    OutlinedCard(Modifier.fillMaxWidth().clickable(onClick = onClick), shape = MaterialTheme.shapes.large) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+    RibbonCard(
+        Modifier.fillMaxWidth().animateContentSize(),
+        variant = RibbonCardVariant.SURFACE_LOW,
+        radius = 28.dp,
+        padding = PaddingValues(14.dp),
+        interactive = true,
+        onClick = onClick,
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(activity.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.width(8.dp))
-                    Surface(color = statusColor.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                        Text(statusLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = statusColor)
-                    }
+                    RibbonChip(statusLabel, tone = statusTone)
                 }
                 val info = "${activity.clubName} · ${activity.memberNum}/${activity.peopleNum} 人"
                 Text(info, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (showSignStatus) {
-                    val signColor = when { activity.isAllSigned -> Color(0xFF2E7D32); activity.signList?.isNotEmpty() == true -> Color(0xFFE65100); else -> MaterialTheme.colorScheme.primary }
-                    Text(activity.signInStatus, style = MaterialTheme.typography.labelSmall, color = signColor)
+                    val signTone = when {
+                        activity.isAllSigned -> RibbonTone.SUCCESS
+                        activity.signList?.isNotEmpty() == true -> RibbonTone.WARNING
+                        else -> RibbonTone.PRIMARY
+                    }
+                    Text(activity.signInStatus, style = MaterialTheme.typography.labelSmall, color = ribbonToneColors(signTone, filled = true).first)
                 }
             }
             if (showApplyButton && !isJoined) {
@@ -334,9 +357,7 @@ private fun LandscapeActivityCard(
             }
             if (isJoined && showApplyButton) {
                 Spacer(Modifier.width(12.dp))
-                Surface(color = Color(0xFF2E7D32).copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                    Text("已加入", modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.SemiBold)
-                }
+                RibbonChip("已加入", tone = RibbonTone.SUCCESS, filled = true)
             }
         }
     }
@@ -379,11 +400,8 @@ private fun LandscapeActivityDetailDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Card(
-                    Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 24.dp, padding = PaddingValues(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         DetailRow(Icons.Default.Schedule, "活动时间", formatTimeRange(activity.startTime, activity.endTime))
                         DetailRow(Icons.Default.People, "报名人数", "${activity.memberNum}/${activity.peopleNum}")
                         if (detail != null) {
@@ -411,27 +429,24 @@ private fun LandscapeActivityDetailDialog(
                         Text("签到记录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.weight(1f))
                         val allSigned = signList.all { it.isSign }
-                        Surface(color = (if (allSigned) Color(0xFF2E7D32) else Color(0xFFE65100)).copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                            Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(if (allSigned) Icons.Default.CheckCircle else Icons.Default.Pending, null, modifier = Modifier.size(12.dp), tint = if (allSigned) Color(0xFF2E7D32) else Color(0xFFE65100))
-                                Spacer(Modifier.width(4.dp))
-                                Text(if (allSigned) "全部完成" else "${signList.count { it.isSign }}/${signList.size}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (allSigned) Color(0xFF2E7D32) else Color(0xFFE65100))
-                            }
-                        }
+                        RibbonChip(
+                            if (allSigned) "全部完成" else "${signList.count { it.isSign }}/${signList.size}",
+                            tone = if (allSigned) RibbonTone.SUCCESS else RibbonTone.WARNING,
+                            icon = if (allSigned) Icons.Default.CheckCircle else Icons.Default.Pending,
+                        )
                     }
                     signList.forEach { sign ->
-                        val color = if (sign.isSign) Color(0xFF2E7D32) else Color(0xFFE65100)
-                        OutlinedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
-                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val tone = if (sign.isSign) RibbonTone.SUCCESS else RibbonTone.WARNING
+                        val color = ribbonToneColors(tone, filled = true).first
+                        RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 24.dp, padding = PaddingValues(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(if (sign.isSign) Icons.Default.CheckCircle else Icons.Default.Pending, null, modifier = Modifier.size(18.dp), tint = color)
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(sign.typeName.ifEmpty { "签到" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     Text("${sign.startTime} - ${sign.endTime}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Surface(color = color.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                                    Text(sign.statusText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)
-                                }
+                                RibbonChip(sign.statusText, tone = tone)
                             }
                         }
                     }

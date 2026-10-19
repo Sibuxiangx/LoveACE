@@ -25,6 +25,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.PlanCategory
 import tech.loveace.appv3.data.model.PlanCourse
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.PlanViewModel
 import tech.loveace.appv3.util.CsvExporter
@@ -85,8 +88,14 @@ fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewMo
 
         when {
             state.isLoading -> LoadingScreen()
-            state.error != null -> ErrorScreen(state.error!!) { vm.loadPlan() }
-            state.planInfo == null -> EmptyScreen()
+            state.error != null -> RibbonState(
+                kind = RibbonStateKind.ERROR,
+                title = "加载失败",
+                description = state.error,
+                actionText = "重试",
+                onAction = { vm.loadPlan() },
+            )
+            state.planInfo == null -> RibbonState(kind = RibbonStateKind.EMPTY, title = "暂无数据")
             else -> {
                 val plan = state.planInfo!!
                 Row(
@@ -98,9 +107,25 @@ fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewMo
                         Modifier.weight(0.4f).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
-                            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(plan.planName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        val extended = LocalExtendedColors.current
+                        val totalPassedCredits = plan.categories.sumOf { it.completedCredits }
+                        val creditProgress = if (plan.estimatedGraduationCredits > 0)
+                            (totalPassedCredits / plan.estimatedGraduationCredits).toFloat().coerceIn(0f, 1f) else 0f
+                        val creditColor = if (creditProgress >= 1f) extended.success else MaterialTheme.colorScheme.primary
+
+                        RibbonCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = if (plan.failedCourses > 0) RibbonCardVariant.ERROR_CONTAINER else RibbonCardVariant.PRIMARY_CONTAINER,
+                            radius = 32.dp,
+                            padding = PaddingValues(22.dp),
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(
+                                    plan.planName,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ribbonContainerColor(if (plan.failedCourses > 0) RibbonCardVariant.ERROR_CONTAINER else RibbonCardVariant.PRIMARY_CONTAINER),
+                                )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(50)) {
                                         Text("专业: ${plan.major}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
@@ -112,15 +137,6 @@ fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewMo
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                 // 学分进度 — 环形
-                                val totalPassedCredits = plan.categories.sumOf { it.completedCredits }
-                                val creditProgress = if (plan.estimatedGraduationCredits > 0)
-                                    (totalPassedCredits / plan.estimatedGraduationCredits).toFloat().coerceIn(0f, 1f) else 0f
-                                val creditColor = when {
-                                    creditProgress >= 1f -> Color(0xFF2E7D32)
-                                    creditProgress >= 0.8f -> Color(0xFF1565C0)
-                                    else -> MaterialTheme.colorScheme.primary
-                                }
-
                                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Box(contentAlignment = Alignment.Center) {
                                         AppCircularProgressIndicator(
@@ -131,10 +147,9 @@ fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewMo
                                         )
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text("${"%.1f".format(totalPassedCredits)}",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold, color = creditColor)
+                                                style = RibbonNumeric.Large, color = creditColor)
                                             Text("/ ${"%.0f".format(plan.estimatedGraduationCredits)}",
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = RibbonNumeric.Caption,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
@@ -150,13 +165,13 @@ fun LandscapePlanScreen(authViewModel: AuthViewModel, vm: PlanViewModel = viewMo
                                 CircularStatRow("总分类", plan.totalCategories, plan.totalCategories, "个")
                                 CircularStatRow("已修课程", plan.totalCourses, plan.totalCourses, "门")
                                 CircularStatRow("已过", plan.passedCourses, plan.totalCourses, "门",
-                                    valueColor = Color(0xFF2E7D32), ringColor = Color(0xFF2E7D32))
+                                    valueColor = extended.success, ringColor = extended.success)
                                 CircularStatRow("尚不及格", plan.failedCourses, plan.totalCourses, "门",
-                                    valueColor = if (plan.failedCourses > 0) Color(0xFFD32F2F) else null,
-                                    ringColor = if (plan.failedCourses > 0) Color(0xFFD32F2F) else null)
+                                    valueColor = if (plan.failedCourses > 0) MaterialTheme.colorScheme.error else null,
+                                    ringColor = if (plan.failedCourses > 0) MaterialTheme.colorScheme.error else null)
                                 if (plan.missingRequiredCourses > 0) {
                                     CircularStatRow("必修缺修", plan.missingRequiredCourses, plan.totalCourses, "门",
-                                        valueColor = Color(0xFFE65100), ringColor = Color(0xFFE65100))
+                                        valueColor = extended.warning, ringColor = extended.warning)
                                     Text("* 必修缺修数据来源于教务处标记",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
@@ -210,9 +225,8 @@ private fun CircularStatRow(
             modifier = Modifier.widthIn(min = 48.dp))
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.Bottom) {
-            Text("$value", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold, color = color)
-            Text(unit, style = MaterialTheme.typography.bodySmall,
+            Text("$value", style = RibbonNumeric.Medium, color = color)
+            Text(unit, style = RibbonNumeric.Caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -224,10 +238,11 @@ private fun LandscapePlanCategoryCard(category: PlanCategory) {
     var expanded by remember { mutableStateOf(false) }
     val hasChildren = category.courses.isNotEmpty() || category.subcategories.isNotEmpty()
 
-    Card(
+    RibbonCard(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        variant = RibbonCardVariant.SURFACE_LOW,
+        radius = 28.dp,
+        padding = PaddingValues(0.dp),
     ) {
         Column {
             Column(
@@ -237,13 +252,7 @@ private fun LandscapePlanCategoryCard(category: PlanCategory) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(category.categoryName, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     if (category.isCompleted) {
-                        Surface(color = Color(0xFF2E7D32).copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                            Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
-                                Spacer(Modifier.width(4.dp))
-                                Text("已达标", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                            }
-                        }
+                        RibbonChip("已达标", tone = RibbonTone.SUCCESS, icon = Icons.Default.CheckCircle)
                     }
                     if (hasChildren) Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, "展开", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -251,26 +260,26 @@ private fun LandscapePlanCategoryCard(category: PlanCategory) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("最低 ${"%.1f".format(category.minCredits)} 学分 · 通过 ${"%.1f".format(category.completedCredits)} 学分", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    val pColor = when { category.completionPercentage >= 100 -> Color(0xFF2E7D32); category.completionPercentage >= 80 -> Color(0xFF1565C0); else -> Color(0xFFE65100) }
+                    val pColor = progressColor(category.completionPercentage)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AppLinearProgressIndicator(
                             progress = { (category.completionPercentage / 100.0).toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.weight(1f).height(8.dp), color = pColor, trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("${"%.0f".format(category.completionPercentage)}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = pColor)
+                        Text("${"%.0f".format(category.completionPercentage)}%", style = RibbonNumeric.Caption, color = pColor)
                     }
                 }
 
                 // 统计 chips
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LandscapeStatChip("已修", "${category.totalCourses}门")
-                    LandscapeStatChip("已过", "${category.passedCourses}门", Color(0xFF2E7D32))
+                    RibbonChip("已修 ${category.totalCourses}门", tone = RibbonTone.NEUTRAL)
+                    RibbonChip("已过 ${category.passedCourses}门", tone = RibbonTone.SUCCESS)
                     if (category.failedCourses > 0) {
-                        LandscapeStatChip("尚不及格", "${category.failedCourses}门", Color(0xFFD32F2F))
+                        RibbonChip("尚不及格 ${category.failedCourses}门", tone = RibbonTone.ERROR)
                     }
                     if (category.missingRequiredCourses > 0) {
-                        LandscapeStatChip("必修缺修", "${category.missingRequiredCourses}门", Color(0xFFE65100))
+                        RibbonChip("必修缺修 ${category.missingRequiredCourses}门", tone = RibbonTone.WARNING)
                     }
                 }
             }
@@ -290,20 +299,24 @@ private fun LandscapePlanCategoryCard(category: PlanCategory) {
 }
 
 @Composable
-private fun LandscapeStatChip(label: String, value: String, color: Color? = null) {
-    val chipColor = color ?: MaterialTheme.colorScheme.onSurfaceVariant
-    val bg = color?.copy(alpha = 0.10f) ?: MaterialTheme.colorScheme.surfaceContainerHigh
-    Surface(color = bg, shape = RoundedCornerShape(50)) {
-        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
-            Text("$label ", style = MaterialTheme.typography.labelSmall, color = chipColor)
-            Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = chipColor)
-        }
-    }
+private fun progressColor(percentage: Double): Color = when {
+    percentage >= 100 -> LocalExtendedColors.current.success
+    percentage >= 80 -> MaterialTheme.colorScheme.primary
+    else -> LocalExtendedColors.current.warning
 }
 
 @Composable
 private fun LandscapePlanCourseRow(course: PlanCourse) {
-    val statusColor = when (course.statusDescription) { "已通过" -> Color(0xFF2E7D32); "未通过" -> Color(0xFFD32F2F); else -> MaterialTheme.colorScheme.outline }
+    val statusTone = when (course.statusDescription) {
+        "已通过" -> RibbonTone.SUCCESS
+        "未通过" -> RibbonTone.ERROR
+        else -> RibbonTone.NEUTRAL
+    }
+    val statusColor = when (statusTone) {
+        RibbonTone.SUCCESS -> LocalExtendedColors.current.success
+        RibbonTone.ERROR -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.outline
+    }
     val statusIcon = when (course.statusDescription) { "已通过" -> Icons.Default.CheckCircle; "未通过" -> Icons.Default.Cancel; else -> Icons.Default.RadioButtonUnchecked }
     ListItem(
         headlineContent = { Text(buildString { if (course.courseCode.isNotEmpty()) append("[${course.courseCode}] "); append(course.courseName.ifEmpty { course.courseCode }) }, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis) },
@@ -315,9 +328,7 @@ private fun LandscapePlanCourseRow(course: PlanCourse) {
         },
         leadingContent = { Icon(statusIcon, course.statusDescription, modifier = Modifier.size(20.dp), tint = statusColor) },
         trailingContent = {
-            Surface(color = statusColor.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                Text(course.statusDescription, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = statusColor)
-            }
+            RibbonChip(course.statusDescription, tone = statusTone)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )

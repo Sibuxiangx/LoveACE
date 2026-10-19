@@ -34,6 +34,7 @@ import coil.compose.AsyncImage
 import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.data.service.RepairService
 import tech.loveace.appv3.ui.components.*
+import tech.loveace.appv3.ui.md3e.*
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.RepairViewModel
 import java.io.ByteArrayOutputStream
@@ -95,8 +96,8 @@ fun RepairScreen(
                         EmptyScreen("暂无${if (selectedTab == 0) "待完成" else "已完成"}的工单")
                     } else {
                         LazyColumn(
-                            contentPadding = PaddingValues(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             items(orders, key = { it.taskId }) { order ->
                                 RepairOrderCard(order) { showDetail = order.taskId }
@@ -122,20 +123,20 @@ fun RepairScreen(
 
 @Composable
 internal fun RepairWarningBanner() {
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        ),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+    RibbonCard(
+        variant = RibbonCardVariant.ERROR_CONTAINER,
+        radius = 28.dp,
+        padding = PaddingValues(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp),
+                tint = ribbonContentColor(RibbonCardVariant.ERROR_CONTAINER))
             Spacer(Modifier.width(12.dp))
             Text(
                 "⚠️ 部分接口未经完整测试，功能不一定可用。如果提交报修后没有反应，请前往学校零星维修平台提交报修。",
                 style = MaterialTheme.typography.bodySmall,
+                color = ribbonContentColor(RibbonCardVariant.ERROR_CONTAINER),
             )
         }
     }
@@ -143,20 +144,23 @@ internal fun RepairWarningBanner() {
 
 @Composable
 internal fun RepairOrderCard(order: RepairOrder, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    RibbonCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = RibbonCardVariant.SURFACE_LOW,
+        radius = 28.dp,
+        padding = PaddingValues(20.dp),
+        interactive = true,
+        onClick = onClick,
     ) {
-        Column(Modifier.padding(20.dp)) {
+        Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(order.title, style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.width(8.dp))
-                SuggestionChip(onClick = {}, label = { Text(order.statusText) },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = if (order.isPending) MaterialTheme.colorScheme.tertiaryContainer
-                        else MaterialTheme.colorScheme.secondaryContainer))
+                RibbonChip(
+                    order.statusText,
+                    tone = if (order.isPending) RibbonTone.TERTIARY else RibbonTone.SECONDARY,
+                )
             }
             Spacer(Modifier.height(8.dp))
             if (order.location.isNotEmpty()) {
@@ -209,10 +213,9 @@ internal fun RepairDetailSheet(vm: RepairViewModel, taskId: String, onDismiss: (
                         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        SectionTitle("报修信息")
-                        Card(shape = MaterialTheme.shapes.extraLarge,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        RibbonSectionTitle("报修信息")
+                        RibbonCard(variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 RepairDetailRow("故障区域", detail.faultArea)
                                 RepairDetailRow("维修项目", detail.repairProject)
                                 RepairDetailRow("联系电话", detail.phone)
@@ -220,17 +223,17 @@ internal fun RepairDetailSheet(vm: RepairViewModel, taskId: String, onDismiss: (
                             }
                         }
                         if (detail.description.isNotEmpty()) {
-                            SectionTitle("故障详情")
+                            RibbonSectionTitle("故障详情")
                             Card(shape = MaterialTheme.shapes.extraLarge,
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                                Text(detail.description, Modifier.padding(20.dp), style = MaterialTheme.typography.bodyMedium)
+                                Text(detail.description, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                         if (detail.progress.isNotEmpty()) {
-                            SectionTitle("维修进度")
+                            RibbonSectionTitle("维修进度")
                             Card(shape = MaterialTheme.shapes.extraLarge,
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     detail.progress.forEachIndexed { index, item ->
                                         Row {
                                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp)) {
@@ -250,10 +253,10 @@ internal fun RepairDetailSheet(vm: RepairViewModel, taskId: String, onDismiss: (
                             }
                         }
                         if (detail.settlements.isNotEmpty()) {
-                            SectionTitle("决算单")
+                            RibbonSectionTitle("决算单")
                             Card(shape = MaterialTheme.shapes.extraLarge,
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                                Column(Modifier.padding(20.dp)) {
+                                Column {
                                     Row(Modifier.fillMaxWidth()) {
                                         Text("服务内容", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
                                         Text("材料", Modifier.width(80.dp), style = MaterialTheme.typography.labelMedium)
@@ -352,41 +355,41 @@ internal fun RepairSubmitView(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     // 故障区域
-                    SectionTitle("故障区域")
+                    RibbonSectionTitle("故障区域")
                     OutlinedCard(onClick = { showAreaPicker = true }, shape = MaterialTheme.shapes.large) {
                         ListItem(
                             headlineContent = {
                                 Text(if (selectedArea != null) "$selectedAreaGroupName/${selectedArea!!.name}" else "请选择故障区域和楼宇",
                                     color = if (selectedArea != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                             },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) })
+                            trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) })
                     }
 
                     // 维修项目
-                    SectionTitle("维修项目")
+                    RibbonSectionTitle("维修项目")
                     OutlinedCard(onClick = { showProjectPicker = true }, shape = MaterialTheme.shapes.large) {
                         ListItem(
                             headlineContent = {
                                 Text(if (selectedProject != null) "$selectedProjectGroupName/${selectedProject!!.name}" else "请选择维修项目",
                                     color = if (selectedProject != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                             },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) })
+                            trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) })
                     }
 
                     // 联系电话
-                    SectionTitle("联系电话")
+                    RibbonSectionTitle("联系电话")
                     OutlinedTextField(value = phone, onValueChange = { phone = it.take(11) },
                         modifier = Modifier.fillMaxWidth(), placeholder = { Text("请填写您的联系电话") },
                         singleLine = true, shape = MaterialTheme.shapes.large)
 
                     // 故障地址
-                    SectionTitle("故障地址")
+                    RibbonSectionTitle("故障地址")
                     OutlinedTextField(value = address, onValueChange = { address = it },
                         modifier = Modifier.fillMaxWidth(), placeholder = { Text("请填写故障的详细地址") },
                         singleLine = true, shape = MaterialTheme.shapes.large)
 
                     // 故障详情
-                    SectionTitle("故障详情")
+                    RibbonSectionTitle("故障详情")
                     OutlinedTextField(value = description, onValueChange = { description = it.take(200) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
                         placeholder = { Text("请详细描述故障信息") },
@@ -394,7 +397,7 @@ internal fun RepairSubmitView(
                         shape = MaterialTheme.shapes.large)
 
                     // 故障图片
-                    SectionTitle("故障图片")
+                    RibbonSectionTitle("故障图片")
                     RepairImagePicker(
                         imageUrls = state.uploadedImageUrls,
                         isUploading = state.isUploading,

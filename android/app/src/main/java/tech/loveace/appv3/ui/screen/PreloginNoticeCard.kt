@@ -3,19 +3,16 @@ package tech.loveace.appv3.ui.screen
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import tech.loveace.appv3.service.ManifestPreloginNotice
 import tech.loveace.appv3.service.RemoteManifestService
+import tech.loveace.appv3.ui.md3e.*
 
 /**
  * 登录前公告卡片：用于学校网络故障、强制改密等需要在登录前触达用户的场景。
@@ -32,26 +29,29 @@ fun PreloginNoticeCard(modifier: Modifier = Modifier) {
     }
 
     val current = notice ?: return
-    val (container, content) = when (current.level) {
-        "critical" ->
-            MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-        // 无主题映射的琥珀色警告容器
-        "warning" -> Color(0xFFFFF3E0) to Color(0xFF8A5300)
-        else ->
-            MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+    val variant = when (current.level) {
+        "critical" -> RibbonCardVariant.ERROR_CONTAINER
+        // warning 走语义化警告容器（原先为硬编码琥珀色）
+        "warning" -> RibbonCardVariant.WARNING_CONTAINER
+        else -> RibbonCardVariant.PRIMARY_CONTAINER
     }
+    val content = ribbonContentColor(variant)
 
-    Card(
+    RibbonCard(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = container),
+        variant = variant,
+        radius = 28.dp,
+        padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Icon(Icons.Default.Campaign, null, tint = content, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
+        Row(verticalAlignment = Alignment.Top) {
+            ShapeBadge(
+                shape = RibbonShape.COOKIE_8,
+                size = 32.dp,
+                color = content.copy(alpha = 0.15f),
+                icon = Icons.Default.Campaign,
+                iconTint = content,
+            )
+            Spacer(Modifier.width(12.dp))
             Column {
                 if (current.title.isNotBlank()) {
                     Text(
