@@ -81,6 +81,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
     implementation(libs.androidx.compose.material.icons.extended)
+    // Material Color Utilities (HCT) for theme preset generation
+    implementation(libs.material.color.utilities)
     implementation(libs.androidx.navigation.compose)
     // Network
     implementation(libs.okhttp)

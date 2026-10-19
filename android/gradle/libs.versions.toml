@@ -6,8 +6,8 @@ junitVersion = "1.2.1"
 espressoCore = "3.6.1"
 lifecycleRuntimeKtx = "2.9.1"
 activityCompose = "1.10.1"
-kotlin = "2.0.21"
-composeBom = "2025.07.00"
+kotlin = "2.4.0"
+composeBom = "2026.09.00"
 navigation = "2.9.0"
 okhttp = "4.12.0"
 jsoup = "1.18.3"
@@ -16,7 +16,8 @@ kotlinxCoroutines = "1.9.0"
 datastore = "1.1.7"
 securityCrypto = "1.1.0-alpha06"
 bouncyCastle = "1.78.1"
-material3Expressive = "1.5.0-alpha14"
+material3Expressive = "1.5.0-beta01"
+materialColorUtilities = "5.0.1"
 biometric = "1.2.0-alpha05"
 camerax = "1.5.0-alpha06"
 zxingCore = "3.5.3"
@@ -42,6 +43,7 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3Expressive" }
 androidx-compose-material3-adaptive-navigation-suite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite", version.ref = "material3Expressive" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+material-color-utilities = { group = "com.materialkolor", name = "material-color-utilities", version.ref = "materialColorUtilities" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 # Network
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
