@@ -10,6 +10,8 @@
   - `gh run list --workflow build-apk.yml --branch main --limit 5`
   - `gh run watch <run-id> --exit-status`
   - `gh run download <run-id> -n loveace-release-apk -D <dir>`
+- `build-apk.yml` supports `dry_run=true`: builds and uploads the APK artifact but skips the `publish` job entirely. Use it to validate compilation before a real release.
+- `setup-android@v3` must pin `packages: platform-tools` (the workflow does): the default value still references the retired `tools` package, which fails on runners with cmdline-tools 16+. GitHub also migrates `ubuntu-latest` between major OS versions; pin `ubuntu-24.04` if a runner image change breaks setup steps.
 - Debug APKs are signed with the runner debug key and will not install over release builds. Release APKs are signed in GitHub Actions from repository secrets; do not commit keystores or signing passwords.
 
 ## Versioning and release
@@ -30,8 +32,16 @@
 
 - Reuse `AUFEConnection` and its shared `HttpClient`/`SmartCookieJar`; do not implement a parallel login flow for school services.
 - Login is two-stage: VPN EC login, then UAAP/CAS login. `AuthViewModel` wires session-expiry detection and auto-reconnect.
+- Forced password change interception: CAS may 302 to `/mng/acp/completeInfo/password` after the TGT is issued (password is correct). `AUFEConnection.performUaapLogin` maps this to `UAAPLoginStatus(failPasswordChangeRequired)`; treat it as a non-error state — never clear credentials, never count it as a login failure, never auto-retry (reconnect() records it in `lastUaapPasswordChangeRequired` and `AuthViewModel` stops reconnecting).
 - `HttpClient` only supplies a default mobile UA when a request did not set `User-Agent`; service-specific UA headers are intentional.
 - JWC endpoints use the VPN host `http://jwcxk2-aufe-edu-cn.vpn2.aufe.edu.cn:8118`; keep historical field spellings from upstream APIs, including `coureSequenceNumber`.
+- Auto teacher evaluation (`TeacherEvaluationService`/`TeacherEvaluationViewModel`) mirrors iOS/desktop behavior: first-visit protection wait (`TeacherEvaluationIndexProtection`, infoTime+5s), one immediate retry with a refreshed index token, verify-before-fail fallback, and one post-batch compensation round. Keep the three platforms consistent when touching it.
+
+## Remote config
+
+- `service/RemoteManifestService.kt` fetches `loveace/manifest_v2.json` (EdgeOne `loveace.linota.cn` first, `release.loveace.top` fallback) with `ignoreUnknownKeys`; unknown top-level fields are safe to add.
+- OTA/update dialogs and announcements flow through `OtaService`/`OtaViewModel` (checked silently at app launch, before login).
+- `prelogin_notice` is the pre-login banner rendered by `ui/screen/PreloginNoticeCard.kt` inside both login screens; fetch failures must stay silent and never block login. Publish/clear it via the `deploy-release-metadata.yml` workflow (`publish-prelogin` / `clear-prelogin`).
 
 ## UI conventions
 

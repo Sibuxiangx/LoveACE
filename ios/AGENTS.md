@@ -28,6 +28,8 @@
   xcrun simctl launch booted cn.linota.loveace
   ```
 - There is no test target; verify with focused `xcodebuild` plus simulator/manual checks unless tests are added.
+- Xcode 27 renamed the simulator UI app to DeviceHub: it lives inside `/Applications/Xcode.app/Contents/Applications/DeviceHub.app` (not Spotlight-searchable); `open -a DeviceHub` opens it. The user now tests on real devices — recreate simulator devices only on demand.
+- Swift 6 strict concurrency: string-interpolation captures of actor properties need explicit `self.` (or copy to a local first) — interpolation counts as a closure.
 - A duplicate build-file warning for `Shared/WidgetModels.swift` may appear; do not clean up project settings unless the user asks.
 
 ## TestFlight upload
@@ -42,6 +44,13 @@
   xcodebuild -exportArchive -archivePath "$ARCHIVE_PATH" -exportOptionsPlist ExportOptions.plist -exportPath "build/TestFlight/export-$(date +%Y%m%d-%H%M%S)" -allowProvisioningUpdates
   ```
 - If upload fails with `Failed to Use Accounts`, the local Xcode App Store Connect login likely expired; ask the user to re-login in Xcode Settings > Accounts, then retry the same archive.
+
+## CI (TestFlight)
+- `.github/workflows/ios-testflight.yml` is `workflow_dispatch` with `dry_run` (default `true`: archive, sign, upload artifact, no TestFlight upload). Trigger a real upload with `gh workflow run ios-testflight.yml --ref main -f dry_run=false`.
+- Every run revokes the distribution certificates/profiles it created at the end (`always()` cleanup step). If a run still fails with "reached the maximum number of certificates", historical certificates need manual revocation on developer.apple.com — the API key may not be able to see/revoke those.
+
+## Pre-login notice
+- `AnnouncementService.fetchPreloginNotice()` reads the optional top-level `prelogin_notice` field of manifest v2; `LoginView` renders the banner below the brand header and must stay silent on fetch failure. Desktop ignores this field.
 
 ## Git/artifact quirks
 - `.gitignore` ignores `build/`, `DerivedData/`, `*.xcarchive`, `*.ipa`, `*.dSYM`, SPM build folders, and Xcode user state.
