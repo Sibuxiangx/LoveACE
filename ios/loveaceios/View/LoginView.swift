@@ -16,12 +16,6 @@ struct LoginView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 80)
 
-                if let notice = preloginNotice {
-                    preloginBanner(notice)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 20)
-                }
-
                 VStack(spacing: 14) {
                     Image(systemName: "graduationcap.fill")
                         .font(.system(size: 44))
@@ -34,7 +28,13 @@ struct LoginView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.bottom, 44)
+                .padding(.bottom, 24)
+
+                if let notice = preloginNotice {
+                    preloginBanner(notice)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 20)
+                }
 
                 VStack(spacing: 16) {
                     inputField(icon: "person.fill", placeholder: "学号", text: $userId, isSecure: false)

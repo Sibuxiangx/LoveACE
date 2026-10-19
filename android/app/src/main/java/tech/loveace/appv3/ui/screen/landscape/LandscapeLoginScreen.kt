@@ -15,7 +15,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import tech.loveace.appv3.ui.components.*
-import tech.loveace.appv3.ui.screen.PreloginNoticeBanner
+import tech.loveace.appv3.ui.screen.PreloginNoticeCard
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,79 +64,78 @@ fun LandscapeLoginScreen(
     }
 
     Surface(Modifier.fillMaxSize()) {
-        Column {
-            PreloginNoticeBanner()
-            Row(Modifier.fillMaxSize()) {
-                // ── 左侧品牌区 ──
-                Box(
-                    modifier = Modifier.weight(0.4f).fillMaxHeight().padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Image(
-                            painter = painterResource(R.drawable.logo),
-                            contentDescription = "Logo",
-                            modifier = Modifier.size(120.dp).clip(CircleShape).scale(enterTransition.value),
-                            contentScale = ContentScale.Crop,
-                        )
-                        Spacer(Modifier.height(24.dp))
-                        Text("彩带小工具", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Text("安徽财经大学学生工具", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(32.dp))
-                        Text("❤ Created By LoveACE Team", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                    }
+        Row(Modifier.fillMaxSize()) {
+            // ── 左侧品牌区 ──
+            Box(
+                modifier = Modifier.weight(0.4f).fillMaxHeight().padding(32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        painter = painterResource(R.drawable.logo),
+                        contentDescription = "Logo",
+                        modifier = Modifier.size(120.dp).clip(CircleShape).scale(enterTransition.value),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Text("彩带小工具", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("安徽财经大学学生工具", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(32.dp))
+                    Text("❤ Created By LoveACE Team", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 }
+            }
 
-                // ── 右侧区域 ──
-                Box(
-                    modifier = Modifier.weight(0.6f).fillMaxHeight().padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (!showManualLogin && rememberedCredentials != null) {
-                        // 快速登录
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("欢迎回来", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(8.dp))
-                            Text(rememberedCredentials.userId, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(48.dp))
-                            LandscapeTelemetryNotice()
-                            Spacer(Modifier.height(16.dp))
+            // ── 右侧区域 ──
+            Box(
+                modifier = Modifier.weight(0.6f).fillMaxHeight().padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!showManualLogin && rememberedCredentials != null) {
+                    // 快速登录
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("欢迎回来", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Text(rememberedCredentials.userId, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(20.dp))
+                        PreloginNoticeCard()
+                        Spacer(Modifier.height(28.dp))
+                        LandscapeTelemetryNotice()
+                        Spacer(Modifier.height(16.dp))
 
-                            if (isLoading) {
-                                AppCircularProgressIndicator(modifier = Modifier.size(64.dp))
-                                Spacer(Modifier.height(20.dp))
-                                Text("快速登录中...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            } else {
-                                Button(
-                                    onClick = onQuickLogin,
-                                    modifier = Modifier.widthIn(max = 300.dp).fillMaxWidth().height(52.dp),
-                                    shape = MaterialTheme.shapes.extraLarge,
-                                ) {
-                                    Icon(Icons.Default.Login, null, modifier = Modifier.size(20.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("快速登录", style = MaterialTheme.typography.titleMedium)
-                                }
-                            }
-
-                            Spacer(Modifier.height(16.dp))
-                            TextButton(onClick = { onSwitchUser(); showManualLogin = true }, enabled = !isLoading) {
-                                Icon(Icons.Default.SwitchAccount, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("切换用户")
+                        if (isLoading) {
+                            AppCircularProgressIndicator(modifier = Modifier.size(64.dp))
+                            Spacer(Modifier.height(20.dp))
+                            Text("快速登录中...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Button(
+                                onClick = onQuickLogin,
+                                modifier = Modifier.widthIn(max = 300.dp).fillMaxWidth().height(52.dp),
+                                shape = MaterialTheme.shapes.extraLarge,
+                            ) {
+                                Icon(Icons.Default.Login, null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("快速登录", style = MaterialTheme.typography.titleMedium)
                             }
                         }
-                    } else {
-                        // 手动登录表单
-                        LandscapeManualLoginForm(
-                            uiState = uiState,
-                            initialUserId = rememberedCredentials?.userId ?: "",
-                            initialEcPassword = rememberedCredentials?.ecPassword ?: "",
-                            initialPassword = rememberedCredentials?.password ?: "",
-                            isLoading = isLoading,
-                            onLogin = onLogin,
-                        )
+
+                        Spacer(Modifier.height(16.dp))
+                        TextButton(onClick = { onSwitchUser(); showManualLogin = true }, enabled = !isLoading) {
+                            Icon(Icons.Default.SwitchAccount, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("切换用户")
+                        }
                     }
+                } else {
+                    // 手动登录表单
+                    LandscapeManualLoginForm(
+                        uiState = uiState,
+                        initialUserId = rememberedCredentials?.userId ?: "",
+                        initialEcPassword = rememberedCredentials?.ecPassword ?: "",
+                        initialPassword = rememberedCredentials?.password ?: "",
+                        isLoading = isLoading,
+                        onLogin = onLogin,
+                    )
                 }
             }
         }
@@ -182,7 +181,11 @@ private fun LandscapeManualLoginForm(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("登录", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
+
+        PreloginNoticeCard()
+
+        Spacer(Modifier.height(20.dp))
 
         ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
             Column(Modifier.padding(horizontal = 24.dp, vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {

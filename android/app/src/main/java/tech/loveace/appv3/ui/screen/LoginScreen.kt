@@ -62,32 +62,29 @@ fun LoginScreen(
     }
 
     Surface(Modifier.fillMaxSize()) {
-        Column {
-            PreloginNoticeBanner()
-            if (!showManualLogin && rememberedCredentials != null) {
-                // ── 快速登录界面 ──
-                QuickLoginView(
-                    userId = rememberedCredentials.userId,
-                    isLoading = isLoading,
-                    enterScale = enterTransition.value,
-                    onQuickLogin = onQuickLogin,
-                    onSwitchUser = {
-                        onSwitchUser()
-                        showManualLogin = true
-                    },
-                )
-            } else {
-                // ── 手动登录表单 ──
-                ManualLoginView(
-                    uiState = uiState,
-                    initialUserId = rememberedCredentials?.userId ?: "",
-                    initialEcPassword = rememberedCredentials?.ecPassword ?: "",
-                    initialPassword = rememberedCredentials?.password ?: "",
-                    isLoading = isLoading,
-                    enterScale = enterTransition.value,
-                    onLogin = onLogin,
-                )
-            }
+        if (!showManualLogin && rememberedCredentials != null) {
+            // ── 快速登录界面 ──
+            QuickLoginView(
+                userId = rememberedCredentials.userId,
+                isLoading = isLoading,
+                enterScale = enterTransition.value,
+                onQuickLogin = onQuickLogin,
+                onSwitchUser = {
+                    onSwitchUser()
+                    showManualLogin = true
+                },
+            )
+        } else {
+            // ── 手动登录表单 ──
+            ManualLoginView(
+                uiState = uiState,
+                initialUserId = rememberedCredentials?.userId ?: "",
+                initialEcPassword = rememberedCredentials?.ecPassword ?: "",
+                initialPassword = rememberedCredentials?.password ?: "",
+                isLoading = isLoading,
+                enterScale = enterTransition.value,
+                onLogin = onLogin,
+            )
         }
     }
 
@@ -125,7 +122,9 @@ private fun QuickLoginView(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(20.dp))
+        PreloginNoticeCard()
+        Spacer(Modifier.height(28.dp))
         TelemetryNotice()
         Spacer(Modifier.height(16.dp))
 
@@ -207,7 +206,9 @@ private fun ManualLoginView(
         Text("彩带小工具", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         Text("安徽财经大学学生工具", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(20.dp))
+        PreloginNoticeCard()
+        Spacer(Modifier.height(20.dp))
 
         ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
