@@ -200,9 +200,3 @@ private fun filterCoursesByWeek(courses: List<tech.loveace.appv3.data.model.Sche
         }
         if (filtered.isEmpty()) null else course.copy(timeAndPlaceList = filtered)
     }
-
-/** 今天是周几（1=周一 … 7=周日） */
-private fun todayDayIndex(): Int {
-    val dow = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK)
-    return if (dow == 1) 7 else dow - 1
-}

@@ -138,6 +138,12 @@ internal fun getMaxUsedSession(grid: Map<String, List<GridCell>>): Int {
     return max.coerceIn(8, MAX_SESSION)
 }
 
+/** 今天是周几（1=周一 … 7=周日） */
+internal fun todayDayIndex(): Int {
+    val dow = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK)
+    return if (dow == 1) 7 else dow - 1
+}
+
 // ==================== 主界面 ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
