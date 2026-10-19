@@ -73,6 +73,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        # 新版 cmdline-tools (16.0) 已移除 'tools' 包，默认值会导致 sdkmanager 失败
+        with:
+          packages: platform-tools
 
       - name: Install SDK 36
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
