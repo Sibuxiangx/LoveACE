@@ -254,27 +254,48 @@ jobs:
               value = value.replace("+0000", "+00:00").replace("Z", "+00:00")
               return datetime.fromisoformat(value)
 
-          def sweep(resource, params):
+          def list_all(resource):
               url = f"{base}/{resource}"
-              query = dict(params)
+              items = []
               while url:
-                  resp = requests.get(url, headers=headers, params=query, timeout=30)
-                  resp.raise_for_status()
-                  query = None
-                  for item in resp.json().get("data", []):
-                      created_raw = item.get("attributes", {}).get("createdDate", "")
-                      try:
-                          if parse_created(created_raw) < started:
-                              continue
-                      except ValueError:
-                          continue
-                      name = item.get("attributes", {}).get("displayName") or item["id"]
-                      deleted = requests.delete(f"{base}/{resource}/{item['id']}", headers=headers, timeout=30)
-                      state = "revoked" if deleted.status_code == 200 else f"failed ({deleted.status_code})"
-                      print(f"{resource} '{name}' ({created_raw}): {state}")
-                  url = resp.json().get("links", {}).get("next")
+                  resp = requests.get(url, headers=headers, params={"limit": 200}, timeout=30)
+                  if resp.status_code != 200:
+                      print(f"list {resource} failed: HTTP {resp.status_code}, skip")
+                      return items
+                  payload = resp.json()
+                  items.extend(payload.get("data", []))
+                  url = payload.get("links", {}).get("next")
+              return items
 
-          for cert_type in ("IOS_DISTRIBUTION", "APPLE_DISTRIBUTION"):
-              sweep("certificates", {"filter[certificateType]": cert_type})
-          sweep("profiles", {})
+          DIST_TYPES = {"IOS_DISTRIBUTION", "APPLE_DISTRIBUTION", "DISTRIBUTION"}
+          try:
+              for item in list_all("certificates"):
+                  attrs = item.get("attributes", {})
+                  if attrs.get("certificateType") not in DIST_TYPES:
+                      continue
+                  created_raw = attrs.get("createdDate", "")
+                  try:
+                      if parse_created(created_raw) < started:
+                          continue
+                  except ValueError:
+                      continue
+                  name = attrs.get("displayName") or item["id"]
+                  deleted = requests.delete(f"{base}/certificates/{item['id']}", headers=headers, timeout=30)
+                  state = "revoked" if deleted.status_code == 200 else f"failed ({deleted.status_code})"
+                  print(f"certificate '{name}' ({created_raw}): {state}")
+
+              for item in list_all("profiles"):
+                  created_raw = item.get("attributes", {}).get("createdDate", "")
+                  try:
+                      if parse_created(created_raw) < started:
+                          continue
+                  except ValueError:
+                      continue
+                  name = item.get("attributes", {}).get("name") or item["id"]
+                  deleted = requests.delete(f"{base}/profiles/{item['id']}", headers=headers, timeout=30)
+                  state = "deleted" if deleted.status_code == 200 else f"failed ({deleted.status_code})"
+                  print(f"profile '{name}' ({created_raw}): {state}")
+          except Exception as cleanup_error:
+              # 上传已完成，清理失败只告警不失败
+              print(f"cleanup warning (non-fatal): {cleanup_error}")
           PY
