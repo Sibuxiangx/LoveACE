@@ -117,6 +117,17 @@ struct LoginView: View {
             PasswordHelpView()
                 .presentationDetents([.medium, .large])
         }
+        .alert(
+            "学校要求修改密码",
+            isPresented: Binding(
+                get: { authVM.passwordChangeRequired },
+                set: { if !$0 { authVM.dismissPasswordChange() } }
+            )
+        ) {
+            Button("我知道了", role: .cancel) { authVM.dismissPasswordChange() }
+        } message: {
+            Text("你的账号被学校要求修改密码（通常是密码到期强制更换），这不是密码错误。请用浏览器登录学校教务系统（智慧校园/教务处），登录时会自动弹出“修改密码”页面，按提示完成修改。完成后回到本 App，用新密码重新登录即可。")
+        }
         .onAppear {
             if let creds = authVM.getRememberedCredentials() {
                 userId = creds.userId

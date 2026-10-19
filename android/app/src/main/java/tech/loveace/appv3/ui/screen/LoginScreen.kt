@@ -3,6 +3,7 @@ package tech.loveace.appv3.ui.screen
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -42,6 +43,7 @@ fun LoginScreen(
     onLogin: (userId: String, ecPassword: String, password: String) -> Unit,
     onQuickLogin: () -> Unit,
     onSwitchUser: () -> Unit,
+    onDismissPasswordChange: () -> Unit = {},
 ) {
     // 是否有已保存的凭证（可快速登录）
     var showManualLogin by remember { mutableStateOf(rememberedCredentials == null) }
@@ -84,6 +86,11 @@ fun LoginScreen(
                 onLogin = onLogin,
             )
         }
+    }
+
+    // 学校强制改密拦截提示（不是密码错误）
+    if (uiState.passwordChangeRequired) {
+        PasswordChangeRequiredDialog(onDismiss = onDismissPasswordChange)
     }
 }
 
@@ -169,6 +176,17 @@ private fun ManualLoginView(
     var showPwd by remember { mutableStateOf(false) }
     var showPasswordHelp by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    // VPN密码默认与教务密码相同：仅当保存过的密码确实不同时，才默认展开高级选项
+    val savedSeparatePwd = initialEcPassword.isNotEmpty() && initialEcPassword != initialPassword
+    var useSeparatePwd by remember { mutableStateOf(savedSeparatePwd) }
+    var showAdvanced by remember { mutableStateOf(savedSeparatePwd) }
+    val effectiveEcPassword = if (useSeparatePwd) ecPassword else password
+    val canLogin = !isLoading && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank())
+
+    fun tryLogin() {
+        focusManager.clearFocus()
+        if (canLogin) onLogin(userId, effectiveEcPassword, password)
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp),
@@ -199,29 +217,66 @@ private fun ManualLoginView(
                     enabled = !isLoading,
                 )
                 OutlinedTextField(
-                    value = ecPassword, onValueChange = { ecPassword = it },
-                    label = { Text("VPN密码") }, leadingIcon = { Icon(Icons.Default.VpnKey, null) },
-                    trailingIcon = { IconButton(onClick = { showEcPwd = !showEcPwd }) { Icon(if (showEcPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
-                    visualTransformation = if (showEcPwd) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
-                    enabled = !isLoading,
-                )
-                OutlinedTextField(
                     value = password, onValueChange = { password = it },
                     label = { Text("教务密码") }, leadingIcon = { Icon(Icons.Default.Lock, null) },
                     trailingIcon = { IconButton(onClick = { showPwd = !showPwd }) { Icon(if (showPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
                     visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
                     singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        focusManager.clearFocus()
-                        if (userId.isNotBlank() && ecPassword.isNotBlank() && password.isNotBlank())
-                            onLogin(userId, ecPassword, password)
-                    }),
+                    keyboardActions = KeyboardActions(onDone = { tryLogin() }),
                     enabled = !isLoading,
                 )
+                // ── 高级选项：VPN密码默认与教务密码相同，默认折叠 ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.large)
+                        .clickable { showAdvanced = !showAdvanced }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "高级选项",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (showAdvanced) "收起高级选项" else "展开高级选项",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                AnimatedVisibility(
+                    visible = showAdvanced,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "我的网关密码和教务密码不一样",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(checked = useSeparatePwd, onCheckedChange = { useSeparatePwd = it }, enabled = !isLoading)
+                        }
+                        if (useSeparatePwd) {
+                            OutlinedTextField(
+                                value = ecPassword, onValueChange = { ecPassword = it },
+                                label = { Text("VPN密码") }, leadingIcon = { Icon(Icons.Default.VpnKey, null) },
+                                trailingIcon = { IconButton(onClick = { showEcPwd = !showEcPwd }) { Icon(if (showEcPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
+                                visualTransformation = if (showEcPwd) VisualTransformation.None else PasswordVisualTransformation(),
+                                singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { tryLogin() }),
+                                enabled = !isLoading,
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -231,9 +286,8 @@ private fun ManualLoginView(
 
         Spacer(Modifier.height(16.dp))
 
-        val canLogin = !isLoading && userId.isNotBlank() && ecPassword.isNotBlank() && password.isNotBlank()
         Button(
-            onClick = { onLogin(userId, ecPassword, password) },
+            onClick = { onLogin(userId, effectiveEcPassword, password) },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = MaterialTheme.shapes.extraLarge, enabled = canLogin,
         ) {
@@ -288,6 +342,25 @@ private fun TelemetryNotice() {
     )
 }
 
+/**
+ * 学校强制改密拦截提示。
+ * 这不是密码错误：不清凭据、不计失败次数、不自动重试；由用户自行前往教务系统完成改密。
+ */
+@Composable
+private fun PasswordChangeRequiredDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Lock, null) },
+        title = { Text("学校要求修改密码") },
+        text = {
+            Text("你的账号被学校要求修改密码（通常是密码到期强制更换），这不是密码错误。\n\n请用浏览器登录学校教务系统（智慧校园/教务处），登录时会自动弹出“修改密码”页面，按提示完成修改。完成后回到本 App，用新密码重新登录即可。")
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("我知道了") }
+        },
+    )
+}
+
 @Composable
 private fun PasswordHelpDialog(onDismiss: () -> Unit) {
     AlertDialog(
@@ -299,16 +372,21 @@ private fun PasswordHelpDialog(onDismiss: () -> Unit) {
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                PasswordHelpSection(Icons.Default.VpnKey, "VPN密码（EasyConnect）", "用于连接校园VPN的密码，登录界面如下图所示：")
-                Image(
-                    painter = painterResource(R.drawable.easyconnect), contentDescription = "EasyConnect 登录界面",
-                    modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large), contentScale = ContentScale.FillWidth,
-                )
-                PasswordHelpSection(Icons.Default.Lock, "教务密码（UAAP）", "用于登录教务系统等校内服务的密码，登录界面如下图所示：")
+                PasswordHelpSection(Icons.Default.Lock, "教务密码（UAAP）", "通常只需填写教务密码，彩带小工具会使用同一密码建立校内访问并登录教务系统，登录界面如下图所示：")
                 Image(
                     painter = painterResource(R.drawable.uaap), contentDescription = "UAAP 登录界面",
                     modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large), contentScale = ContentScale.FillWidth,
                 )
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("只有在你确认网关密码与教务密码不同时，才需要在登录页的高级选项中单独填写 VPN 密码。", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
                     shape = MaterialTheme.shapes.large,
@@ -326,7 +404,7 @@ private fun PasswordHelpDialog(onDismiss: () -> Unit) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
                         Icon(Icons.Default.Lightbulb, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("忘记密码？建议访问 vpn.aufe.edu.cn 尝试登录来确认。", style = MaterialTheme.typography.bodySmall)
+                        Text("忘记密码时，请通过学校官方教务系统确认或重置。", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

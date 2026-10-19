@@ -130,12 +130,16 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
     // 设置VPN重定向回调（静默重登录失败时触发）
     authProvider.onVpnRedirect = () {
       if (mounted) {
+        // 学校强制改密拦截：给出改密指引而不是"会话已过期"
+        final passwordChange = authProvider.passwordChangeRequired;
         displayInfoBar(
           context,
           builder: (context, close) {
             return InfoBar(
-              title: const Text('会话已过期'),
-              content: const Text('请重新登录'),
+              title: Text(passwordChange ? '学校要求修改密码' : '会话已过期'),
+              content: Text(passwordChange
+                  ? '这不是密码错误。请用浏览器登录学校教务系统（智慧校园/教务处），登录时会自动弹出“修改密码”页面，按提示完成修改。完成后回到本 App，用新密码重新登录即可。'
+                  : '请重新登录'),
               severity: InfoBarSeverity.warning,
               action: IconButton(
                 icon: const Icon(FluentIcons.clear),
@@ -186,15 +190,18 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
         ),
       );
     } else {
-      // 登录失败，显示错误消息
+      // 登录失败，显示错误消息（改密拦截给出指引，不算密码错误）
       if (mounted) {
+        final passwordChange = authProvider.passwordChangeRequired;
         displayInfoBar(
           context,
           builder: (context, close) {
             return InfoBar(
-              title: const Text('登录失败'),
-              content: Text(authProvider.errorMessage ?? '未知错误'),
-              severity: InfoBarSeverity.error,
+              title: Text(passwordChange ? '学校要求修改密码' : '登录失败'),
+              content: Text(passwordChange
+                  ? '这不是密码错误。请用浏览器登录学校教务系统（智慧校园/教务处），登录时会自动弹出“修改密码”页面，按提示完成修改。完成后回到本 App，用新密码重新登录即可。'
+                  : (authProvider.errorMessage ?? '未知错误')),
+              severity: passwordChange ? InfoBarSeverity.warning : InfoBarSeverity.error,
               action: IconButton(
                 icon: const Icon(FluentIcons.clear),
                 onPressed: close,

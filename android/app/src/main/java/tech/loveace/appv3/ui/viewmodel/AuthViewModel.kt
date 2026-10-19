@@ -25,6 +25,8 @@ data class AuthUiState(
     val state: AuthState = AuthState.Initial,
     val errorMessage: String? = null,
     val userId: String = "",
+    /** 学校 UAAP/CAS 强制改密拦截（不是密码错误：不清凭据、不计密码失败、不自动重试） */
+    val passwordChangeRequired: Boolean = false,
 )
 
 /**
@@ -97,6 +99,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 // UAAP (CAS) login
                 val uaapResult = conn.uaapLogin()
                 if (!uaapResult.success) {
+                    if (uaapResult.failPasswordChangeRequired) {
+                        // 学校强制改密：TGT 已铸出（密码正确），CAS 拒绝签发票据。
+                        // 不是密码错误：不清凭据、不计密码失败、不自动重试，本次会话作废
+                        Log.w(TAG, "🏫 Password change required for $userId")
+                        Analytics.trackLoginFailed(userId, "password_change_required")
+                        _uiState.value = AuthUiState(state = AuthState.Error, passwordChangeRequired = true)
+                        return@launch
+                    }
                     val msg = when {
                         uaapResult.failInvalidCredentials -> "教务系统密码错误"
                         uaapResult.failNetworkError -> "网络连接失败"
@@ -150,6 +160,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
                 val uaapResult = conn.uaapLogin()
                 if (!uaapResult.success) {
+                    if (uaapResult.failPasswordChangeRequired) {
+                        // 学校强制改密：不是密码错误，不清凭据，抛给 UI 提示
+                        Analytics.trackLoginFailed(creds.userId, "password_change_required")
+                        _uiState.value = AuthUiState(state = AuthState.Unauthenticated, passwordChangeRequired = true)
+                        return@launch
+                    }
                     Analytics.trackLoginFailed(creds.userId, "UAAP 登录失败")
                     _uiState.value = AuthUiState(state = AuthState.Unauthenticated)
                     return@launch
@@ -196,6 +212,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getRememberedCredentials(): UserCredentials? = credentialStore.loadRemembered()
+
+    /** 用户确认改密提示：仅关闭弹窗标记，保留错误状态与本地凭据 */
+    fun dismissPasswordChange() {
+        _uiState.value = _uiState.value.copy(passwordChangeRequired = false)
+    }
 
     fun clearSavedCredentials() {
         credentialStore.clear()
@@ -252,6 +273,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 initServices(conn)
                 Analytics.trackSessionReconnectSuccess()
                 Log.i(TAG, "✅ Auto-reconnect succeeded")
+            } else if (conn.lastUaapPasswordChangeRequired) {
+                // 学校强制改密：停止重连（再连也会被拦截），不清凭据，把状态抛给 UI
+                Log.w(TAG, "🏫 Password change required, stop reconnecting")
+                Analytics.trackSessionReconnectFailed()
+                stopHeartbeat()
+                runCatching { conn.close() }
+                clearServices()
+                _uiState.value = AuthUiState(state = AuthState.Error, passwordChangeRequired = true)
             } else {
                 Log.e(TAG, "❌ Auto-reconnect failed, user needs to re-login")
                 Analytics.trackSessionReconnectFailed()

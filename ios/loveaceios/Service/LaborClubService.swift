@@ -28,6 +28,11 @@ actor LaborClubService {
             let location = response.value(forHTTPHeaderField: "Location")
             if (301...308).contains(code), let location = location {
                 nextUrl = location
+                // 学校强制改密拦截：CAS 校验通过但不签发票据，302 到改密页面。不是密码错误，不可重试
+                if nextUrl.contains("/mng/acp/completeInfo/password") {
+                    logger.warning("fetchTicket: password change required")
+                    throw PasswordChangeRequiredError()
+                }
                 if nextUrl.contains("register?ticket=") || nextUrl.contains("#/register?ticket="),
                    let range = nextUrl.range(of: "ticket=([^&#]+)", options: .regularExpression) {
                     let ticketStr = String(nextUrl[range]).replacingOccurrences(of: "ticket=", with: "")
@@ -88,6 +93,9 @@ actor LaborClubService {
             let jsonData = try JSONSerialization.data(withJSONObject: dataObj)
             let info = try JSONDecoder().decode(LaborClubProgressInfo.self, from: jsonData)
             return .success(info)
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getProgress: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getProgress: \(error.localizedDescription)")
             return .failure(error.localizedDescription, retryable: true)
@@ -104,6 +112,9 @@ actor LaborClubService {
             let body = String(data: data, encoding: .utf8) ?? ""
             let root = try parseRoot(body)
             return .success(try decodeRows(root, type: LaborClubActivity.self))
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getJoinedActivities: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getJoinedActivities: \(error.localizedDescription)")
             return .failure(error.localizedDescription, retryable: true)
@@ -119,6 +130,9 @@ actor LaborClubService {
             let body = String(data: data, encoding: .utf8) ?? ""
             let root = try parseRoot(body)
             return .success(try decodeRows(root, type: LaborClubInfo.self))
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getJoinedClubs: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getJoinedClubs: \(error.localizedDescription)")
             return .failure(error.localizedDescription, retryable: true)
@@ -135,6 +149,9 @@ actor LaborClubService {
             let body = String(data: data, encoding: .utf8) ?? ""
             let root = try parseRoot(body)
             return .success(try decodeRows(root, type: LaborClubActivity.self))
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getClubActivities: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getClubActivities: \(error.localizedDescription)")
             return .failure(error.localizedDescription, retryable: true)
@@ -157,6 +174,9 @@ actor LaborClubService {
             let msg = root["msg"] as? String ?? "报名成功"
             if code != 0 { return .failure(msg) }
             return .success(msg, message: msg)
+        } catch is PasswordChangeRequiredError {
+            logger.warning("applyActivity: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("applyActivity: \(error.localizedDescription)")
             return .failure(error.localizedDescription)
@@ -176,6 +196,9 @@ actor LaborClubService {
             let rows: Any = (dataElement as? [Any]) ?? ([] as [Any])
             let jsonData = try JSONSerialization.data(withJSONObject: rows)
             return .success(try JSONDecoder().decode([SignItem].self, from: jsonData))
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getSignList: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getSignList: \(error.localizedDescription)")
             return .failure(error.localizedDescription, retryable: true)
@@ -219,6 +242,9 @@ actor LaborClubService {
                 formData: formFields, teacherList: teachers
             )
             return .success(detail)
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getActivityDetail: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getActivityDetail: \(error.localizedDescription)")
             return .failure(error.localizedDescription)
@@ -236,6 +262,9 @@ actor LaborClubService {
             guard let jsonData = body.data(using: .utf8) else { throw ServiceError.emptyResponse }
             let result = try JSONDecoder().decode(SignInResponse.self, from: jsonData)
             return .success(result)
+        } catch is PasswordChangeRequiredError {
+            logger.warning("scanSignIn: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("scanSignIn: \(error.localizedDescription)")
             return .failure(error.localizedDescription)

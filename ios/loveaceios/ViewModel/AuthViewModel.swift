@@ -9,6 +9,7 @@ private enum ReauthenticationResult {
     case success(AUFEConnection)
     case unavailable
     case failed
+    case passwordChangeRequired
 }
 
 @MainActor
@@ -17,6 +18,8 @@ final class AuthViewModel {
     var state: AuthState = .initial
     var errorMessage: String?
     var userId: String = ""
+    /// 学校 UAAP/CAS 强制改密拦截（不是密码错误：不清凭据、不计密码失败、不自动重试）
+    var passwordChangeRequired = false
 
     private let credentialStore = CredentialStore()
     private var heartbeatTask: Task<Void, Never>?
@@ -68,6 +71,13 @@ final class AuthViewModel {
             let uaapResult = await conn.uaapLogin()
             guard !Task.isCancelled, attempt == currentAuthenticationAttempt else { return }
             guard uaapResult.success else {
+                if uaapResult.failPasswordChangeRequired {
+                    // 学校强制改密：TGT 已铸出（密码正确），CAS 拒绝签发票据。
+                    // 不是密码错误：不清凭据、不计密码失败、不自动重试，本次会话作废
+                    logger.warning("Password change required for \(userId)")
+                    Analytics.shared.trackLoginFailed(userId: userId, reason: "password_change_required")
+                    state = .error; errorMessage = nil; passwordChangeRequired = true; return
+                }
                 let msg: String
                 if uaapResult.failInvalidCredentials { msg = "学号或密码错误" }
                 else if uaapResult.failNetworkError { msg = "网络连接失败" }
@@ -110,7 +120,13 @@ final class AuthViewModel {
             let uaap = await conn.uaapLogin()
             guard !Task.isCancelled, attempt == currentAuthenticationAttempt else { return }
             guard uaap.success else {
-                Analytics.shared.trackLoginFailed(userId: creds.userId, reason: "restore_uaap_failed")
+                if uaap.failPasswordChangeRequired {
+                    // 学校强制改密：不是密码错误，不清凭据，抛给 UI 提示
+                    Analytics.shared.trackLoginFailed(userId: creds.userId, reason: "password_change_required")
+                    passwordChangeRequired = true
+                } else {
+                    Analytics.shared.trackLoginFailed(userId: creds.userId, reason: "restore_uaap_failed")
+                }
                 state = .unauthenticated; return
             }
             connection = conn
@@ -194,6 +210,11 @@ final class AuthViewModel {
             state = .authenticated
             startHeartbeat()
             logger.warning("Auto-reconnect deferred because the network is unavailable")
+        case .passwordChangeRequired:
+            // 学校强制改密：停止重连（再连也会被拦截），不清凭据，把状态抛给 UI
+            logger.warning("Password change required, stop reconnecting")
+            Analytics.shared.trackSessionReconnectFailed()
+            finishPasswordChangeIntercepted()
         case .failed:
             Analytics.shared.trackSessionReconnectFailed()
             finishAutomaticSignOut()
@@ -213,9 +234,22 @@ final class AuthViewModel {
 
         let uaap = await conn.uaapLogin()
         if uaap.failNetworkError { return .unavailable }
+        if uaap.failPasswordChangeRequired { return .passwordChangeRequired }
         guard uaap.success else { return .failed }
         return .success(conn)
     }
+
+    /// 学校强制改密拦截：停止重连、半成品会话作废，但不清除本地凭据（不是密码错误），状态抛给 UI
+    private func finishPasswordChangeIntercepted() {
+        stopHeartbeat()
+        clearServices()
+        currentAuthenticationAttempt = UUID()
+        errorMessage = nil
+        passwordChangeRequired = true
+        state = .unauthenticated
+    }
+
+    func dismissPasswordChange() { passwordChangeRequired = false }
 
     private func finishAutomaticSignOut() {
         stopHeartbeat()

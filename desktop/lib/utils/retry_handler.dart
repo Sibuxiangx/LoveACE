@@ -1,6 +1,8 @@
 import 'dart:math';
 
 /// 重试处理器，支持指数退避策略
+import '../models/aufe/login_status.dart';
+
 class RetryHandler {
   static const int maxRetries = 3;
   static const Duration initialDelay = Duration(seconds: 1);
@@ -46,6 +48,11 @@ class RetryHandler {
 
   /// 判断错误是否应该重试（网络相关错误）
   static bool shouldRetryOnError(dynamic error) {
+    // 学校强制改密拦截：重试也会被拦截，直接失败
+    if (error is PasswordChangeRequiredException) {
+      return false;
+    }
+
     // 可以根据具体错误类型判断是否应该重试
     // 例如：网络超时、连接失败等应该重试
     // 认证失败、参数错误等不应该重试

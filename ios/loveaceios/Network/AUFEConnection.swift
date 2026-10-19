@@ -214,6 +214,12 @@ actor AUFEConnection {
         let responseUrl = redirectURL ?? loginResponse.url?.absoluteString ?? ""
         logger.info("📄 UAAP response size: \(loginBody.count), contains '用户名或密码错误': \(loginBody.contains("用户名或密码错误")), contains 'ticket': \(responseUrl.contains("ticket="))")
 
+        // 学校强制改密：TGT 已铸出（密码正确）但 CAS 不签发票据，302 到改密页面。
+        // 必须先于"密码错误"判定；该状态不可自动重试。
+        if responseUrl.contains("/mng/acp/completeInfo/password") {
+            logger.warning("🏫 UAAP: password change required (TGT issued, ticket refused)")
+            return UAAPLoginStatus(failPasswordChangeRequired: true)
+        }
         if loginBody.contains("Invalid username or password")
             || loginBody.contains("用户名或密码错误")
             || loginBody.contains("errorMsg") {

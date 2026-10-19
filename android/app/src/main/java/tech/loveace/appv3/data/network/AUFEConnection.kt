@@ -36,6 +36,10 @@ class AUFEConnection(
     private var ecLogged = false
     private var uaapLogged = false
 
+    /** 最近一次 reconnect() 中 UAAP 是否被学校强制改密拦截（用于停止自动重连并提示用户） */
+    var lastUaapPasswordChangeRequired = false
+        private set
+
     fun startClient() {
         client = HttpClient(baseUrl = SERVER_URL, timeoutMs = TIMEOUT)
         simpleClient = HttpClient(baseUrl = SERVER_URL, timeoutMs = TIMEOUT)
@@ -66,6 +70,7 @@ class AUFEConnection(
 
     /** 完整重连：EC + UAAP */
     suspend fun reconnect(): Boolean = withContext(Dispatchers.IO) {
+        lastUaapPasswordChangeRequired = false
         try {
             Log.i(TAG, "🔄 Reconnecting...")
             close()
@@ -73,6 +78,7 @@ class AUFEConnection(
             val ec = ecLogin()
             if (!ec.success) { Log.e(TAG, "🔄 EC re-login failed"); return@withContext false }
             val uaap = uaapLogin()
+            lastUaapPasswordChangeRequired = uaap.failPasswordChangeRequired
             if (!uaap.success) { Log.e(TAG, "🔄 UAAP re-login failed"); return@withContext false }
             Log.i(TAG, "✅ Reconnect succeeded")
             true
@@ -193,6 +199,10 @@ class AUFEConnection(
         val responseUrl = loginResponse.request.url.toString()
 
         return when {
+            // 学校强制改密：TGT 已铸出（密码正确）但 CAS 不签发票据，302 到改密页面。
+            // 必须先于"密码错误"判定；该状态不可自动重试。
+            responseUrl.contains("/mng/acp/completeInfo/password") ->
+                UAAPLoginStatus(failPasswordChangeRequired = true)
             loginBody.contains("Invalid username or password") ||
                 loginBody.contains("用户名或密码错误") ->
                 UAAPLoginStatus(failInvalidCredentials = true)

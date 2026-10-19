@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../models/aufe/login_status.dart';
 import '../models/aufe/user_credentials.dart';
 import '../services/analytics_service.dart';
 import '../services/aufe/connector.dart';
@@ -38,6 +39,9 @@ class AuthProvider extends ChangeNotifier {
   String? _errorMessage;
   UserCredentials? _credentials;
 
+  /// 学校 UAAP/CAS 强制改密拦截（不是密码错误：不清凭据、不自动重试）
+  bool _passwordChangeRequired = false;
+
   /// Get current authentication state
   AuthState get state => _state;
 
@@ -49,6 +53,15 @@ class AuthProvider extends ChangeNotifier {
 
   /// Get current user credentials
   UserCredentials? get credentials => _credentials;
+
+  /// 学校强制改密拦截标记（不是密码错误，不清凭据、不自动重试）
+  bool get passwordChangeRequired => _passwordChangeRequired;
+
+  /// 用户确认改密提示
+  void dismissPasswordChange() {
+    _passwordChangeRequired = false;
+    notifyListeners();
+  }
 
   /// Check if user is authenticated
   bool get isAuthenticated => _state == AuthState.authenticated;
@@ -80,6 +93,7 @@ class AuthProvider extends ChangeNotifier {
 
       _setState(AuthState.loading);
       _errorMessage = null;
+      _passwordChangeRequired = false;
 
       // Create credentials
       final credentials = UserCredentials(
@@ -124,6 +138,17 @@ class AuthProvider extends ChangeNotifier {
       LoggerService.info('🔐 UAAP login result: ${uaapLoginStatus.success}');
 
       if (!uaapLoginStatus.success) {
+        if (uaapLoginStatus.failPasswordChangeRequired) {
+          // 学校强制改密：TGT 已铸出（密码正确），CAS 拒绝签发票据。
+          // 不是密码错误：不清凭据、不计密码失败、不自动重试，本次会话作废
+          LoggerService.warning('🏫 学校要求修改密码，停止登录流程');
+          _passwordChangeRequired = true;
+          _errorMessage = null;
+          _setState(AuthState.error);
+          await connection.close();
+          AnalyticsService.instance.trackLoginFailed(userId, 'password_change_required');
+          return false;
+        }
         _errorMessage = _getUaapLoginErrorMessage(uaapLoginStatus);
         LoggerService.info('❌ UAAP login failed: $_errorMessage');
         _setState(AuthState.error);
@@ -336,6 +361,16 @@ class AuthProvider extends ChangeNotifier {
       final uaapLoginStatus = await _connection!.uaapLogin();
 
       if (!uaapLoginStatus.success) {
+        if (uaapLoginStatus.failPasswordChangeRequired) {
+          // 学校强制改密：停止重连（再连也会被拦截），不清凭据，半成品会话作废
+          LoggerService.warning('🏫 静默重登录: 学校要求修改密码，停止重连');
+          await _connection?.close();
+          _connection = null;
+          _passwordChangeRequired = true;
+          _errorMessage = null;
+          _setState(AuthState.unauthenticated);
+          return false;
+        }
         LoggerService.warning('❌ 静默重登录: UAAP登录失败');
         return false;
       }
@@ -350,6 +385,12 @@ class AuthProvider extends ChangeNotifier {
 
   /// 处理静默重登录失败
   Future<void> _handleSilentReloginFailed() async {
+    if (_passwordChangeRequired) {
+      // 改密拦截：不清凭据、不登出，仅导航回登录页展示提示
+      LoggerService.info('🏫 改密拦截：保留凭据，仅导航回登录页');
+      onVpnRedirect?.call();
+      return;
+    }
     LoggerService.info('🚨 静默重登录失败，清除会话并触发导航回登录页面');
 
     // 清除当前会话状态
@@ -384,7 +425,9 @@ class AuthProvider extends ChangeNotifier {
 
   /// Get user-friendly error message for UAAP login status
   String _getUaapLoginErrorMessage(dynamic status) {
-    if (status.failInvalidCredentials) {
+    if (status.failPasswordChangeRequired) {
+      return passwordChangeGuidance;
+    } else if (status.failInvalidCredentials) {
       return 'UAAP系统用户名或密码错误';
     } else if (status.failNotFoundLt) {
       return '无法获取lt参数，请稍后重试';

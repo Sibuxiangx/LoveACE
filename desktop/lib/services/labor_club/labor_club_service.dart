@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../../models/backend/uni_response.dart';
 import '../../models/labor_club/labor_club_progress_info.dart';
+import '../../models/aufe/login_status.dart';
 import '../../models/labor_club/labor_club_activity.dart';
 import '../../models/labor_club/labor_club_info.dart';
 import '../../models/labor_club/activity_detail.dart';
@@ -91,6 +92,13 @@ class LaborClubService {
           }
 
           LoggerService.info('🔄 重定向到: $nextLocation');
+
+          // 学校强制改密拦截：CAS 校验通过但不签发票据，302 到改密页面。不是密码错误，不可重试
+          if (nextLocation.contains('/mng/acp/completeInfo/password')) {
+            LoggerService.warning('🏫 检测到学校强制改密拦截，停止获取 ticket');
+            throw PasswordChangeRequiredException();
+          }
+
           redirectCount++;
 
           // 检查是否到达回调页面（包含ticket）
@@ -109,6 +117,8 @@ class LaborClubService {
       }
 
       return null;
+    } on PasswordChangeRequiredException {
+      rethrow;
     } catch (e) {
       LoggerService.error('❌ 获取劳动俱乐部 ticket失败', error: e);
       return null;

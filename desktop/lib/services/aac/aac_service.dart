@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../../models/backend/uni_response.dart';
 import '../../models/aac/aac_credit_info.dart';
+import '../../models/aufe/login_status.dart';
 import '../../utils/error_handler.dart';
 import '../../utils/retry_handler.dart';
 import '../aufe/connector.dart';
@@ -79,6 +80,13 @@ class AACService {
           }
 
           LoggerService.info('🔄 重定向到: $nextLocation');
+
+          // 学校强制改密拦截：CAS 校验通过但不签发票据，302 到改密页面。不是密码错误，不可重试
+          if (nextLocation.contains('/mng/acp/completeInfo/password')) {
+            LoggerService.warning('🏫 检测到学校强制改密拦截，停止获取 ticket');
+            throw PasswordChangeRequiredException();
+          }
+
           redirectCount++;
 
           // 检查是否到达注册页面（包含ticket）
@@ -97,6 +105,8 @@ class AACService {
       }
 
       return null;
+    } on PasswordChangeRequiredException {
+      rethrow;
     } catch (e) {
       LoggerService.error('❌ 获取AAC ticket失败', error: e);
       return null;

@@ -32,6 +32,11 @@ actor AACService {
 
             if (301...308).contains(code), let location = location {
                 nextUrl = location
+                // 学校强制改密拦截：CAS 校验通过但不签发票据，302 到改密页面。不是密码错误，不可重试
+                if nextUrl.contains("/mng/acp/completeInfo/password") {
+                    logger.warning("fetchTicket: password change required")
+                    throw PasswordChangeRequiredError()
+                }
                 if nextUrl.contains("CoreLoginCallback") && callbackBaseUrl == nil {
                     callbackBaseUrl = nextUrl
                 }
@@ -99,6 +104,9 @@ actor AACService {
                 typeAdoptResult: dataObj["TypeAdoptResult"] as? String ?? ""
             )
             return .success(info)
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getCreditInfo: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getCreditInfo failed: \(error.localizedDescription)")
             return .failure(error.localizedDescription, retryable: true)
@@ -126,6 +134,9 @@ actor AACService {
             let listJsonData = try JSONSerialization.data(withJSONObject: listData)
             let categories = try JSONDecoder().decode([AACCreditCategory].self, from: listJsonData)
             return .success(categories)
+        } catch is PasswordChangeRequiredError {
+            logger.warning("getCreditList: password change required")
+            return .failure(passwordChangeGuidance, retryable: false)
         } catch {
             logger.error("getCreditList failed: \(error.localizedDescription)")
             return .failure(error.localizedDescription, retryable: true)

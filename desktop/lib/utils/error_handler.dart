@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import '../models/aufe/login_status.dart';
 import '../models/backend/uni_response.dart';
 
 /// 错误处理工具类
@@ -20,6 +21,15 @@ class ErrorHandler {
     // 判断是否为可重试的错误
     bool retryable = false;
     String errorDetail = '';
+
+    // 学校强制改密拦截：不是故障也不是密码问题，给出改密指引且不可重试
+    if (error is PasswordChangeRequiredException) {
+      return UniResponse.failure(
+        passwordChangeGuidance,
+        message: message,
+        retryable: false,
+      );
+    }
 
     if (error is SocketException) {
       errorDetail = '网络连接失败';

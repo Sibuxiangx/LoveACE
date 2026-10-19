@@ -223,6 +223,7 @@ fun RibbonApp(
                     onLogin = { uid, ec, pwd -> authViewModel.login(uid, ec, pwd) },
                     onQuickLogin = { authViewModel.restoreSession() },
                     onSwitchUser = { authViewModel.clearSavedCredentials() },
+                    onDismissPasswordChange = { authViewModel.dismissPasswordChange() },
                 )
             } else {
                 LoginScreen(
@@ -231,6 +232,7 @@ fun RibbonApp(
                     onLogin = { uid, ec, pwd -> authViewModel.login(uid, ec, pwd) },
                     onQuickLogin = { authViewModel.restoreSession() },
                     onSwitchUser = { authViewModel.clearSavedCredentials() },
+                    onDismissPasswordChange = { authViewModel.dismissPasswordChange() },
                 )
             }
         }

@@ -250,6 +250,13 @@ class AUFEConnection {
       LoggerService.info('🔐 UAAP login response status: $statusCode');
       LoggerService.info('🔐 UAAP login response URL: $responseUrl');
 
+      // 学校强制改密：TGT 已铸出（密码正确）但 CAS 不签发票据，302 到改密页面。
+      // 必须先于"密码错误"判定；正常返回状态值（不抛异常），避免 RetryHandler 自动重试。
+      if (responseUrl.contains('/mng/acp/completeInfo/password')) {
+        LoggerService.warning('🏫 UAAP login intercepted: password change required');
+        return UAAPLoginStatus(failPasswordChangeRequired: true);
+      }
+
       // 检查是否登录失败（用户名或密码错误）
       if (loginResponseText.contains('Invalid username or password') ||
           loginResponseText.contains('用户名或密码错误') ||

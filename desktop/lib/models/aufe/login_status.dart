@@ -38,12 +38,25 @@ class ECLoginStatus {
   }
 }
 
+/// 学校 UAAP/CAS 强制改密拦截：凭据校验通过（CAS 已铸出 TGT），但不再签发票据，
+/// 而是把请求 302 重定向到改密页面（路径含 /mng/acp/completeInfo/password）。
+/// 这不是密码错误：调用方不得清除本地凭据、不得计入密码失败次数、不得自动重试。
+class PasswordChangeRequiredException implements Exception {
+  @override
+  String toString() => 'PasswordChangeRequiredException: 学校要求修改密码';
+}
+
+/// 改密拦截的通用指引文案
+const String passwordChangeGuidance =
+    '学校要求修改密码：请用浏览器登录学校教务系统完成密码修改，然后用新密码重新登录';
+
 /// UAAP登录状态
 class UAAPLoginStatus {
   final bool success;
   final bool failNotFoundLt;
   final bool failNotFoundExecution;
   final bool failInvalidCredentials;
+  final bool failPasswordChangeRequired;
   final bool failNetworkError;
   final bool failUnknownError;
 
@@ -52,6 +65,7 @@ class UAAPLoginStatus {
     this.failNotFoundLt = false,
     this.failNotFoundExecution = false,
     this.failInvalidCredentials = false,
+    this.failPasswordChangeRequired = false,
     this.failNetworkError = false,
     this.failUnknownError = false,
   });
@@ -60,6 +74,7 @@ class UAAPLoginStatus {
   bool get isFailed => !success;
 
   String get errorMessage {
+    if (failPasswordChangeRequired) return '学校要求修改密码';
     if (failNotFoundLt) return '未找到lt参数';
     if (failNotFoundExecution) return '未找到execution参数';
     if (failInvalidCredentials) return '用户名或密码错误';

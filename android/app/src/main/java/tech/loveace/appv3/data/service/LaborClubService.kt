@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.data.network.AUFEConnection
+import tech.loveace.appv3.data.network.PasswordChangeRequiredException
 
 /**
  * 劳动俱乐部服务
@@ -32,6 +33,11 @@ class LaborClubService(private val connection: AUFEConnection) {
                 val location = response.header("Location")
                 if (code in 301..308 && location != null) {
                     nextUrl = location
+                    // 学校强制改密拦截：CAS 校验通过但不签发票据，302 到改密页面。不是密码错误，不可重试
+                    if (nextUrl.contains("/mng/acp/completeInfo/password")) {
+                        Log.w(TAG, "fetchTicket: password change required")
+                        throw PasswordChangeRequiredException()
+                    }
                     if (nextUrl.contains("register?ticket=") || nextUrl.contains("#/register?ticket=")) {
                         val ticketMatch = Regex("ticket=([^&#]+)").find(nextUrl)
                         if (ticketMatch != null) return java.net.URLDecoder.decode(ticketMatch.groupValues[1], "UTF-8")
@@ -44,7 +50,7 @@ class LaborClubService(private val connection: AUFEConnection) {
                     break
                 }
             }
-        } catch (e: Exception) { Log.e(TAG, "fetchTicket failed", e) }
+        } catch (e: PasswordChangeRequiredException) { throw e } catch (e: Exception) { Log.e(TAG, "fetchTicket failed", e) }
         return null
     }
 
@@ -74,7 +80,7 @@ class LaborClubService(private val connection: AUFEConnection) {
             val root = parseRoot(resp.body?.string() ?: throw Exception("响应为空"))
             val data = root["data"]?.jsonObject ?: throw Exception("缺少data")
             UniResponse.success(json.decodeFromJsonElement<LaborClubProgressInfo>(data))
-        } catch (e: Exception) { Log.e(TAG, "getProgress", e); UniResponse.failure(e.message ?: "获取进度失败", retryable = true) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "getProgress: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "getProgress", e); UniResponse.failure(e.message ?: "获取进度失败", retryable = true) }
     }
 
     // ── 已加入活动 ──
@@ -91,7 +97,7 @@ class LaborClubService(private val connection: AUFEConnection) {
                 else -> JsonArray(emptyList())
             }
             UniResponse.success(rows.map { json.decodeFromJsonElement<LaborClubActivity>(it) })
-        } catch (e: Exception) { Log.e(TAG, "getJoinedActivities", e); UniResponse.failure(e.message ?: "获取已参加活动失败", retryable = true) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "getJoinedActivities: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "getJoinedActivities", e); UniResponse.failure(e.message ?: "获取已参加活动失败", retryable = true) }
     }
 
     // ── 已加入俱乐部 ──
@@ -108,7 +114,7 @@ class LaborClubService(private val connection: AUFEConnection) {
                 else -> JsonArray(emptyList())
             }
             UniResponse.success(rows.map { json.decodeFromJsonElement<LaborClubInfo>(it) })
-        } catch (e: Exception) { Log.e(TAG, "getJoinedClubs", e); UniResponse.failure(e.message ?: "获取俱乐部列表失败", retryable = true) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "getJoinedClubs: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "getJoinedClubs", e); UniResponse.failure(e.message ?: "获取俱乐部列表失败", retryable = true) }
     }
 
     // ── 俱乐部活动列表 ──
@@ -126,7 +132,7 @@ class LaborClubService(private val connection: AUFEConnection) {
                 else -> JsonArray(emptyList())
             }
             UniResponse.success(rows.map { json.decodeFromJsonElement<LaborClubActivity>(it) })
-        } catch (e: Exception) { Log.e(TAG, "getClubActivities", e); UniResponse.failure(e.message ?: "获取俱乐部活动失败", retryable = true) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "getClubActivities: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "getClubActivities", e); UniResponse.failure(e.message ?: "获取俱乐部活动失败", retryable = true) }
     }
 
     // ── 报名活动 ──
@@ -142,7 +148,7 @@ class LaborClubService(private val connection: AUFEConnection) {
             val msg = root["msg"]?.jsonPrimitive?.contentOrNull ?: "报名成功"
             if (code != 0) UniResponse.failure<String>(msg, retryable = false)
             else UniResponse.success(msg, message = msg)
-        } catch (e: Exception) { Log.e(TAG, "applyActivity", e); UniResponse.failure(e.message ?: "报名失败", retryable = false) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "applyActivity: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "applyActivity", e); UniResponse.failure(e.message ?: "报名失败", retryable = false) }
     }
 
     // ── 签到列表 ──
@@ -159,7 +165,7 @@ class LaborClubService(private val connection: AUFEConnection) {
                 else -> JsonArray(emptyList())
             }
             UniResponse.success(rows.map { json.decodeFromJsonElement<SignItem>(it) })
-        } catch (e: Exception) { Log.e(TAG, "getSignList", e); UniResponse.failure(e.message ?: "获取签到列表失败", retryable = true) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "getSignList: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "getSignList", e); UniResponse.failure(e.message ?: "获取签到列表失败", retryable = true) }
     }
 
     // ── 活动详情 ──
@@ -193,7 +199,7 @@ class LaborClubService(private val connection: AUFEConnection) {
                 signList = signArr.map { json.decodeFromJsonElement<SignItem>(it) },
             )
             UniResponse.success(detail)
-        } catch (e: Exception) { Log.e(TAG, "getActivityDetail", e); UniResponse.failure(e.message ?: "获取活动详情失败", retryable = true) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "getActivityDetail: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "getActivityDetail", e); UniResponse.failure(e.message ?: "获取活动详情失败", retryable = true) }
     }
 
     // ── 扫码签到 ──
@@ -205,11 +211,12 @@ class LaborClubService(private val connection: AUFEConnection) {
                 formData = mapOf("content" to qrData, "location" to location), headers = apiHeaders())
             val result = json.decodeFromString<SignInResponse>(resp.body?.string() ?: throw Exception("响应为空"))
             UniResponse.success(result)
-        } catch (e: Exception) { Log.e(TAG, "scanSignIn", e); UniResponse.failure(e.message ?: "签到失败", retryable = false) }
+        } catch (e: PasswordChangeRequiredException) { Log.w(TAG, "scanSignIn: password change required"); UniResponse.failure(PASSWORD_CHANGE_MESSAGE, retryable = false) } catch (e: Exception) { Log.e(TAG, "scanSignIn", e); UniResponse.failure(e.message ?: "签到失败", retryable = false) }
     }
 
     companion object {
         private const val TAG = "LaborClubService"
+        private const val PASSWORD_CHANGE_MESSAGE = "学校要求修改密码：请用浏览器登录学校教务系统完成密码修改，然后用新密码重新登录"
         const val BASE_URL = "http://api-ldjlb-ac-acxk-net.vpn2.aufe.edu.cn:8118"
         const val LOGIN_SERVICE_URL =
             "http://uaap-aufe-edu-cn.vpn2.aufe.edu.cn:8118/cas/login?service=http%3a%2f%2fapi.ldjlb.ac.acxk.net%2fUser%2fIndex%2fCoreLoginCallback%3fisCASGateway%3dtrue"
