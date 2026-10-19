@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -189,12 +191,14 @@ class TeacherEvaluationViewModel : ViewModel() {
         courses: List<TeacherEvaluationCourse>,
         indexToken: String,
     ) {
-        val jobs = mutableListOf<Job>()
-        courses.forEachIndexed { index, course ->
-            if (index > 0) delay(START_INTERVAL_MS)
-            jobs += launch { runTask(service, course, courses.size, indexToken) }
+        coroutineScope {
+            val jobs = mutableListOf<Job>()
+            courses.forEachIndexed { index, course ->
+                if (index > 0) delay(START_INTERVAL_MS)
+                jobs += launch { runTask(service, course, courses.size, indexToken) }
+            }
+            jobs.joinAll()
         }
-        jobs.joinAll()
     }
 
     /** 收集失败课程，剔除刷新后已确认已评的，并把剩余任务重置为待重试 */
