@@ -23,7 +23,7 @@ fun findFullWidthChars(text: String): List<Char> =
             i += 2
         }
         inRange
-    }
+    }.toList()
 
 fun hasFullWidthChars(text: String): Boolean = findFullWidthChars(text).isNotEmpty()
 

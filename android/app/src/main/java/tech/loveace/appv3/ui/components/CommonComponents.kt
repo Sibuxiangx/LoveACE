@@ -94,7 +94,9 @@ fun StatCard(
 fun AppCircularProgressIndicator(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
 ) {
+    // trackColor 仅为兼容旧调用点保留，花形 loader 不使用
     RibbonShapeLoader(modifier = modifier, color = color)
 }
 
