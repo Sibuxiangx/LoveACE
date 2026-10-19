@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -362,7 +363,7 @@ internal fun RepairSubmitView(
                                 Text(if (selectedArea != null) "$selectedAreaGroupName/${selectedArea!!.name}" else "请选择故障区域和楼宇",
                                     color = if (selectedArea != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                             },
-                            trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) })
+                            trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
                     }
 
                     // 维修项目
@@ -373,7 +374,7 @@ internal fun RepairSubmitView(
                                 Text(if (selectedProject != null) "$selectedProjectGroupName/${selectedProject!!.name}" else "请选择维修项目",
                                     color = if (selectedProject != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                             },
-                            trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) })
+                            trailingContent = { Icon(Icons.Rounded.ChevronRight, null) })
                     }
 
                     // 联系电话

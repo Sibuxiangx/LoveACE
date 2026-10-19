@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -177,7 +177,7 @@ fun RibbonListItem(
         if (chevron) {
             Spacer(Modifier.width(4.dp))
             Icon(
-                Icons.AutoMirrored.Rounded.ChevronRight,
+                Icons.Rounded.ChevronRight,
                 null,
                 modifier = Modifier.size(22.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -5,7 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ChevronRight
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -162,7 +162,7 @@ fun ScoreCard(record: ScoreRecord, onClick: (() -> Unit)? = null) {
                     }
                 }
                 if (onClick != null) {
-                    Icon(Icons.AutoMirrored.Filled.ChevronRight, contentDescription = "查看成绩明细")
+                    Icon(Icons.Rounded.ChevronRight, contentDescription = "查看成绩明细")
                 }
             }
         }

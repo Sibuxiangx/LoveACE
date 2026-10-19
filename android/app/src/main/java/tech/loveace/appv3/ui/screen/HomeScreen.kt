@@ -4,7 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ChevronRight
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -274,7 +274,7 @@ fun HomeScreen(
                                     )
                                     Text("卡片余额", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Icon(Icons.AutoMirrored.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)                            }
+                                Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)                            }
                         }
                     }
                 }

@@ -12,7 +12,7 @@ import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ChevronRight
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -244,7 +244,7 @@ private fun LandscapeCategorySelectorItem(category: AACCreditCategory, index: In
                 }
             },
             trailingContent = {
-                if (isSelected) Icon(Icons.AutoMirrored.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (isSelected) Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )

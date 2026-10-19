@@ -12,7 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ChevronRight
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -264,7 +264,7 @@ private fun LandscapeSubmitForm(vm: RepairViewModel, authViewModel: AuthViewMode
                                     Text(if (selectedArea != null) "$selectedAreaGroupName/${selectedArea!!.name}" else "请选择",
                                         color = if (selectedArea != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                                 },
-                                trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) },
+                                trailingContent = { Icon(Icons.Rounded.ChevronRight, null) },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                             )
                         }
@@ -281,7 +281,7 @@ private fun LandscapeSubmitForm(vm: RepairViewModel, authViewModel: AuthViewMode
                                     Text(if (selectedProject != null) "$selectedProjectGroupName/${selectedProject!!.name}" else "请选择",
                                         color = if (selectedProject != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                                 },
-                                trailingContent = { Icon(Icons.AutoMirrored.Filled.ChevronRight, null) },
+                                trailingContent = { Icon(Icons.Rounded.ChevronRight, null) },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                             )
                         }

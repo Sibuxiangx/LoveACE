@@ -36,6 +36,8 @@ import tech.loveace.appv3.data.model.LaborClubActivity
 import tech.loveace.appv3.data.model.SignItem
 import tech.loveace.appv3.ui.components.*
 import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.theme.LocalExtendedColors
+import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.LaborClubUiState
 import tech.loveace.appv3.ui.viewmodel.LaborClubViewModel
