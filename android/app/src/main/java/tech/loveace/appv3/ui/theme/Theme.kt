@@ -5,7 +5,7 @@ import android.app.Application
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.darkColorScheme
@@ -170,7 +170,9 @@ fun RibbonTheme(
     // 壁纸取色模式下 success/warning 仍由预设算法提供（系统动态 scheme 没有这两个角色）
     val extendedColors = remember(preset, isDark) { extendedColorsFromPreset(isDark) }
 
-    MaterialExpressiveTheme(
+    // MaterialExpressiveTheme 在 material3 1.4 里还是 internal；expressive 语义由
+    // 自建 md3e 组件（花形/按压 morph/自绘 wavy）承载，主题入口用 MaterialTheme。
+    MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
     ) {

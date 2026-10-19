@@ -238,7 +238,7 @@ fun HomeScreen(
             } else if (academicState.isLoading) {
                 item {
                     Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                        AppCircularProgressIndicator()
+                        AppCircularProgressIndicator(modifier = Modifier.size(32.dp))
                     }
                 }
             }

@@ -136,7 +136,7 @@ fun ElectricityScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: Elec
                     if (state.isLoading) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                AppCircularProgressIndicator()
+                                AppCircularProgressIndicator(modifier = Modifier.size(32.dp))
                             }
                         }
                     }

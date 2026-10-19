@@ -152,7 +152,7 @@ fun LandscapeHomeScreen(
                     }
                 } else if (academicState.isLoading) {
                     Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                        AppCircularProgressIndicator()
+                        AppCircularProgressIndicator(modifier = Modifier.size(32.dp))
                     }
                 }
 

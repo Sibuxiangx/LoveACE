@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import tech.loveace.appv3.ui.md3e.RibbonShapeLoader
 import tech.loveace.appv3.ui.theme.LocalProgressBarStyle
 import tech.loveace.appv3.ui.theme.ProgressBarStyle
 
@@ -22,7 +23,7 @@ import tech.loveace.appv3.ui.theme.ProgressBarStyle
 fun LoadingScreen(message: String = "加载中...") {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            AppCircularProgressIndicator()
+            AppCircularProgressIndicator(modifier = Modifier.size(32.dp))
             Spacer(Modifier.height(20.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -98,7 +99,8 @@ fun AppCircularProgressIndicator(
 ) {
     val style = LocalProgressBarStyle.current
     when (style) {
-        ProgressBarStyle.WAVY -> WavyCircularProgressIndicator(progress = null, modifier = modifier, color = color, trackColor = trackColor)
+        // 不确定进度的 loading 用 M3E 花形 morph loader
+        ProgressBarStyle.WAVY -> RibbonShapeLoader(modifier = modifier, color = color)
         ProgressBarStyle.STANDARD -> CircularProgressIndicator(modifier = modifier, color = color)
     }
 }
