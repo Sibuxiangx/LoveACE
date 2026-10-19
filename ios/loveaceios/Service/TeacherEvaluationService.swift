@@ -24,7 +24,8 @@ actor TeacherEvaluationService {
             try await refreshEvaluationIndexState()
             if indexProtection.requiresInitialWait {
                 // 首次访问保护：先不出课程列表，由上层倒计时后重新拉取
-                teacherEvaluationLogger.info("fetchCourses: first-visit protection, wait \(indexProtection.waitSeconds)s")
+                let waitSeconds = indexProtection.waitSeconds
+                teacherEvaluationLogger.info("fetchCourses: first-visit protection, wait \(waitSeconds)s")
                 return .success([])
             }
             let client = await connection.client!
