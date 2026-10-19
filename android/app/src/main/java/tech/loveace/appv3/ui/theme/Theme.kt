@@ -4,8 +4,18 @@ import android.app.Activity
 import android.app.Application
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
@@ -17,6 +27,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.materialkolor.palettes.TonalPalette
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -33,7 +44,7 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeConfig()
     )
 
-    fun setSeedColor(argb: Int) = viewModelScope.launch { prefs.setSeedColor(argb) }
+    fun setPreset(presetId: String) = viewModelScope.launch { prefs.setPreset(presetId) }
     fun setDarkMode(mode: DarkMode) = viewModelScope.launch { prefs.setDarkMode(mode) }
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { prefs.setDynamicColor(enabled) }
     fun setCourseNotification(enabled: Boolean) = viewModelScope.launch { prefs.setCourseNotification(enabled) }
@@ -41,124 +52,100 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
 }
 
 /**
- * 根据种子色生成 M3 配色方案，surface 系列颜色带有种子色色调
+ * 由 Material Color Utilities（HCT）从预设色相/彩度组装 ColorScheme。
+ * 调色板拆分与 tone 映射对齐小程序 DESIGN.md §2.3：
+ * secondary = hue+3 & chroma×0.6、tertiary = hue+50 & chroma×0.8、
+ * neutral = hue+3 & 4.5、neutralVariant = hue+4 & 8。
  */
-private fun generateColorScheme(seedArgb: Int, isDark: Boolean): ColorScheme {
-    val seed = Color(seedArgb)
-    val hsl = colorToHsl(seed)
-    val h = hsl[0]; val s = hsl[1]
+private fun schemeFromPreset(preset: ThemePreset, isDark: Boolean): ColorScheme {
+    val chroma = preset.chroma
+    val primary = TonalPalette.fromHueAndChroma(preset.hue, chroma)
+    val secondary = TonalPalette.fromHueAndChroma(preset.hue + 3.0, minOf(13.0, chroma * 0.6))
+    val tertiary = TonalPalette.fromHueAndChroma(preset.hue + 50.0, minOf(22.0, chroma * 0.8))
+    val neutral = TonalPalette.fromHueAndChroma(preset.hue + 3.0, 4.5)
+    val neutralVariant = TonalPalette.fromHueAndChroma(preset.hue + 4.0, 8.0)
+    val error = TonalPalette.fromHueAndChroma(25.0, 84.0)
+
+    fun tone(p: TonalPalette, t: Int) = Color(p.tone(t))
 
     return if (isDark) {
         darkColorScheme(
-            primary = hslToColor(h, (s * 0.8f).coerceIn(0f, 1f), 0.75f),
-            onPrimary = hslToColor(h, s, 0.15f),
-            primaryContainer = hslToColor(h, (s * 0.9f).coerceIn(0f, 1f), 0.30f),
-            onPrimaryContainer = hslToColor(h, (s * 0.6f).coerceIn(0f, 1f), 0.90f),
-            secondary = hslToColor((h + 30f) % 360f, (s * 0.5f).coerceIn(0f, 1f), 0.75f),
-            onSecondary = hslToColor((h + 30f) % 360f, (s * 0.4f).coerceIn(0f, 1f), 0.15f),
-            secondaryContainer = hslToColor((h + 30f) % 360f, (s * 0.4f).coerceIn(0f, 1f), 0.25f),
-            onSecondaryContainer = hslToColor((h + 30f) % 360f, (s * 0.3f).coerceIn(0f, 1f), 0.90f),
-            tertiary = hslToColor((h + 60f) % 360f, (s * 0.6f).coerceIn(0f, 1f), 0.75f),
-            onTertiary = hslToColor((h + 60f) % 360f, (s * 0.5f).coerceIn(0f, 1f), 0.15f),
-            tertiaryContainer = hslToColor((h + 60f) % 360f, (s * 0.5f).coerceIn(0f, 1f), 0.25f),
-            onTertiaryContainer = hslToColor((h + 60f) % 360f, (s * 0.4f).coerceIn(0f, 1f), 0.90f),
-            error = Color(0xFFFFB4AB),
-            onError = Color(0xFF690005),
-            errorContainer = Color(0xFF93000A),
-            onErrorContainer = Color(0xFFFFDAD6),
-            background = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.08f),
-            onBackground = Color(0xFFE5E1E9),
-            surface = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.08f),
-            onSurface = Color(0xFFE5E1E9),
-            onSurfaceVariant = Color(0xFFC7C5D0),
-            outline = Color(0xFF918F9A),
-            outlineVariant = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.25f),
-            surfaceDim = hslToColor(h, (s * 0.08f).coerceIn(0f, 1f), 0.06f),
-            surfaceBright = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.22f),
-            surfaceContainerLowest = hslToColor(h, (s * 0.08f).coerceIn(0f, 1f), 0.04f),
-            surfaceContainerLow = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.10f),
-            surfaceContainer = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.13f),
-            surfaceContainerHigh = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.16f),
-            surfaceContainerHighest = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.20f),
-            inverseSurface = hslToColor(h, (s * 0.10f).coerceIn(0f, 1f), 0.90f),
-            inverseOnSurface = hslToColor(h, (s * 0.08f).coerceIn(0f, 1f), 0.18f),
-            inversePrimary = hslToColor(h, s, 0.42f),
+            primary = tone(primary, 80),
+            onPrimary = tone(primary, 20),
+            primaryContainer = tone(primary, 30),
+            onPrimaryContainer = tone(primary, 90),
+            secondary = tone(secondary, 80),
+            onSecondary = tone(secondary, 20),
+            secondaryContainer = tone(secondary, 30),
+            onSecondaryContainer = tone(secondary, 90),
+            tertiary = tone(tertiary, 80),
+            onTertiary = tone(tertiary, 20),
+            tertiaryContainer = tone(tertiary, 30),
+            onTertiaryContainer = tone(tertiary, 90),
+            error = tone(error, 80),
+            onError = tone(error, 20),
+            errorContainer = tone(error, 30),
+            onErrorContainer = tone(error, 90),
+            background = tone(neutral, 6),
+            onBackground = tone(neutral, 90),
+            surface = tone(neutral, 6),
+            onSurface = tone(neutral, 90),
+            surfaceVariant = tone(neutralVariant, 30),
+            onSurfaceVariant = tone(neutralVariant, 80),
+            outline = tone(neutralVariant, 60),
+            outlineVariant = tone(neutralVariant, 30),
+            surfaceDim = tone(neutral, 6),
+            surfaceBright = tone(neutral, 24),
+            surfaceContainerLowest = tone(neutral, 4),
+            surfaceContainerLow = tone(neutral, 10),
+            surfaceContainer = tone(neutral, 12),
+            surfaceContainerHigh = tone(neutral, 17),
+            surfaceContainerHighest = tone(neutral, 22),
+            inverseSurface = tone(neutral, 90),
+            inverseOnSurface = tone(neutral, 20),
+            inversePrimary = tone(primary, 40),
         )
     } else {
         lightColorScheme(
-            primary = hslToColor(h, s, 0.42f),
-            onPrimary = Color.White,
-            primaryContainer = hslToColor(h, (s * 0.7f).coerceIn(0f, 1f), 0.90f),
-            onPrimaryContainer = hslToColor(h, s, 0.12f),
-            secondary = hslToColor((h + 30f) % 360f, (s * 0.4f).coerceIn(0f, 1f), 0.40f),
-            onSecondary = Color.White,
-            secondaryContainer = hslToColor((h + 30f) % 360f, (s * 0.4f).coerceIn(0f, 1f), 0.90f),
-            onSecondaryContainer = hslToColor((h + 30f) % 360f, (s * 0.3f).coerceIn(0f, 1f), 0.12f),
-            tertiary = hslToColor((h + 60f) % 360f, (s * 0.5f).coerceIn(0f, 1f), 0.38f),
-            onTertiary = Color.White,
-            tertiaryContainer = hslToColor((h + 60f) % 360f, (s * 0.5f).coerceIn(0f, 1f), 0.90f),
-            onTertiaryContainer = hslToColor((h + 60f) % 360f, (s * 0.4f).coerceIn(0f, 1f), 0.12f),
-            error = Color(0xFFBA1A1A),
-            onError = Color.White,
-            errorContainer = Color(0xFFFFDAD6),
-            onErrorContainer = Color(0xFF410002),
-            // 关键：background 和 surface 带有种子色色调，让整个 app 背景受主题色影响
-            background = hslToColor(h, (s * 0.18f).coerceIn(0f, 1f), 0.97f),
-            onBackground = Color(0xFF1C1B20),
-            surface = hslToColor(h, (s * 0.18f).coerceIn(0f, 1f), 0.97f),
-            onSurface = Color(0xFF1C1B20),
-            onSurfaceVariant = Color(0xFF46464F),
-            outline = Color(0xFF777680),
-            outlineVariant = hslToColor(h, (s * 0.15f).coerceIn(0f, 1f), 0.82f),
-            surfaceDim = hslToColor(h, (s * 0.15f).coerceIn(0f, 1f), 0.88f),
-            surfaceBright = hslToColor(h, (s * 0.18f).coerceIn(0f, 1f), 0.98f),
-            surfaceContainerLowest = Color.White,
-            surfaceContainerLow = hslToColor(h, (s * 0.18f).coerceIn(0f, 1f), 0.95f),
-            surfaceContainer = hslToColor(h, (s * 0.16f).coerceIn(0f, 1f), 0.93f),
-            surfaceContainerHigh = hslToColor(h, (s * 0.14f).coerceIn(0f, 1f), 0.91f),
-            surfaceContainerHighest = hslToColor(h, (s * 0.12f).coerceIn(0f, 1f), 0.89f),
-            inverseSurface = Color(0xFF313036),
-            inverseOnSurface = hslToColor(h, (s * 0.12f).coerceIn(0f, 1f), 0.95f),
-            inversePrimary = hslToColor(h, (s * 0.8f).coerceIn(0f, 1f), 0.75f),
+            primary = tone(primary, 40),
+            onPrimary = tone(primary, 100),
+            primaryContainer = tone(primary, 90),
+            onPrimaryContainer = tone(primary, 10),
+            secondary = tone(secondary, 40),
+            onSecondary = tone(secondary, 100),
+            secondaryContainer = tone(secondary, 90),
+            onSecondaryContainer = tone(secondary, 10),
+            tertiary = tone(tertiary, 40),
+            onTertiary = tone(tertiary, 100),
+            tertiaryContainer = tone(tertiary, 90),
+            onTertiaryContainer = tone(tertiary, 10),
+            error = tone(error, 40),
+            onError = tone(error, 100),
+            errorContainer = tone(error, 90),
+            onErrorContainer = tone(error, 10),
+            background = tone(neutral, 99),
+            onBackground = tone(neutral, 10),
+            surface = tone(neutral, 99),
+            onSurface = tone(neutral, 10),
+            surfaceVariant = tone(neutralVariant, 90),
+            onSurfaceVariant = tone(neutralVariant, 30),
+            outline = tone(neutralVariant, 50),
+            outlineVariant = tone(neutralVariant, 80),
+            surfaceDim = tone(neutral, 87),
+            surfaceBright = tone(neutral, 99),
+            surfaceContainerLowest = tone(neutral, 100),
+            surfaceContainerLow = tone(neutral, 96),
+            surfaceContainer = tone(neutral, 93),
+            surfaceContainerHigh = tone(neutral, 91),
+            surfaceContainerHighest = tone(neutral, 88),
+            inverseSurface = tone(neutral, 20),
+            inverseOnSurface = tone(neutral, 95),
+            inversePrimary = tone(primary, 80),
         )
     }
 }
 
-/** RGB → HSL */
-private fun colorToHsl(color: Color): FloatArray {
-    val r = color.red; val g = color.green; val b = color.blue
-    val max = maxOf(r, g, b); val min = minOf(r, g, b)
-    val l = (max + min) / 2f
-    if (max == min) return floatArrayOf(0f, 0f, l)
-    val d = max - min
-    val s = if (l > 0.5f) d / (2f - max - min) else d / (max + min)
-    val h = when (max) {
-        r -> ((g - b) / d + (if (g < b) 6f else 0f)) * 60f
-        g -> ((b - r) / d + 2f) * 60f
-        else -> ((r - g) / d + 4f) * 60f
-    }
-    return floatArrayOf(h, s, l)
-}
-
-/** HSL → Color */
-private fun hslToColor(h: Float, s: Float, l: Float): Color {
-    if (s == 0f) return Color(l, l, l)
-    val q = if (l < 0.5f) l * (1f + s) else l + s - l * s
-    val p = 2f * l - q
-    fun hue2rgb(t: Float): Float {
-        val tt = when { t < 0f -> t + 1f; t > 1f -> t - 1f; else -> t }
-        return when {
-            tt < 1f / 6f -> p + (q - p) * 6f * tt
-            tt < 1f / 2f -> q
-            tt < 2f / 3f -> p + (q - p) * (2f / 3f - tt) * 6f
-            else -> p
-        }
-    }
-    val hNorm = h / 360f
-    return Color(hue2rgb(hNorm + 1f / 3f), hue2rgb(hNorm), hue2rgb(hNorm - 1f / 3f))
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RibbonTheme(
     themeViewModel: ThemeViewModel = viewModel(),
@@ -173,13 +160,16 @@ fun RibbonTheme(
         DarkMode.DARK -> true
     }
 
+    val preset = ThemePresets.byId(config.presetId)
     val colorScheme = when {
         config.useDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        else -> generateColorScheme(config.seedColorArgb, isDark)
+        else -> schemeFromPreset(preset, isDark)
     }
+    // 壁纸取色模式下 success/warning 仍由预设算法提供（系统动态 scheme 没有这两个角色）
+    val extendedColors = remember(preset, isDark) { extendedColorsFromPreset(isDark) }
 
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
@@ -206,6 +196,7 @@ fun RibbonTheme(
         }
 
         CompositionLocalProvider(
+            LocalExtendedColors provides extendedColors,
             LocalDensity provides scaledDensity,
             LocalIsDarkTheme provides isDark,
             LocalProgressBarStyle provides config.progressBarStyle,
