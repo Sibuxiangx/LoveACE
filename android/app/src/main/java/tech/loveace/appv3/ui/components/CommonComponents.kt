@@ -134,6 +134,21 @@ fun AppLinearProgressIndicator(
     )
 }
 
+/** 不确定进度的线性指示器（标准线条，indeterminate） */
+@Composable
+fun AppLinearProgressIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+) {
+    LinearProgressIndicator(
+        modifier = modifier,
+        color = color,
+        trackColor = trackColor,
+        strokeCap = StrokeCap.Round,
+    )
+}
+
 /** 带图标背景的 Tonal 图标容器 */
 @Composable
 fun TonalIconBox(
