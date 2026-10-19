@@ -77,8 +77,8 @@ jobs:
         with:
           packages: platform-tools
 
-      - name: Install SDK 36
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install SDK 37
+        run: sdkmanager "platforms;android-37" "build-tools;37.0.0"
 
       - name: Restore release keystore
         env:

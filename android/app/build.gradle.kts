@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "tech.loveace.appv3"
-    compileSdk = 36
+    compileSdk = 37
 
     fun buildConfigString(value: String): String {
         val escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
