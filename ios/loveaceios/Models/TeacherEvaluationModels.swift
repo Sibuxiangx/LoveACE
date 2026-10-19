@@ -1,5 +1,35 @@
 import Foundation
 
+// MARK: - First-Visit Protection
+
+/// 评教首页“首次访问须知/倒计时”保护状态。
+/// 仅解析脱敏的结构字段（隐藏 input 与 JS 状态变量），不含任何个人数据。
+struct TeacherEvaluationIndexProtection: Hashable {
+    var schoolId: String = ""
+    var infoOff: String = ""
+    var infoTimeSeconds: Int = 0
+    var isFinished: String = ""
+    var isFinishedResolved: Bool = false
+    var isFirstVisit: String = ""
+    var isFirstVisitResolved: Bool = false
+    var hasAhcjTimer: Bool = false
+
+    /// 命中条件：infoOff=1 且存在倒计时且未见“已完成/已访问”的明确证据。
+    /// 状态变量解析失败时保守走等待，避免过早 search/提交。
+    var requiresInitialWait: Bool {
+        guard infoOff == "1", infoTimeSeconds > 0, hasAhcjTimer else { return false }
+        let finishedKnown = isFinishedResolved && isFinished != "unfinished"
+        let visitedKnown = isFirstVisitResolved && isFirstVisit != "unVisit"
+        return !(finishedKnown || visitedKnown)
+    }
+
+    /// 保护等待秒数：倒计时 + 安全余量
+    var waitSeconds: Int { infoTimeSeconds > 0 ? infoTimeSeconds + Self.safetySeconds : 0 }
+
+    static let safetySeconds = 5
+    static let none = TeacherEvaluationIndexProtection()
+}
+
 // MARK: - Teacher Evaluation Course
 
 struct TeacherEvaluationCourse: Codable, Identifiable, Hashable {
@@ -167,6 +197,8 @@ struct TeacherEvaluationTask: Identifiable, Hashable {
     var countdownRemaining: Int = 0
     var countdownTotal: Int = 0
     var errorMessage: String?
+    /// 轻量错误分类：prepareFailed / submitFailed / verifyMismatch / unknown
+    var errorKind: String?
     var startTime: Date?
     var endTime: Date?
 

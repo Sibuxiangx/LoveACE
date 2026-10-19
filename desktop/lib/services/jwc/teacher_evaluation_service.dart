@@ -28,6 +28,17 @@ class TeacherEvaluationService {
           ),
         );
       }
+      if (index.protection.requiresInitialWait) {
+        // 首次访问保护：先不出课程列表，由上层倒计时后重新拉取
+        LoggerService.info('🏫 loadCourses: first-visit protection, wait ${index.protection.waitSeconds}s');
+        return UniResponse.success(
+          TeacherEvaluationCourseList(
+            tokenValue: index.tokenValue,
+            isClosed: false,
+            protection: index.protection,
+          ),
+        );
+      }
       if (index.tokenValue.isEmpty) throw Exception('未找到评教 token');
       return UniResponse.success(
         TeacherEvaluationCourseList(
@@ -38,6 +49,17 @@ class TeacherEvaluationService {
       );
     } catch (e) {
       LoggerService.error('❌ 获取评教课程失败', error: e);
+      return UniResponse.failure(e.toString(), retryable: true);
+    }
+  }
+
+  /// 重新拉取评教首页并返回最新 token（用于提交失败后的立即重试）
+  Future<UniResponse<String>> fetchIndexToken() async {
+    try {
+      final index = await _fetchIndex();
+      return UniResponse.success(index.tokenValue);
+    } catch (e) {
+      LoggerService.error('❌ 刷新评教 token 失败', error: e);
       return UniResponse.failure(e.toString(), retryable: true);
     }
   }
@@ -153,7 +175,41 @@ class TeacherEvaluationService {
       tokenValue: _parseTokenValue(doc, html),
       isClosed: alert != null,
       closedMessage: alert?.text.trim() ?? '',
+      protection: _parseIndexProtection(doc),
     );
+  }
+
+  /// 解析评教首页的“首次访问须知/倒计时”保护状态。
+  /// 只读取隐藏 input 与 JS 状态变量，日志不记录页面原文。
+  TeacherEvaluationIndexProtection _parseIndexProtection(Document doc) {
+    try {
+      final scripts = doc.querySelectorAll('script').map((s) => s.text).join('\n');
+      final finished = _scriptStringVar(scripts, 'isFinished');
+      final firstVisit = _scriptStringVar(scripts, 'isFirstVisit');
+      return TeacherEvaluationIndexProtection(
+        schoolId: _inputIdValue(doc, 'schoolId'),
+        infoOff: _inputIdValue(doc, 'infoOff'),
+        infoTimeSeconds: int.tryParse(_inputIdValue(doc, 'infoTime')) ?? 0,
+        isFinished: finished.$1,
+        isFinishedResolved: finished.$2,
+        isFirstVisit: firstVisit.$1,
+        isFirstVisitResolved: firstVisit.$2,
+        hasAhcjTimer: scripts.contains('tsxxAhcj'),
+      );
+    } catch (_) {
+      return TeacherEvaluationIndexProtection.none;
+    }
+  }
+
+  (String, bool) _scriptStringVar(String scripts, String name) {
+    final match = RegExp("var\\s+$name\\s*=\\s*['\"]([^'\"]*)['\"]").firstMatch(scripts);
+    if (match == null) return ('', false);
+    return (match.group(1)?.trim() ?? '', true);
+  }
+
+  String _inputIdValue(Document doc, String id) {
+    final node = doc.querySelector('input#$id');
+    return node?.attributes['value']?.trim() ?? '';
   }
 
   Future<List<TeacherEvaluationCourse>> _fetchCourses() async {

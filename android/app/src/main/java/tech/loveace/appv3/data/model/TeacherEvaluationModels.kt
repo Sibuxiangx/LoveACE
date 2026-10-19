@@ -1,9 +1,47 @@
 package tech.loveace.appv3.data.model
 
+/**
+ * 评教首页“首次访问须知/倒计时”保护状态。
+ * 仅解析脱敏的结构字段（隐藏 input 与 JS 状态变量），不含任何个人数据。
+ */
+data class TeacherEvaluationIndexProtection(
+    val schoolId: String = "",
+    val infoOff: String = "",
+    val infoTimeSeconds: Int = 0,
+    val isFinished: String = "",
+    val isFinishedResolved: Boolean = false,
+    val isFirstVisit: String = "",
+    val isFirstVisitResolved: Boolean = false,
+    val hasAhcjTimer: Boolean = false,
+) {
+    /**
+     * 命中条件：infoOff=1 且存在倒计时且未见“已完成/已访问”的明确证据。
+     * 状态变量解析失败时保守走等待，避免过早 search/提交。
+     */
+    val requiresInitialWait: Boolean
+        get() {
+            if (infoOff != "1" || infoTimeSeconds <= 0 || !hasAhcjTimer) return false
+            val finishedKnown = isFinishedResolved && isFinished != "unfinished"
+            val visitedKnown = isFirstVisitResolved && isFirstVisit != "unVisit"
+            return !(finishedKnown || visitedKnown)
+        }
+
+    /** 保护等待秒数：倒计时 + 安全余量 */
+    val waitSeconds: Int
+        get() = if (infoTimeSeconds > 0) infoTimeSeconds + SAFETY_SECONDS else 0
+
+    companion object {
+        private const val SAFETY_SECONDS = 5
+
+        val NONE = TeacherEvaluationIndexProtection()
+    }
+}
+
 data class TeacherEvaluationIndex(
     val tokenValue: String,
     val isClosed: Boolean,
     val closedMessage: String = "",
+    val protection: TeacherEvaluationIndexProtection = TeacherEvaluationIndexProtection.NONE,
 )
 
 data class TeacherEvaluationCourseList(
@@ -11,6 +49,7 @@ data class TeacherEvaluationCourseList(
     val isClosed: Boolean,
     val closedMessage: String = "",
     val courses: List<TeacherEvaluationCourse> = emptyList(),
+    val protection: TeacherEvaluationIndexProtection = TeacherEvaluationIndexProtection.NONE,
 )
 
 data class TeacherEvaluationCourse(

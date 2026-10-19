@@ -169,6 +169,15 @@ class _WinUITeacherEvaluationPageState
                 ],
               ),
               const SizedBox(height: 18),
+              if (provider.protectionWaitSeconds > 0) ...[
+                InfoBar(
+                  title: Text('首次评教需阅读须知（${provider.protectionWaitSeconds}/${provider.protectionWaitTotalSeconds}s）'),
+                  content: const Text('教务系统首次评教有强制阅读倒计时，等待结束后将自动重新加载课程列表。'),
+                  severity: InfoBarSeverity.warning,
+                  isLong: true,
+                ),
+                const SizedBox(height: 12),
+              ],
               _buildSafetyNotice(),
               const SizedBox(height: 18),
               Row(

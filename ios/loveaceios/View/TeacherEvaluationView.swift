@@ -19,6 +19,22 @@ struct TeacherEvaluationView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 16) {
+                            if vm.protectionWaitSeconds > 0 {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "timer")
+                                        .foregroundStyle(.orange)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("首次评教需阅读须知（\(vm.protectionWaitSeconds)/\(vm.protectionWaitTotalSeconds)s）")
+                                            .font(.subheadline.weight(.medium))
+                                        Text("教务系统首次评教有强制阅读倒计时，等待结束后将自动重新加载课程列表。")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(.orange.opacity(0.12), in: .rect(cornerRadius: 12))
+                            }
                             headerCard
                             if let error = vm.error { inlineError(error) }
                             if let result = vm.lastResult { resultCard(result) }

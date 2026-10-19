@@ -1,12 +1,52 @@
+/// 评教首页“首次访问须知/倒计时”保护状态。
+/// 仅解析脱敏的结构字段（隐藏 input 与 JS 状态变量），不含任何个人数据。
+class TeacherEvaluationIndexProtection {
+  final String schoolId;
+  final String infoOff;
+  final int infoTimeSeconds;
+  final String isFinished;
+  final bool isFinishedResolved;
+  final String isFirstVisit;
+  final bool isFirstVisitResolved;
+  final bool hasAhcjTimer;
+
+  const TeacherEvaluationIndexProtection({
+    this.schoolId = '',
+    this.infoOff = '',
+    this.infoTimeSeconds = 0,
+    this.isFinished = '',
+    this.isFinishedResolved = false,
+    this.isFirstVisit = '',
+    this.isFirstVisitResolved = false,
+    this.hasAhcjTimer = false,
+  });
+
+  /// 命中条件：infoOff=1 且存在倒计时且未见“已完成/已访问”的明确证据。
+  /// 状态变量解析失败时保守走等待，避免过早 search/提交。
+  bool get requiresInitialWait {
+    if (infoOff != '1' || infoTimeSeconds <= 0 || !hasAhcjTimer) return false;
+    final finishedKnown = isFinishedResolved && isFinished != 'unfinished';
+    final visitedKnown = isFirstVisitResolved && isFirstVisit != 'unVisit';
+    return !(finishedKnown || visitedKnown);
+  }
+
+  /// 保护等待秒数：倒计时 + 安全余量
+  int get waitSeconds => infoTimeSeconds > 0 ? infoTimeSeconds + 5 : 0;
+
+  static const TeacherEvaluationIndexProtection none = TeacherEvaluationIndexProtection();
+}
+
 class TeacherEvaluationIndex {
   final String tokenValue;
   final bool isClosed;
   final String closedMessage;
+  final TeacherEvaluationIndexProtection protection;
 
   const TeacherEvaluationIndex({
     required this.tokenValue,
     required this.isClosed,
     this.closedMessage = '',
+    this.protection = TeacherEvaluationIndexProtection.none,
   });
 }
 
@@ -15,12 +55,14 @@ class TeacherEvaluationCourseList {
   final bool isClosed;
   final String closedMessage;
   final List<TeacherEvaluationCourse> courses;
+  final TeacherEvaluationIndexProtection protection;
 
   const TeacherEvaluationCourseList({
     required this.tokenValue,
     required this.isClosed,
     this.closedMessage = '',
     this.courses = const [],
+    this.protection = TeacherEvaluationIndexProtection.none,
   });
 }
 

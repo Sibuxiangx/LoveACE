@@ -8,6 +8,9 @@ actor TeacherEvaluationService {
     private let connection: AUFEConnection
     private var token: String?
 
+    /// 最近一次刷新 index 时的首次访问保护状态（脱敏结构字段）
+    private(set) var indexProtection: TeacherEvaluationIndexProtection = .none
+
     static let baseURL = "http://jwcxk2-aufe-edu-cn.vpn2.aufe.edu.cn:8118"
 
     init(connection: AUFEConnection) {
@@ -19,6 +22,11 @@ actor TeacherEvaluationService {
     func fetchCourses() async -> UniResponse<[TeacherEvaluationCourse]> {
         do {
             try await refreshEvaluationIndexState()
+            if indexProtection.requiresInitialWait {
+                // 首次访问保护：先不出课程列表，由上层倒计时后重新拉取
+                teacherEvaluationLogger.info("fetchCourses: first-visit protection, wait \(indexProtection.waitSeconds)s")
+                return .success([])
+            }
             let client = await connection.client!
             let (data, response) = try await client.post(
                 "\(Self.baseURL)/student/teachingEvaluation/teachingEvaluation/search?sf_request_type=ajax",
@@ -97,9 +105,16 @@ actor TeacherEvaluationService {
         let html = String(data: data, encoding: .utf8) ?? ""
         if isEvaluationClosedPage(html) {
             token = nil
+            indexProtection = .none
             throw ServiceError.parseError("评价暂未开启")
         }
         token = parseToken(from: html)
+        indexProtection = parseIndexProtection(from: html)
+    }
+
+    /// 重新拉取评教首页（用于提交失败后的立即重试，刷新 index token）
+    func refreshIndexToken() async {
+        try? await refreshEvaluationIndexState()
     }
 
     private func accessEvaluationPage(course: TeacherEvaluationCourse, totalCourses: Int) async throws -> String? {
@@ -316,6 +331,30 @@ private extension TeacherEvaluationService {
             }
         }
         return false
+    }
+
+    /// 解析评教首页的“首次访问须知/倒计时”保护状态。
+    /// 只读取隐藏 input 与 JS 状态变量，日志不记录页面原文。
+    func parseIndexProtection(from html: String) -> TeacherEvaluationIndexProtection {
+        guard let doc = try? SwiftSoup.parse(html) else { return .none }
+
+        func idValue(_ id: String) -> String {
+            let value = attr((try? doc.select("input#\(id)").first()), "value")
+            return value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let infoTime = Int(idValue("infoTime")) else { return .none }
+        let finished = firstCapture(#"var\s+isFinished\s*=\s*["']([^"']*)["']"#, in: html)
+        let firstVisit = firstCapture(#"var\s+isFirstVisit\s*=\s*["']([^"']*)["']"#, in: html)
+        return TeacherEvaluationIndexProtection(
+            schoolId: idValue("schoolId"),
+            infoOff: idValue("infoOff"),
+            infoTimeSeconds: infoTime,
+            isFinished: finished ?? "",
+            isFinishedResolved: finished != nil,
+            isFirstVisit: firstVisit ?? "",
+            isFirstVisitResolved: firstVisit != nil,
+            hasAhcjTimer: html.contains("tsxxAhcj")
+        )
     }
 
     func optionLabel(for input: Element, in doc: Document) -> String {
