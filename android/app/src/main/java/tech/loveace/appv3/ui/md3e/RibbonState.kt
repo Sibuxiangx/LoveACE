@@ -22,10 +22,10 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import tech.loveace.appv3.ui.components.AppCircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -63,7 +63,7 @@ fun RibbonState(
         when (kind) {
             RibbonStateKind.LOADING -> {
                 Spacer(Modifier.height(28.dp))
-                CircularWavyProgressIndicator(modifier = Modifier.size(48.dp))
+                AppCircularProgressIndicator(modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(28.dp))
             }
             else -> {

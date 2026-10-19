@@ -145,7 +145,6 @@ private fun schemeFromPreset(preset: ThemePreset, isDark: Boolean): ColorScheme 
     }
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RibbonTheme(
     themeViewModel: ThemeViewModel = viewModel(),

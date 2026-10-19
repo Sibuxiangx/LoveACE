@@ -90,7 +90,6 @@ fun StatCard(
 }
 
 /** 根据用户偏好选择波浪或标准风格的圆形进度指示器 */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppCircularProgressIndicator(
     modifier: Modifier = Modifier,
@@ -99,13 +98,12 @@ fun AppCircularProgressIndicator(
 ) {
     val style = LocalProgressBarStyle.current
     when (style) {
-        ProgressBarStyle.WAVY -> CircularWavyProgressIndicator(modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.WAVY -> WavyCircularProgressIndicator(progress = null, modifier = modifier, color = color, trackColor = trackColor)
         ProgressBarStyle.STANDARD -> CircularProgressIndicator(modifier = modifier, color = color)
     }
 }
 
 /** 根据用户偏好选择波浪或标准风格的圆形进度指示器（确定进度） */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppCircularProgressIndicator(
     progress: () -> Float,
@@ -115,13 +113,12 @@ fun AppCircularProgressIndicator(
 ) {
     val style = LocalProgressBarStyle.current
     when (style) {
-        ProgressBarStyle.WAVY -> CircularWavyProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.WAVY -> WavyCircularProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
         ProgressBarStyle.STANDARD -> CircularProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
     }
 }
 
 /** 根据用户偏好选择波浪或标准风格的线性进度条 */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppLinearProgressIndicator(
     modifier: Modifier = Modifier,
@@ -130,13 +127,12 @@ fun AppLinearProgressIndicator(
 ) {
     val style = LocalProgressBarStyle.current
     when (style) {
-        ProgressBarStyle.WAVY -> LinearWavyProgressIndicator(modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.WAVY -> WavyLinearProgressIndicator(progress = null, modifier = modifier, color = color, trackColor = trackColor)
         ProgressBarStyle.STANDARD -> LinearProgressIndicator(modifier = modifier, color = color, trackColor = trackColor)
     }
 }
 
 /** 根据用户偏好选择波浪或标准风格的线性进度条（确定进度） */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppLinearProgressIndicator(
     progress: () -> Float,
@@ -146,7 +142,7 @@ fun AppLinearProgressIndicator(
 ) {
     val style = LocalProgressBarStyle.current
     when (style) {
-        ProgressBarStyle.WAVY -> LinearWavyProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
+        ProgressBarStyle.WAVY -> WavyLinearProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
         ProgressBarStyle.STANDARD -> LinearProgressIndicator(progress = progress, modifier = modifier, color = color, trackColor = trackColor)
     }
 }
