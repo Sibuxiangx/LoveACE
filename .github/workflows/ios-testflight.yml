@@ -23,6 +23,9 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Record start time
+        run: echo "RUN_STARTED_AT=$(date -u -v -1M +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
       - name: Checkout repository
         uses: actions/checkout@v5
 
@@ -209,3 +212,69 @@ jobs:
             ios/build/TestFlight/export
             ios/build/TestFlight/loveaceios.xcarchive
           if-no-files-found: ignore
+
+      - name: Revoke certificates and profiles created by this run
+        if: ${{ always() }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          # Runner 的私钥用完即弃，Apple 后台遗留的证书是死数据，会累积到
+          # 账号证书上限。吊销本次 run 开始（含 1 分钟余量）之后新建的
+          # distribution 证书与 profile，防止额度耗尽。
+          python3 -m venv /tmp/asc-cleanup-venv
+          source /tmp/asc-cleanup-venv/bin/activate
+          python -m pip install --quiet pyjwt cryptography requests
+          python3 - <<'PY'
+          import os
+          import time
+          from datetime import datetime
+
+          import jwt
+          import requests
+
+          key_id = os.environ["APP_STORE_CONNECT_API_KEY_ID"]
+          issuer_id = os.environ["APP_STORE_CONNECT_API_ISSUER_ID"]
+          private_key = os.environ["APP_STORE_CONNECT_API_KEY_P8"]
+          started = datetime.fromisoformat(
+              os.environ["RUN_STARTED_AT"].replace("Z", "+00:00")
+          )
+
+          token = jwt.encode(
+              {"iss": issuer_id, "iat": int(time.time()), "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
+              private_key,
+              algorithm="ES256",
+              headers={"kid": key_id, "typ": "JWT"},
+          )
+          headers = {"Authorization": f"Bearer {token}"}
+          base = "https://api.appstoreconnect.apple.com/v1"
+
+          def parse_created(value):
+              value = value.replace("+0000", "+00:00").replace("Z", "+00:00")
+              return datetime.fromisoformat(value)
+
+          def sweep(resource, params):
+              url = f"{base}/{resource}"
+              query = dict(params)
+              while url:
+                  resp = requests.get(url, headers=headers, params=query, timeout=30)
+                  resp.raise_for_status()
+                  query = None
+                  for item in resp.json().get("data", []):
+                      created_raw = item.get("attributes", {}).get("createdDate", "")
+                      try:
+                          if parse_created(created_raw) < started:
+                              continue
+                      except ValueError:
+                          continue
+                      name = item.get("attributes", {}).get("displayName") or item["id"]
+                      deleted = requests.delete(f"{base}/{resource}/{item['id']}", headers=headers, timeout=30)
+                      state = "revoked" if deleted.status_code == 200 else f"failed ({deleted.status_code})"
+                      print(f"{resource} '{name}' ({created_raw}): {state}")
+                  url = resp.json().get("links", {}).get("next")
+
+          for cert_type in ("IOS_DISTRIBUTION", "APPLE_DISTRIBUTION"):
+              sweep("certificates", {"filter[certificateType]": cert_type})
+          sweep("profiles", {})
+          PY
