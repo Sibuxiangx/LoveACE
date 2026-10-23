@@ -4,6 +4,24 @@ import os
 
 private let logger = Logger(subsystem: "tech.loveace.loveaceios", category: "AUFEConnection")
 
+private struct ECAuthContext {
+    let twfId: String
+    let csrfCode: String
+    let rsaKey: String
+    let rsaExp: String
+}
+
+/// 验证码图片对应的待提交认证上下文（仅内存，不记录日志）；提交验证码后立即丢弃
+private struct PendingCaptchaContext {
+    let auth: ECAuthContext
+    let createdAt: Date
+}
+
+private enum ECAuthPageResult {
+    case page(ECAuthContext, requiresCaptcha: Bool)
+    case failed(ECLoginStatus)
+}
+
 actor AUFEConnection {
     let userId: String
     private let ecPassword: String
@@ -16,11 +34,15 @@ actor AUFEConnection {
     private(set) var twfId: String?
     private var ecLogged = false
     private var uaapLogged = false
+    /// EC 验证码待提交上下文（仅内存）：仅在 captchaRequired 后存在，提交验证码后清除
+    private var pendingCaptcha: PendingCaptchaContext?
 
     static let serverURL = "https://vpn2.aufe.edu.cn"
     static let uaapLoginURL =
         "http://uaap-aufe-edu-cn.vpn2.aufe.edu.cn:8118/cas/login?service=http%3A%2F%2Fjwcxk2.aufe.edu.cn%2Fj_spring_cas_security_check"
     static let timeout: TimeInterval = 60
+    /// 验证码待提交上下文的有效期（秒）；超时后重新取图
+    static let captchaContextLifetime: TimeInterval = 180
 
     init(userId: String, ecPassword: String, password: String) {
         self.userId = userId
@@ -71,9 +93,11 @@ actor AUFEConnection {
 
     // MARK: - EC Login
 
-    func ecLogin() async -> ECLoginStatus {
+    /// EC 登录。`captchaCode` 为 nil 表示尚未输入验证码：学校要求验证码时返回 `captchaRequired` 与图片，不提交密码。
+    /// 非空 `captchaCode` 必须使用上一次 `captchaRequired` 保存的待提交上下文；该上下文单次有效。
+    func ecLogin(captchaCode: String? = nil) async -> ECLoginStatus {
         do {
-            return try await performEcLogin()
+            return try await performEcLogin(captchaCode: captchaCode)
         } catch {
             logger.error("EC login error: \(error.localizedDescription)")
             if isNetworkError(error) { return ECLoginStatus(failNetworkError: true) }
@@ -81,79 +105,161 @@ actor AUFEConnection {
         }
     }
 
-    private func performEcLogin() async throws -> ECLoginStatus {
+    private func performEcLogin(captchaCode: String?) async throws -> ECLoginStatus {
+        if let captchaCode {
+            guard let pending = pendingCaptcha,
+                  Date().timeIntervalSince(pending.createdAt) <= Self.captchaContextLifetime else {
+                logger.info("🖼️ EC captcha code without a valid pending context; requesting a new challenge")
+                return try await requestCaptchaChallenge()
+            }
+            pendingCaptcha = nil
+            return try await submitEcCredentials(auth: pending.auth, captchaCode: captchaCode)
+        }
+
+        pendingCaptcha = nil
+        switch try await fetchEcAuthPage() {
+        case .failed(let status):
+            return status
+        case .page(let auth, let requiresCaptcha):
+            if requiresCaptcha {
+                logger.info("🖼️ EC login requires captcha (RndImg=1)")
+                return try await issueCaptchaChallenge(auth: auth)
+            }
+            return try await submitEcCredentials(auth: auth, captchaCode: nil)
+        }
+    }
+
+    /// 取新的认证页与验证码图片（验证码路径）
+    private func requestCaptchaChallenge() async throws -> ECLoginStatus {
+        switch try await fetchEcAuthPage() {
+        case .failed(let status):
+            return status
+        case .page(let auth, _):
+            return try await issueCaptchaChallenge(auth: auth)
+        }
+    }
+
+    private func fetchEcAuthPage() async throws -> ECAuthPageResult {
         logger.info("🔑 EC Login Step 1: fetching auth params...")
         let (data, _) = try await client.get("\(Self.serverURL)/por/login_auth.csp?apiversion=1")
         let body = String(data: data, encoding: .utf8) ?? ""
         if body.isEmpty {
             logger.error("❌ EC auth response is empty")
-            return ECLoginStatus(failNetworkError: true)
+            return .failed(ECLoginStatus(failNetworkError: true))
         }
         logger.info("📄 EC auth response received [\(body.count) bytes]")
 
         guard let twfMatch = body.range(of: "(?<=<TwfID>).+?(?=</TwfID>)", options: .regularExpression) else {
             logger.error("❌ TwfID not found in response")
-            return ECLoginStatus(failNotFoundTwfid: true)
+            return .failed(ECLoginStatus(failNotFoundTwfid: true))
         }
-        twfId = String(body[twfMatch])
+        let twfValue = String(body[twfMatch])
+        twfId = twfValue
         logger.info("✅ TwfID received")
 
         guard let rsaKeyMatch = body.range(of: "(?<=<RSA_ENCRYPT_KEY>).+?(?=</RSA_ENCRYPT_KEY>)", options: .regularExpression) else {
             logger.error("❌ RSA key not found")
-            return ECLoginStatus(failNotFoundRsaKey: true)
+            return .failed(ECLoginStatus(failNotFoundRsaKey: true))
         }
         let rsaKey = String(body[rsaKeyMatch])
         logger.info("✅ RSA key length: \(rsaKey.count)")
 
         guard let rsaExpMatch = body.range(of: "(?<=<RSA_ENCRYPT_EXP>).+?(?=</RSA_ENCRYPT_EXP>)", options: .regularExpression) else {
             logger.error("❌ RSA exponent not found")
-            return ECLoginStatus(failNotFoundRsaExp: true)
+            return .failed(ECLoginStatus(failNotFoundRsaExp: true))
         }
         let rsaExp = String(body[rsaExpMatch])
         logger.info("✅ RSA exponent: \(rsaExp)")
 
         guard let csrfMatch = body.range(of: "(?<=<CSRF_RAND_CODE>).+?(?=</CSRF_RAND_CODE>)", options: .regularExpression) else {
             logger.error("❌ CSRF code not found")
-            return ECLoginStatus(failNotFoundCsrfCode: true)
+            return .failed(ECLoginStatus(failNotFoundCsrfCode: true))
         }
         let csrfCode = String(body[csrfMatch])
         logger.info("✅ CSRF code received")
 
-        let passwordToEncrypt = "\(ecPassword)_\(csrfCode)"
-        let encryptedPassword = CryptoHelper.rsaEncrypt(plaintext: passwordToEncrypt, modulusHex: rsaKey, exponentStr: rsaExp)
+        let requiresCaptcha = body.contains("<RndImg>1</RndImg>")
+        let auth = ECAuthContext(twfId: twfValue, csrfCode: csrfCode, rsaKey: rsaKey, rsaExp: rsaExp)
+        return .page(auth, requiresCaptcha: requiresCaptcha)
+    }
+
+    /// 下载验证码图片（绑定到本认证页的 TWFID），成功后保存待提交上下文
+    private func issueCaptchaChallenge(auth: ECAuthContext) async throws -> ECLoginStatus {
+        let (image, _) = try await client.get(
+            "\(Self.serverURL)/por/rand_code.csp",
+            headers: ["Cookie": "TWFID=\(auth.twfId)"]
+        )
+        guard !image.isEmpty else {
+            logger.error("❌ EC captcha image is empty")
+            return ECLoginStatus(failUnknownError: true)
+        }
+        pendingCaptcha = PendingCaptchaContext(auth: auth, createdAt: Date())
+        logger.info("🖼️ EC captcha image received [\(image.count) bytes]")
+        return ECLoginStatus(captchaRequired: true, captchaImage: image)
+    }
+
+    private func submitEcCredentials(auth: ECAuthContext, captchaCode: String?) async throws -> ECLoginStatus {
+        let passwordToEncrypt = "\(ecPassword)_\(auth.csrfCode)"
+        let encryptedPassword = CryptoHelper.rsaEncrypt(plaintext: passwordToEncrypt, modulusHex: auth.rsaKey, exponentStr: auth.rsaExp)
         logger.info("🔐 Encrypted password length: \(encryptedPassword.count), empty: \(encryptedPassword.isEmpty)")
 
         logger.info("🔑 EC Login Step 2: posting credentials...")
         let (loginData, _) = try await client.post(
             "\(Self.serverURL)/por/login_psw.csp?anti_replay=1&encrypt=1&type=cs",
             formData: [
-                "svpn_rand_code": "",
+                "svpn_rand_code": captchaCode ?? "",
                 "mitm": "",
-                "svpn_req_randcode": csrfCode,
+                "svpn_req_randcode": auth.csrfCode,
                 "svpn_name": userId,
                 "svpn_password": encryptedPassword
             ],
-            headers: ["Cookie": "TWFID=\(twfId!)"]
+            headers: ["Cookie": "TWFID=\(auth.twfId)"]
         )
         let loginBody = String(data: loginData, encoding: .utf8) ?? ""
         logger.info("📄 EC login response received [\(loginBody.count) bytes]")
 
-        if loginBody.contains("<Result>1</Result>") {
-            await client.setCookie(name: "TWFID", value: twfId!, domain: ".vpn2.aufe.edu.cn")
+        switch Self.classifyEcLoginBody(loginBody, codeSubmitted: captchaCode != nil) {
+        case .success:
+            await client.setCookie(name: "TWFID", value: auth.twfId, domain: ".vpn2.aufe.edu.cn")
             ecLogged = true
             await simpleClient.copyCookies(from: client)
             await noRedirectClient.copyCookies(from: client)
             logger.info("✅ EC Login succeeded")
             return ECLoginStatus(success: true)
-        } else if loginBody.contains("Invalid username or password!") {
+        case .captchaRequired:
+            logger.error("❌ EC Login: captcha required")
+            return try await requestCaptchaChallenge()
+        case .captchaInvalid:
+            logger.error("❌ EC Login: captcha incorrect")
+            return ECLoginStatus(captchaInvalid: true)
+        case .invalidCredentials:
             logger.error("❌ EC Login: invalid credentials")
             return ECLoginStatus(failInvalidCredentials: true)
-        } else if loginBody.contains("[CDATA[maybe attacked]]") || loginBody.contains("CAPTCHA required") {
-            logger.error("❌ EC Login: maybe attacked / captcha required")
-            return ECLoginStatus(failMaybeAttacked: true)
+        case .unknown:
+            logger.error("❌ EC Login: unknown response [\(loginBody.count) bytes]")
+            return ECLoginStatus(failUnknownError: true)
         }
-        logger.error("❌ EC Login: unknown response [\(loginBody.count) bytes]")
-        return ECLoginStatus(failUnknownError: true)
+    }
+
+    private enum ECLoginOutcome {
+        case success, captchaRequired, captchaInvalid, invalidCredentials, unknown
+    }
+
+    /// login_psw.csp 响应分类，判定顺序固定：成功 → 验证码/风控 → 密码错误 → 未知
+    private static func classifyEcLoginBody(_ body: String, codeSubmitted: Bool) -> ECLoginOutcome {
+        if body.contains("<Result>1</Result>") { return .success }
+        let captchaChallenge = body.contains("20023")
+            || body.contains("CAPTCHA required")
+            || body.contains("characters are incorrect")
+        // "[CDATA[maybe attacked]]" 已被 "maybe attacked" 覆盖
+        let maybeAttacked = body.contains("20041") || body.contains("maybe attacked")
+        if captchaChallenge || maybeAttacked {
+            return codeSubmitted && captchaChallenge ? .captchaInvalid : .captchaRequired
+        }
+        if body.contains("Invalid username or password!") || body.contains("20004") {
+            return .invalidCredentials
+        }
+        return .unknown
     }
 
     // MARK: - UAAP Login
@@ -222,6 +328,7 @@ actor AUFEConnection {
         }
         if loginBody.contains("Invalid username or password")
             || loginBody.contains("用户名或密码错误")
+            || loginBody.contains("密码输入错误")
             || loginBody.contains("errorMsg") {
             logger.error("❌ UAAP Login: invalid credentials")
             return UAAPLoginStatus(failInvalidCredentials: true)

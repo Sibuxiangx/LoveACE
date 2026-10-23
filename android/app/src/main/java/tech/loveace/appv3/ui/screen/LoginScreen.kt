@@ -32,6 +32,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import kotlinx.coroutines.delay
 import tech.loveace.appv3.R
 import tech.loveace.appv3.data.model.UserCredentials
 import tech.loveace.appv3.util.describeFullWidthChars
@@ -45,18 +49,19 @@ import tech.loveace.appv3.ui.viewmodel.AuthUiState
 fun LoginScreen(
     uiState: AuthUiState,
     rememberedCredentials: UserCredentials?,
-    onLogin: (userId: String, ecPassword: String, password: String) -> Unit,
+    onLogin: (userId: String, ecPassword: String, password: String, captchaCode: String?) -> Unit,
+    onUserIdChanged: (userId: String) -> Unit,
     onQuickLogin: () -> Unit,
     onSwitchUser: () -> Unit,
     onDismissPasswordChange: () -> Unit = {},
 ) {
     // 是否有已保存的凭证（可快速登录）
-    var showManualLogin by remember { mutableStateOf(rememberedCredentials == null) }
+    var showManualLogin by remember { mutableStateOf(rememberedCredentials == null || uiState.errorMessage != null) }
     val isLoading = uiState.state == AuthState.Loading
 
-    // 如果有保存凭证且出错了，自动切到手动登录
-    LaunchedEffect(uiState.state) {
-        if (uiState.state == AuthState.Error && !showManualLogin) {
+    // 如果有保存凭证且出错了（含需要重新登录的提示），自动切到手动登录
+    LaunchedEffect(uiState.state, uiState.errorMessage) {
+        if ((uiState.state == AuthState.Error || uiState.errorMessage != null) && !showManualLogin) {
             showManualLogin = true
         }
     }
@@ -89,6 +94,7 @@ fun LoginScreen(
                 isLoading = isLoading,
                 enterScale = enterTransition.value,
                 onLogin = onLogin,
+                onUserIdChanged = onUserIdChanged,
             )
         }
     }
@@ -181,11 +187,13 @@ private fun ManualLoginView(
     initialPassword: String,
     isLoading: Boolean,
     enterScale: Float,
-    onLogin: (userId: String, ecPassword: String, password: String) -> Unit,
+    onLogin: (userId: String, ecPassword: String, password: String, captchaCode: String?) -> Unit,
+    onUserIdChanged: (userId: String) -> Unit,
 ) {
     var userId by remember { mutableStateOf(initialUserId) }
     var ecPassword by remember { mutableStateOf(initialEcPassword) }
     var password by remember { mutableStateOf(initialPassword) }
+    var captchaInput by remember { mutableStateOf("") }
     var showEcPwd by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
     var showPasswordHelp by remember { mutableStateOf(false) }
@@ -202,11 +210,21 @@ private fun ManualLoginView(
         useSeparatePwd && hasFullWidthChars(ecPassword) -> "VPN密码含全角字符 ${describeFullWidthChars(ecPassword)}，请切换为英文半角输入"
         else -> null
     }
-    val canLogin = !isLoading && fullWidthHint == null && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank())
+    // 验证码：仅当学校要求（已有图片）时生效；去掉首尾空白后必须非空且不含全角字符
+    val captchaCode = if (uiState.captchaImage != null) captchaInput.trim() else null
+    val captchaOk = captchaCode == null || (captchaCode.isNotEmpty() && !hasFullWidthChars(captchaCode))
+    // 冷却期内禁用登录按钮（不触网），剩余秒数每秒刷新
+    val cooldownSec = rememberLoginCooldownSeconds(uiState.cooldownUntil)
+    val canLogin = !isLoading && cooldownSec == 0L && fullWidthHint == null && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank()) && captchaOk
+
+    // 学号变化：清除验证码状态，并载入该学号的冷却
+    LaunchedEffect(userId) { onUserIdChanged(userId) }
+    // 每张新图片（首次获取、点击刷新、验证码错误后重取）都清空已输入的验证码
+    LaunchedEffect(uiState.captchaImage) { captchaInput = "" }
 
     fun tryLogin() {
         focusManager.clearFocus()
-        if (canLogin) onLogin(userId, effectiveEcPassword, password)
+        if (canLogin) onLogin(userId, effectiveEcPassword, password, captchaCode)
     }
 
     Column(
@@ -264,6 +282,16 @@ private fun ManualLoginView(
                         if (hasFullWidthChars(password)) Text("含全角字符 ${describeFullWidthChars(password)}，请用英文半角", fontSize = 12.sp)
                     },
                 )
+                uiState.captchaImage?.let { image ->
+                    CaptchaField(
+                        image = image,
+                        value = captchaInput,
+                        onValueChange = { captchaInput = it },
+                        onRefresh = { onLogin(userId, effectiveEcPassword, password, null) },
+                        enabled = !isLoading,
+                        refreshEnabled = !isLoading && cooldownSec == 0L,
+                    )
+                }
                 // ── 高级选项：VPN密码默认与教务密码相同，默认折叠 ──
                 Row(
                     modifier = Modifier
@@ -329,7 +357,7 @@ private fun ManualLoginView(
         Spacer(Modifier.height(16.dp))
 
         Button(
-            onClick = { onLogin(userId, effectiveEcPassword, password) },
+            onClick = { onLogin(userId, effectiveEcPassword, password, captchaCode) },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = MaterialTheme.shapes.extraLarge, enabled = canLogin,
         ) {
@@ -340,6 +368,14 @@ private fun ManualLoginView(
             } else {
                 Text("登录", style = MaterialTheme.typography.titleMedium)
             }
+        }
+        if (cooldownSec > 0L) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "请 $cooldownSec 秒后再试",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
 
         AnimatedVisibility(
@@ -470,4 +506,67 @@ private fun PasswordHelpSection(
             Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+/**
+ * 学校网关验证码行：图片固定 44dp 高（保持宽高比），点击刷新；输入框只接受半角 ASCII。
+ * 图片为 GIF 原始字节，由 BitmapFactory 解码首帧。
+ */
+@Composable
+internal fun CaptchaField(
+    image: ByteArray,
+    value: String,
+    onValueChange: (String) -> Unit,
+    onRefresh: () -> Unit,
+    enabled: Boolean,
+    refreshEnabled: Boolean,
+) {
+    val bitmap = remember(image) { BitmapFactory.decodeByteArray(image, 0, image.size)?.asImageBitmap() }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        OutlinedTextField(
+            value = value, onValueChange = onValueChange,
+            label = { Text("验证码") },
+            singleLine = true, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.large,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Ascii,
+                capitalization = KeyboardCapitalization.None,
+                autoCorrect = false,
+                imeAction = ImeAction.Done,
+            ),
+            enabled = enabled,
+            isError = hasFullWidthChars(value),
+            supportingText = {
+                if (hasFullWidthChars(value)) Text("验证码含全角字符，请用英文半角", fontSize = 12.sp)
+            },
+        )
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = "验证码，点击刷新",
+                modifier = Modifier
+                    .height(44.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(enabled = refreshEnabled, onClick = onRefresh),
+                contentScale = ContentScale.FillHeight,
+            )
+        }
+    }
+}
+
+/** 登录冷却剩余秒数（向上取整），每秒刷新一次，归零后自动恢复 */
+@Composable
+internal fun rememberLoginCooldownSeconds(cooldownUntil: Long): Long {
+    val remainingSec by produceState(initialValue = 0L, cooldownUntil) {
+        while (true) {
+            val leftMs = cooldownUntil - System.currentTimeMillis()
+            value = if (leftMs > 0L) (leftMs + 999L) / 1000L else 0L
+            if (leftMs <= 0L) break
+            delay(1000L)
+        }
+    }
+    return remainingSec
 }

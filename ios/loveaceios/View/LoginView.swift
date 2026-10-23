@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct LoginView: View {
     @Environment(AuthViewModel.self) private var authVM
@@ -10,6 +11,7 @@ struct LoginView: View {
     @State private var usesSeparateGatewayPassword = false
     @State private var showPasswordHelp = false
     @State private var preloginNotice: PreloginNotice?
+    @State private var captchaInput = ""
 
     var body: some View {
         ScrollView {
@@ -37,18 +39,21 @@ struct LoginView: View {
                 }
 
                 VStack(spacing: 16) {
-                    inputField(icon: "person.fill", placeholder: "学号", text: $userId, isSecure: false)
+                    inputField(icon: "person.fill", placeholder: "学号", text: $userId, isSecure: false, warning: fullWidthWarning(userId))
                         .keyboardType(.numberPad)
                         .textContentType(.username)
 
-                    passwordField(placeholder: "教务系统密码", text: $password)
+                    passwordField(placeholder: "教务系统密码", text: $password, warning: fullWidthWarning(password))
+                    if let captchaImage = authVM.captchaImage {
+                        captchaField(image: captchaImage)
+                    }
 
                     DisclosureGroup(isExpanded: $showAdvancedOptions) {
                         VStack(alignment: .leading, spacing: 10) {
                             Toggle("我的网关密码和教务密码不一样", isOn: $usesSeparateGatewayPassword)
                                 .font(.subheadline)
                             if usesSeparateGatewayPassword {
-                                inputField(icon: "network", placeholder: "网关密码", text: $ecPassword, isSecure: true)
+                                inputField(icon: "network", placeholder: "网关密码", text: $ecPassword, isSecure: true, warning: fullWidthWarning(ecPassword))
                                     .textContentType(.password)
                             }
                         }
@@ -85,27 +90,9 @@ struct LoginView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                Button {
-                    authVM.login(
-                        userId: userId,
-                        password: password,
-                        gatewayPassword: usesSeparateGatewayPassword ? ecPassword : nil
-                    )
-                } label: {
-                    Group {
-                        if authVM.state == .loading {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("登录")
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .foregroundStyle(.white)
-                    .background(canLogin ? Color.blue : Color.gray.opacity(0.35), in: .rect(cornerRadius: 14))
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    loginButton(cooldownRemaining: cooldownRemaining(at: context.date))
                 }
-                .disabled(!canLogin || authVM.state == .loading)
                 .padding(.horizontal, 32)
                 .padding(.top, 28)
 
@@ -150,11 +137,117 @@ struct LoginView: View {
                 }
             }
         }
+        .onChange(of: userId) { _, newValue in
+            authVM.userIdDidChange(to: newValue)
+            captchaInput = ""
+        }
+        .onChange(of: authVM.captchaImage) { _, _ in
+            captchaInput = ""
+        }
     }
 
     private var canLogin: Bool {
         !userId.isEmpty && !password.isEmpty
             && (!usesSeparateGatewayPassword || !ecPassword.isEmpty)
+            && !hasFullWidthChars(userId)
+            && !hasFullWidthChars(password)
+            && !(usesSeparateGatewayPassword && hasFullWidthChars(ecPassword))
+            && captchaReady
+    }
+
+    /// 全角字符提示（与 Android LoginScreen 一致）：仅提示、不转换；命中时禁止登录
+    private func fullWidthWarning(_ text: String) -> String? {
+        hasFullWidthChars(text) ? "含全角字符 \(describeFullWidthChars(text))，请用英文半角" : nil
+    }
+
+    // MARK: - Captcha & Cooldown
+
+    private var trimmedCaptchaInput: String {
+        captchaInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 验证码激活时必须非空且不含全角字符（全角提示见 captchaField）
+    private var captchaReady: Bool {
+        authVM.captchaImage == nil || (!trimmedCaptchaInput.isEmpty && !hasFullWidthChars(trimmedCaptchaInput))
+    }
+
+    private var captchaWarning: String? {
+        hasFullWidthChars(trimmedCaptchaInput) ? "验证码含全角字符，请用英文半角" : nil
+    }
+
+    /// 距冷却结束的剩余秒数；0 表示无冷却
+    private func cooldownRemaining(at date: Date) -> Int {
+        guard let until = authVM.cooldownUntil, until > date else { return 0 }
+        return LoginThrottle.remainingSeconds(until: until, now: date)
+    }
+
+    private func loginButton(cooldownRemaining remaining: Int) -> some View {
+        let loading = authVM.state == .loading
+        return Button {
+            authVM.login(
+                userId: userId,
+                password: password,
+                gatewayPassword: usesSeparateGatewayPassword ? ecPassword : nil,
+                captchaCode: authVM.captchaImage == nil ? nil : trimmedCaptchaInput
+            )
+        } label: {
+            Group {
+                if loading {
+                    ProgressView().tint(.white)
+                } else if remaining > 0 {
+                    Text("请 \(remaining) 秒后再试")
+                        .fontWeight(.semibold)
+                } else {
+                    Text("登录")
+                        .fontWeight(.semibold)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .foregroundStyle(.white)
+            .background(canLogin && remaining == 0 ? Color.blue : Color.gray.opacity(0.35), in: .rect(cornerRadius: 14))
+        }
+        .disabled(!canLogin || remaining > 0 || loading)
+    }
+
+    private func captchaField(image: Data) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.shield")
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 20)
+                TextField("验证码", text: $captchaInput)
+                    .keyboardType(.asciiCapable)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button {
+                    captchaInput = ""
+                    authVM.refreshCaptcha()
+                } label: {
+                    captchaImageView(image)
+                }
+                .disabled(authVM.state == .loading)
+                .accessibilityLabel("验证码图片，点击刷新")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.fill.quaternary, in: .rect(cornerRadius: 12))
+            .overlay { fieldErrorBorder(captchaWarning) }
+            fieldWarning(captchaWarning)
+        }
+    }
+
+    @ViewBuilder
+    private func captchaImageView(_ data: Data) -> some View {
+        if let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 44)
+        } else {
+            Image(systemName: "arrow.clockwise")
+                .frame(height: 44)
+        }
     }
 
     // MARK: - Pre-login Notice
@@ -184,44 +277,69 @@ struct LoginView: View {
         .background(tint.opacity(0.12), in: .rect(cornerRadius: 12))
     }
 
-    private func passwordField(placeholder: String, text: Binding<String>) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "lock.fill")
-                .foregroundStyle(.tertiary)
-                .frame(width: 20)
-            Group {
-                if showPassword {
-                    TextField(placeholder, text: text)
-                } else {
-                    SecureField(placeholder, text: text)
+    private func passwordField(placeholder: String, text: Binding<String>, warning: String?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 20)
+                Group {
+                    if showPassword {
+                        TextField(placeholder, text: text)
+                    } else {
+                        SecureField(placeholder, text: text)
+                    }
+                }
+                .textContentType(.password)
+                Button { showPassword.toggle() } label: {
+                    Image(systemName: showPassword ? "eye.slash" : "eye")
+                        .foregroundStyle(.tertiary)
+                        .contentTransition(.symbolEffect(.replace))
                 }
             }
-            .textContentType(.password)
-            Button { showPassword.toggle() } label: {
-                Image(systemName: showPassword ? "eye.slash" : "eye")
-                    .foregroundStyle(.tertiary)
-                    .contentTransition(.symbolEffect(.replace))
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(.fill.quaternary, in: .rect(cornerRadius: 12))
+            .overlay { fieldErrorBorder(warning) }
+            fieldWarning(warning)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(.fill.quaternary, in: .rect(cornerRadius: 12))
     }
 
-    private func inputField(icon: String, placeholder: String, text: Binding<String>, isSecure: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(.tertiary)
-                .frame(width: 20)
-            if isSecure {
-                SecureField(placeholder, text: text)
-            } else {
-                TextField(placeholder, text: text)
+    private func inputField(icon: String, placeholder: String, text: Binding<String>, isSecure: Bool, warning: String?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 20)
+                if isSecure {
+                    SecureField(placeholder, text: text)
+                } else {
+                    TextField(placeholder, text: text)
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(.fill.quaternary, in: .rect(cornerRadius: 12))
+            .overlay { fieldErrorBorder(warning) }
+            fieldWarning(warning)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(.fill.quaternary, in: .rect(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private func fieldErrorBorder(_ warning: String?) -> some View {
+        if warning != nil {
+            RoundedRectangle(cornerRadius: 12).stroke(.red, lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private func fieldWarning(_ warning: String?) -> some View {
+        if let warning {
+            Text(warning)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .padding(.horizontal, 4)
+        }
     }
 }
 

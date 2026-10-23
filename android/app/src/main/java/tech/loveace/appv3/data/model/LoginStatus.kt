@@ -7,7 +7,12 @@ data class ECLoginStatus(
     val failNotFoundRsaExp: Boolean = false,
     val failNotFoundCsrfCode: Boolean = false,
     val failInvalidCredentials: Boolean = false,
-    val failMaybeAttacked: Boolean = false,
+    /** 学校要求输入验证码（RndImg=1 或 20041）：必须携带 [captchaImage]，不计失败 */
+    val failCaptchaRequired: Boolean = false,
+    /** 已提交的验证码错误（20023）：计失败，需用新认证页与新图片重试 */
+    val failCaptchaInvalid: Boolean = false,
+    /** 验证码图片原始字节（GIF），仅 [failCaptchaRequired] 时非空。不得记录日志 */
+    val captchaImage: ByteArray? = null,
     val failNetworkError: Boolean = false,
     val failUnknownError: Boolean = false,
 ) {
@@ -18,7 +23,8 @@ data class ECLoginStatus(
             failNotFoundRsaExp -> "未找到RSA指数"
             failNotFoundCsrfCode -> "未找到CSRF代码"
             failInvalidCredentials -> "用户名或密码错误"
-            failMaybeAttacked -> "登录频繁，请稍后重试"
+            failCaptchaRequired -> "学校要求输入验证码"
+            failCaptchaInvalid -> "验证码错误，请重新输入"
             failNetworkError -> "网络连接错误"
             failUnknownError -> "未知错误"
             else -> ""

@@ -40,6 +40,27 @@ class AUFEConnection(
     var lastUaapPasswordChangeRequired = false
         private set
 
+    /** 最近一次 reconnect() 中 EC 是否要求输入验证码（自动重连无法人工输入，需回到登录页） */
+    var lastEcCaptchaRequired = false
+        private set
+
+    /** EC 认证页解析结果（验证码上下文的一部分） */
+    private class EcAuthPage(
+        val twfId: String,
+        val csrf: String,
+        val rsaKey: String,
+        val rsaExp: String,
+        val rndImg: Boolean,
+    )
+
+    /** 获取验证码图片时保存的认证上下文；提交验证码后立即清空，不得复用 */
+    private class PendingCaptcha(val page: EcAuthPage, val createdAt: Long)
+
+    /** EC 认证页解析失败时抛出，由 [ecLogin] 转换为对应结果 */
+    private class EcStepFailure(val status: ECLoginStatus) : Exception()
+
+    private var pendingCaptcha: PendingCaptcha? = null
+
     fun startClient() {
         client = HttpClient(baseUrl = SERVER_URL, timeoutMs = TIMEOUT)
         simpleClient = HttpClient(baseUrl = SERVER_URL, timeoutMs = TIMEOUT)
@@ -70,12 +91,14 @@ class AUFEConnection(
 
     /** 完整重连：EC + UAAP */
     suspend fun reconnect(): Boolean = withContext(Dispatchers.IO) {
+        lastEcCaptchaRequired = false
         lastUaapPasswordChangeRequired = false
         try {
             Log.i(TAG, "🔄 Reconnecting...")
             close()
             startClient()
             val ec = ecLogin()
+            lastEcCaptchaRequired = ec.failCaptchaRequired
             if (!ec.success) { Log.e(TAG, "🔄 EC re-login failed"); return@withContext false }
             val uaap = uaapLogin()
             lastUaapPasswordChangeRequired = uaap.failPasswordChangeRequired
@@ -88,70 +111,121 @@ class AUFEConnection(
         }
     }
 
-    suspend fun ecLogin(): ECLoginStatus = withContext(Dispatchers.IO) {
+    /**
+     * EC(VPN) 登录。
+     * - [captchaCode] 为 null 或空：获取认证页；学校要求验证码时返回 failCaptchaRequired 并附图片，不提交密码。
+     * - [captchaCode] 非空：必须使用上一次返回验证码时保存的认证上下文提交；上下文缺失或超过
+     *   [CAPTCHA_TTL_MS] 时不提交，改为重新获取验证码（不计失败）。
+     */
+    suspend fun ecLogin(captchaCode: String? = null): ECLoginStatus = withContext(Dispatchers.IO) {
         try {
-            performEcLogin()
+            performEcLogin(captchaCode?.takeIf { it.isNotEmpty() })
+        } catch (e: EcStepFailure) {
+            e.status
         } catch (e: Exception) {
             Log.e(TAG, "EC login error", e)
             ECLoginStatus(failUnknownError = true)
         }
     }
 
-    private fun performEcLogin(): ECLoginStatus {
-        // 1. Get auth params
+    private fun performEcLogin(captchaCode: String?): ECLoginStatus {
+        if (captchaCode == null) {
+            pendingCaptcha = null
+            val page = fetchAuthPage()
+            if (page.rndImg) return issueCaptchaChallenge(page)
+            // 无需验证码：空验证码提交；若学校此时要求验证码（20041），换新认证页与图片
+            val status = postEcLogin(page, captchaCode = "", codeSubmitted = false)
+            return if (status.failCaptchaRequired) issueCaptchaChallenge(fetchAuthPage()) else status
+        }
+
+        // 上下文单次使用：取出即清空，无论提交结果如何都不复用
+        val pending = pendingCaptcha
+        pendingCaptcha = null
+        if (pending == null || System.currentTimeMillis() - pending.createdAt > CAPTCHA_TTL_MS) {
+            Log.i(TAG, "🔐 No valid captcha context, issuing a new challenge")
+            return issueCaptchaChallenge(fetchAuthPage())
+        }
+        val status = postEcLogin(pending.page, captchaCode, codeSubmitted = true)
+        return if (status.failCaptchaRequired) issueCaptchaChallenge(fetchAuthPage()) else status
+    }
+
+    /** GET 认证页并解析；失败抛出 [EcStepFailure] */
+    private fun fetchAuthPage(): EcAuthPage {
         val response = client.get("$SERVER_URL/por/login_auth.csp?apiversion=1")
-        val body = response.body?.string() ?: return ECLoginStatus(failNetworkError = true)
+        val body = response.body?.string() ?: throw EcStepFailure(ECLoginStatus(failNetworkError = true))
 
-        // 2. Extract TwfID
-        val twfMatch = Regex("<TwfID>(.*?)</TwfID>").find(body)
-            ?: return ECLoginStatus(failNotFoundTwfid = true)
-        twfId = twfMatch.groupValues[1]
+        val twf = Regex("<TwfID>(.*?)</TwfID>").find(body)?.groupValues?.get(1)
+            ?: throw EcStepFailure(ECLoginStatus(failNotFoundTwfid = true))
+        val rsaKey = Regex("<RSA_ENCRYPT_KEY>(.*?)</RSA_ENCRYPT_KEY>").find(body)?.groupValues?.get(1)
+            ?: throw EcStepFailure(ECLoginStatus(failNotFoundRsaKey = true))
+        val rsaExp = Regex("<RSA_ENCRYPT_EXP>(.*?)</RSA_ENCRYPT_EXP>").find(body)?.groupValues?.get(1)
+            ?: throw EcStepFailure(ECLoginStatus(failNotFoundRsaExp = true))
+        val csrf = Regex("<CSRF_RAND_CODE>(.*?)</CSRF_RAND_CODE>").find(body)?.groupValues?.get(1)
+            ?: throw EcStepFailure(ECLoginStatus(failNotFoundCsrfCode = true))
+        val rndImg = Regex("<RndImg>(.*?)</RndImg>").find(body)?.groupValues?.get(1)?.trim() == "1"
 
-        // 3. Extract RSA key
-        val rsaKeyMatch = Regex("<RSA_ENCRYPT_KEY>(.*?)</RSA_ENCRYPT_KEY>").find(body)
-            ?: return ECLoginStatus(failNotFoundRsaKey = true)
-        val rsaKey = rsaKeyMatch.groupValues[1]
+        twfId = twf
+        return EcAuthPage(twf, csrf, rsaKey, rsaExp, rndImg)
+    }
 
-        // 4. Extract RSA exponent
-        val rsaExpMatch = Regex("<RSA_ENCRYPT_EXP>(.*?)</RSA_ENCRYPT_EXP>").find(body)
-            ?: return ECLoginStatus(failNotFoundRsaExp = true)
-        val rsaExp = rsaExpMatch.groupValues[1]
+    /** 为该认证页获取验证码图片，成功后保存单次使用的认证上下文 */
+    private fun issueCaptchaChallenge(page: EcAuthPage): ECLoginStatus {
+        val image = fetchCaptchaImage(page.twfId) ?: return ECLoginStatus(failUnknownError = true)
+        pendingCaptcha = PendingCaptcha(page, System.currentTimeMillis())
+        return ECLoginStatus(failCaptchaRequired = true, captchaImage = image)
+    }
 
-        // 5. Extract CSRF code
-        val csrfMatch = Regex("<CSRF_RAND_CODE>(.*?)</CSRF_RAND_CODE>").find(body)
-            ?: return ECLoginStatus(failNotFoundCsrfCode = true)
-        val csrfCode = csrfMatch.groupValues[1]
+    /** GET /por/rand_code.csp；必须显式携带与认证页同一 TWFID 的 Cookie（与登录 POST 一致） */
+    private fun fetchCaptchaImage(twfId: String): ByteArray? {
+        val bytes = client.get(
+            "$SERVER_URL/por/rand_code.csp",
+            headers = mapOf("Cookie" to "TWFID=$twfId"),
+        ).use { it.body?.bytes() }
+        return bytes?.takeIf { it.isNotEmpty() }
+    }
 
-        // 6. RSA encrypt password
-        val passwordToEncrypt = "${ecPassword}_$csrfCode"
-        val encryptedPassword = rsaEncrypt(passwordToEncrypt, rsaKey, rsaExp)
-
-        // 7. Login
+    /** 提交 login_psw.csp */
+    private fun postEcLogin(page: EcAuthPage, captchaCode: String, codeSubmitted: Boolean): ECLoginStatus {
+        val encryptedPassword = rsaEncrypt("${ecPassword}_${page.csrf}", page.rsaKey, page.rsaExp)
         val loginResponse = client.post(
             "$SERVER_URL/por/login_psw.csp?anti_replay=1&encrypt=1&type=cs",
             formData = mapOf(
-                "svpn_rand_code" to "",
+                "svpn_rand_code" to captchaCode,
                 "mitm" to "",
-                "svpn_req_randcode" to csrfCode,
+                "svpn_req_randcode" to page.csrf,
                 "svpn_name" to userId,
                 "svpn_password" to encryptedPassword,
             ),
-            headers = mapOf("Cookie" to "TWFID=$twfId"),
+            headers = mapOf("Cookie" to "TWFID=${page.twfId}"),
         )
         val loginBody = loginResponse.body?.string() ?: return ECLoginStatus(failNetworkError = true)
 
         return when {
             loginBody.contains("<Result>1</Result>") -> {
-                client.cookieJar.setCookie("TWFID", twfId!!, "vpn2.aufe.edu.cn")
+                twfId = page.twfId
+                client.cookieJar.setCookie("TWFID", page.twfId, "vpn2.aufe.edu.cn")
                 ecLogged = true
                 simpleClient.copyCookiesFrom(client)
                 noRedirectClient.copyCookiesFrom(client)
                 ECLoginStatus(success = true)
             }
-            loginBody.contains("Invalid username or password!") ->
+            else -> classifyEcLoginFailure(loginBody, codeSubmitted)
+        }
+    }
+
+    /** login_psw 失败响应分类（协议顺序）：验证码 → 密码错误 → 未知 */
+    private fun classifyEcLoginFailure(body: String, codeSubmitted: Boolean): ECLoginStatus {
+        val captchaChallenge = body.contains("20023") ||
+            body.contains("CAPTCHA required") ||
+            body.contains("characters are incorrect")
+        val maybeAttacked = body.contains("20041") ||
+            body.contains("maybe attacked") ||
+            body.contains("[CDATA[maybe attacked]]")
+        return when {
+            captchaChallenge && codeSubmitted -> ECLoginStatus(failCaptchaInvalid = true)
+            captchaChallenge || maybeAttacked -> ECLoginStatus(failCaptchaRequired = true)
+            body.contains("Invalid username or password!") || body.contains("20004") ->
                 ECLoginStatus(failInvalidCredentials = true)
-            loginBody.contains("[CDATA[maybe attacked]]") || loginBody.contains("CAPTCHA required") ->
-                ECLoginStatus(failMaybeAttacked = true)
             else -> ECLoginStatus(failUnknownError = true)
         }
     }
@@ -204,7 +278,9 @@ class AUFEConnection(
             responseUrl.contains("/mng/acp/completeInfo/password") ->
                 UAAPLoginStatus(failPasswordChangeRequired = true)
             loginBody.contains("Invalid username or password") ||
-                loginBody.contains("用户名或密码错误") ->
+                loginBody.contains("用户名或密码错误") ||
+                loginBody.contains("密码输入错误") ||
+                loginBody.contains("errorMsg") ->
                 UAAPLoginStatus(failInvalidCredentials = true)
             responseUrl.startsWith("http://jwcxk2") || responseUrl.contains("ticket=") -> {
                 uaapLogged = true
@@ -265,5 +341,6 @@ class AUFEConnection(
         const val UAAP_LOGIN_URL =
             "http://uaap-aufe-edu-cn.vpn2.aufe.edu.cn:8118/cas/login?service=http%3A%2F%2Fjwcxk2.aufe.edu.cn%2Fj_spring_cas_security_check"
         const val TIMEOUT = 60_000L
+        const val CAPTCHA_TTL_MS = 180_000L
     }
 }

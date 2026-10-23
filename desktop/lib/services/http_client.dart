@@ -131,7 +131,7 @@ class HTTPClient {
               LoggerService.info('🍪 发送 Cookies: $cookieStr');
             }
           } else {
-            LoggerService.info('🍪 使用手动设置的 Cookie: $existingCookie');
+            LoggerService.info('🍪 使用手动设置的 Cookie（已隐藏）');
           }
 
           // 打印请求信息
@@ -159,7 +159,10 @@ class HTTPClient {
           LoggerService.info('📥 Response Headers: ${response.headers}');
 
           // 打印响应数据（限制长度避免日志过大）
-          final responseData = response.data.toString();
+          // 二进制响应（如验证码图片）不打印内容，避免日志泄露
+          final responseData = response.requestOptions.responseType == ResponseType.bytes
+              ? '<binary>'
+              : response.data.toString();
           if (responseData.length > 1000) {
             LoggerService.info(
               '📥 Response Data (truncated): ${responseData.substring(0, 1000)}...',
@@ -929,7 +932,7 @@ class HTTPClient {
               LoggerService.info('🍪 发送 Cookies: $cookieStr');
             }
           } else {
-            LoggerService.info('🍪 使用手动设置的 Cookie: $existingCookie');
+            LoggerService.info('🍪 使用手动设置的 Cookie（已隐藏）');
           }
 
           LoggerService.info('🌐 ${options.method} ${options.uri}');

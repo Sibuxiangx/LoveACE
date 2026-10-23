@@ -7,7 +7,12 @@ struct ECLoginStatus {
     let failNotFoundRsaExp: Bool
     let failNotFoundCsrfCode: Bool
     let failInvalidCredentials: Bool
-    let failMaybeAttacked: Bool
+    /// 学校要求输入验证码（尚未提交验证码，或刚提交的验证码被判定需要重新获取）
+    let captchaRequired: Bool
+    /// 已提交的验证码错误（计入登录失败）
+    let captchaInvalid: Bool
+    /// 验证码图片（GIF 原始字节）；仅 captchaRequired 时存在
+    let captchaImage: Data?
     let failNetworkError: Bool
     let failUnknownError: Bool
 
@@ -17,7 +22,8 @@ struct ECLoginStatus {
         if failNotFoundRsaExp { return "未找到RSA指数" }
         if failNotFoundCsrfCode { return "未找到CSRF代码" }
         if failInvalidCredentials { return "用户名或密码错误" }
-        if failMaybeAttacked { return "登录频繁，请稍后重试" }
+        if captchaRequired { return "学校要求输入验证码" }
+        if captchaInvalid { return "验证码错误，请重新输入" }
         if failNetworkError { return "网络连接错误" }
         if failUnknownError { return "未知错误" }
         return ""
@@ -26,14 +32,15 @@ struct ECLoginStatus {
     init(success: Bool = false, failNotFoundTwfid: Bool = false,
          failNotFoundRsaKey: Bool = false, failNotFoundRsaExp: Bool = false,
          failNotFoundCsrfCode: Bool = false, failInvalidCredentials: Bool = false,
-         failMaybeAttacked: Bool = false, failNetworkError: Bool = false,
-         failUnknownError: Bool = false) {
+         captchaRequired: Bool = false, captchaInvalid: Bool = false, captchaImage: Data? = nil,
+         failNetworkError: Bool = false, failUnknownError: Bool = false) {
         self.success = success; self.failNotFoundTwfid = failNotFoundTwfid
         self.failNotFoundRsaKey = failNotFoundRsaKey; self.failNotFoundRsaExp = failNotFoundRsaExp
         self.failNotFoundCsrfCode = failNotFoundCsrfCode
         self.failInvalidCredentials = failInvalidCredentials
-        self.failMaybeAttacked = failMaybeAttacked; self.failNetworkError = failNetworkError
-        self.failUnknownError = failUnknownError
+        self.captchaRequired = captchaRequired; self.captchaInvalid = captchaInvalid
+        self.captchaImage = captchaImage
+        self.failNetworkError = failNetworkError; self.failUnknownError = failUnknownError
     }
 }
 

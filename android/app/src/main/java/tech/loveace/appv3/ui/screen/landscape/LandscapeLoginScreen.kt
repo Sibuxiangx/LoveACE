@@ -42,6 +42,8 @@ import tech.loveace.appv3.util.describeFullWidthChars
 import tech.loveace.appv3.util.hasFullWidthChars
 import tech.loveace.appv3.ui.viewmodel.AuthState
 import tech.loveace.appv3.ui.viewmodel.AuthUiState
+import tech.loveace.appv3.ui.screen.CaptchaField
+import tech.loveace.appv3.ui.screen.rememberLoginCooldownSeconds
 
 /**
  * 横屏登录页：左侧品牌区 + 右侧表单/快速登录区
@@ -51,16 +53,18 @@ import tech.loveace.appv3.ui.viewmodel.AuthUiState
 fun LandscapeLoginScreen(
     uiState: AuthUiState,
     rememberedCredentials: UserCredentials?,
-    onLogin: (userId: String, ecPassword: String, password: String) -> Unit,
+    onLogin: (userId: String, ecPassword: String, password: String, captchaCode: String?) -> Unit,
+    onUserIdChanged: (userId: String) -> Unit,
     onQuickLogin: () -> Unit,
     onSwitchUser: () -> Unit,
     onDismissPasswordChange: () -> Unit = {},
 ) {
-    var showManualLogin by remember { mutableStateOf(rememberedCredentials == null) }
+    var showManualLogin by remember { mutableStateOf(rememberedCredentials == null || uiState.errorMessage != null) }
     val isLoading = uiState.state == AuthState.Loading
 
-    LaunchedEffect(uiState.state) {
-        if (uiState.state == AuthState.Error && !showManualLogin) {
+    // 如果有保存凭证且出错了（含需要重新登录的提示），自动切到手动登录
+    LaunchedEffect(uiState.state, uiState.errorMessage) {
+        if ((uiState.state == AuthState.Error || uiState.errorMessage != null) && !showManualLogin) {
             showManualLogin = true
         }
     }
@@ -149,6 +153,7 @@ fun LandscapeLoginScreen(
                         initialPassword = rememberedCredentials?.password ?: "",
                         isLoading = isLoading,
                         onLogin = onLogin,
+                        onUserIdChanged = onUserIdChanged,
                     )
                 }
             }
@@ -169,11 +174,13 @@ private fun LandscapeManualLoginForm(
     initialEcPassword: String,
     initialPassword: String,
     isLoading: Boolean,
-    onLogin: (userId: String, ecPassword: String, password: String) -> Unit,
+    onLogin: (userId: String, ecPassword: String, password: String, captchaCode: String?) -> Unit,
+    onUserIdChanged: (userId: String) -> Unit,
 ) {
     var userId by remember { mutableStateOf(initialUserId) }
     var ecPassword by remember { mutableStateOf(initialEcPassword) }
     var password by remember { mutableStateOf(initialPassword) }
+    var captchaInput by remember { mutableStateOf("") }
     var showEcPwd by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
     var showPasswordHelp by remember { mutableStateOf(false) }
@@ -190,11 +197,21 @@ private fun LandscapeManualLoginForm(
         useSeparatePwd && hasFullWidthChars(ecPassword) -> "VPN密码含全角字符 ${describeFullWidthChars(ecPassword)}，请切换为英文半角输入"
         else -> null
     }
-    val canLogin = !isLoading && fullWidthHint == null && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank())
+    // 验证码：仅当学校要求（已有图片）时生效；去掉首尾空白后必须非空且不含全角字符
+    val captchaCode = if (uiState.captchaImage != null) captchaInput.trim() else null
+    val captchaOk = captchaCode == null || (captchaCode.isNotEmpty() && !hasFullWidthChars(captchaCode))
+    // 冷却期内禁用登录按钮（不触网），剩余秒数每秒刷新
+    val cooldownSec = rememberLoginCooldownSeconds(uiState.cooldownUntil)
+    val canLogin = !isLoading && cooldownSec == 0L && fullWidthHint == null && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank()) && captchaOk
+
+    // 学号变化：清除验证码状态，并载入该学号的冷却
+    LaunchedEffect(userId) { onUserIdChanged(userId) }
+    // 每张新图片（首次获取、点击刷新、验证码错误后重取）都清空已输入的验证码
+    LaunchedEffect(uiState.captchaImage) { captchaInput = "" }
 
     fun tryLogin() {
         focusManager.clearFocus()
-        if (canLogin) onLogin(userId, effectiveEcPassword, password)
+        if (canLogin) onLogin(userId, effectiveEcPassword, password, captchaCode)
     }
 
     Column(
@@ -236,6 +253,16 @@ private fun LandscapeManualLoginForm(
                         if (hasFullWidthChars(password)) Text("含全角字符 ${describeFullWidthChars(password)}，请用英文半角", fontSize = 12.sp)
                     },
                 )
+                uiState.captchaImage?.let { image ->
+                    CaptchaField(
+                        image = image,
+                        value = captchaInput,
+                        onValueChange = { captchaInput = it },
+                        onRefresh = { onLogin(userId, effectiveEcPassword, password, null) },
+                        enabled = !isLoading,
+                        refreshEnabled = !isLoading && cooldownSec == 0L,
+                    )
+                }
                 // ── 高级选项：VPN密码默认与教务密码相同，默认折叠 ──
                 Row(
                     modifier = Modifier
@@ -301,7 +328,7 @@ private fun LandscapeManualLoginForm(
         Spacer(Modifier.height(12.dp))
 
         Button(
-            onClick = { onLogin(userId, effectiveEcPassword, password) },
+            onClick = { onLogin(userId, effectiveEcPassword, password, captchaCode) },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = MaterialTheme.shapes.extraLarge, enabled = canLogin,
         ) {
@@ -312,6 +339,14 @@ private fun LandscapeManualLoginForm(
             } else {
                 Text("登录", style = MaterialTheme.typography.titleMedium)
             }
+        }
+        if (cooldownSec > 0L) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "请 $cooldownSec 秒后再试",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
 
         AnimatedVisibility(

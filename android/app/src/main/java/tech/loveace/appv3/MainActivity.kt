@@ -220,7 +220,8 @@ fun RibbonApp(
                 LandscapeLoginScreen(
                     uiState = authState,
                     rememberedCredentials = remembered,
-                    onLogin = { uid, ec, pwd -> authViewModel.login(uid, ec, pwd) },
+                    onLogin = { uid, ec, pwd, code -> authViewModel.login(uid, ec, pwd, code) },
+                    onUserIdChanged = { authViewModel.onUserIdChanged(it) },
                     onQuickLogin = { authViewModel.restoreSession() },
                     onSwitchUser = { authViewModel.clearSavedCredentials() },
                     onDismissPasswordChange = { authViewModel.dismissPasswordChange() },
@@ -229,7 +230,8 @@ fun RibbonApp(
                 LoginScreen(
                     uiState = authState,
                     rememberedCredentials = remembered,
-                    onLogin = { uid, ec, pwd -> authViewModel.login(uid, ec, pwd) },
+                    onLogin = { uid, ec, pwd, code -> authViewModel.login(uid, ec, pwd, code) },
+                    onUserIdChanged = { authViewModel.onUserIdChanged(it) },
                     onQuickLogin = { authViewModel.restoreSession() },
                     onSwitchUser = { authViewModel.clearSavedCredentials() },
                     onDismissPasswordChange = { authViewModel.dismissPasswordChange() },

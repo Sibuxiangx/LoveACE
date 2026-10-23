@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/services.dart' show SystemMouseCursors, TextCapitalization;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
@@ -28,12 +30,19 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
   bool _obscurePassword = true;
   bool _agreedToTerms = false;
   bool _rememberPassword = false;
+  final _captchaController = TextEditingController();
+
+  /// 每秒刷新一次，用于登录冷却倒计时
+  Timer? _cooldownTimer;
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.instance.trackScreen('登录');
     _loadRememberedCredentials();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   /// 加载记住的密码
@@ -47,6 +56,9 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
           _passwordController.text = remembered.password;
           _rememberPassword = true;
         });
+        // 预填学号后读取该学号的登录冷却
+        Provider.of<AuthProvider>(context, listen: false)
+            .loadCooldownFor(remembered.userId);
       }
     } catch (e) {
       // 加载失败时忽略，用户可以手动输入
@@ -55,9 +67,11 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _userIdController.dispose();
     _ecPasswordController.dispose();
     _passwordController.dispose();
+    _captchaController.dispose();
     super.dispose();
   }
 
@@ -118,6 +132,26 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
     );
   }
 
+  /// 学号变化：清除验证码输入与旧学号的验证码流程，并读取新学号的冷却
+  void _handleUserIdChanged(String value) {
+    _captchaController.clear();
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    authProvider.clearCaptchaState();
+    authProvider.loadCooldownFor(value.trim());
+  }
+
+  /// 点击验证码图片：重新获取验证码（不计失败）
+  Future<void> _handleRefreshCaptcha() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.state == AuthState.loading) return;
+    _captchaController.clear();
+    final error = await authProvider.refreshCaptcha();
+    if (!mounted) return;
+    if (error != null) {
+      _showErrorInfoBar(error);
+    }
+  }
+
   /// 处理登录逻辑
   Future<void> _handleLogin() async {
     // 验证表单
@@ -132,14 +166,15 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
       if (mounted) {
         // 学校强制改密拦截：给出改密指引而不是"会话已过期"
         final passwordChange = authProvider.passwordChangeRequired;
+        final captchaRelogin = authProvider.reloginCaptchaRequired;
         displayInfoBar(
           context,
           builder: (context, close) {
             return InfoBar(
-              title: Text(passwordChange ? '学校要求修改密码' : '会话已过期'),
+              title: Text(passwordChange ? '学校要求修改密码' : captchaRelogin ? '需要验证码' : '会话已过期'),
               content: Text(passwordChange
                   ? '这不是密码错误。请用浏览器登录学校教务系统（智慧校园/教务处），登录时会自动弹出“修改密码”页面，按提示完成修改。完成后回到本 App，用新密码重新登录即可。'
-                  : '请重新登录'),
+                  : captchaRelogin ? '学校要求输入验证码，请重新登录' : '请重新登录'),
               severity: InfoBarSeverity.warning,
               action: IconButton(
                 icon: const Icon(FluentIcons.clear),
@@ -152,13 +187,21 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
     };
 
     // 调用登录方法
+    // 验证码仅在图片显示时提交
+    final captchaImageBefore = authProvider.captchaImage;
     final success = await authProvider.login(
       userId: _userIdController.text.trim(),
       ecPassword: _ecPasswordController.text,
       password: _passwordController.text,
+      captchaCode: captchaImageBefore != null ? _captchaController.text : null,
     );
 
     if (!mounted) return;
+
+    // 验证码图片已变化（错误后自动刷新，或流程结束）时清空旧输入
+    if (!identical(captchaImageBefore, authProvider.captchaImage)) {
+      _captchaController.clear();
+    }
 
     if (success) {
       // 处理记住密码
@@ -273,6 +316,7 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
                           label: '学号',
                           child: TextBox(
                             controller: _userIdController,
+                            onChanged: _handleUserIdChanged,
                             placeholder: '请输入学号',
                             prefix: const Padding(
                               padding: EdgeInsets.only(left: 8),
@@ -310,6 +354,56 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
                         ),
                         const SizedBox(height: 16),
 
+                        // 验证码（学校要求时显示）
+                        Consumer<AuthProvider>(
+                          builder: (context, authProvider, child) {
+                            final captchaImage = authProvider.captchaImage;
+                            if (captchaImage == null) {
+                              return const SizedBox.shrink();
+                            }
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                InfoLabel(
+                                  label: '验证码',
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextBox(
+                                          controller: _captchaController,
+                                          placeholder: '请输入图中验证码',
+                                          autocorrect: false,
+                                          enableSuggestions: false,
+                                          textCapitalization: TextCapitalization.none,
+                                          onChanged: (_) => setState(() {}),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Tooltip(
+                                        message: '点击刷新验证码',
+                                        child: MouseRegion(
+                                          cursor: SystemMouseCursors.click,
+                                          child: GestureDetector(
+                                            onTap: authProvider.state == AuthState.loading
+                                                ? null
+                                                : _handleRefreshCaptcha,
+                                            child: Image.memory(
+                                              captchaImage,
+                                              height: 44,
+                                              fit: BoxFit.contain,
+                                              gaplessPlayback: true,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                            );
+                          },
+                        ),
                         // UAAP密码输入框
                         InfoLabel(
                           label: 'UAAP密码',
@@ -418,11 +512,15 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
                           builder: (context, authProvider, child) {
                             final isLoading =
                                 authProvider.state == AuthState.loading;
+                            final cooldownLeft = authProvider.cooldownSecondsLeft;
+                            final codeEmpty = authProvider.captchaImage != null &&
+                                _captchaController.text.trim().isEmpty;
+                            final disabled = isLoading ||
+                                !_agreedToTerms ||
+                                codeEmpty ||
+                                cooldownLeft > 0;
                             return FilledButton(
-                              onPressed:
-                                  (isLoading || !_agreedToTerms)
-                                      ? null
-                                      : _handleLogin,
+                              onPressed: disabled ? null : _handleLogin,
                               child: Padding(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
@@ -432,7 +530,11 @@ class _WinUILoginScreenState extends State<WinUILoginScreen> {
                                         width: 16,
                                         child: ProgressRing(strokeWidth: 2),
                                       )
-                                    : const Text('登录'),
+                                    : Text(
+                                        cooldownLeft > 0
+                                            ? '请 $cooldownLeft 秒后再试'
+                                            : '登录',
+                                      ),
                               ),
                             );
                           },

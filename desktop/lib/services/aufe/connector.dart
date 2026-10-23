@@ -9,6 +9,25 @@ import '../../utils/retry_handler.dart';
 import 'aufe_config.dart';
 import '../../services/logger_service.dart';
 
+/// EC 验证码待提交上下文：取图时的认证页参数（仅内存保存，单次有效，不得记录日志）
+class _EcAuthContext {
+  final String twfId;
+  final String csrfCode;
+  final String rsaKey;
+  final String rsaExp;
+  /// 学校是否要求验证码（RndImg == 1）
+  final bool rndImg;
+  final DateTime createdAt;
+
+  _EcAuthContext({
+    required this.twfId,
+    required this.csrfCode,
+    required this.rsaKey,
+    required this.rsaExp,
+    required this.rndImg,
+  }) : createdAt = DateTime.now();
+}
+
 /// AUFE教务系统连接类
 class AUFEConnection {
   final String userId;
@@ -22,6 +41,12 @@ class AUFEConnection {
   bool _ecLogged = false;
   bool _uaapLogged = false;
   DateTime _lastCheck = DateTime.now();
+
+  /// 验证码待提交上下文（取图时保存，提交后或过期即清除）
+  _EcAuthContext? _pendingCaptcha;
+
+  /// 验证码上下文有效期
+  static const Duration _captchaContextTtl = Duration(seconds: 180);
 
   // 配置常量
   static const String serverUrl = AUFEConnectorConstants.serverUrl;
@@ -62,10 +87,13 @@ class AUFEConnection {
   }
 
   /// EC系统登录（RSA加密）
-  Future<ECLoginStatus> ecLogin() async {
+  ///
+  /// [captchaCode] 为空表示尚未输入验证码：学校要求验证码时返回 captchaRequired 并附带图片，不提交密码。
+  /// 非空时使用最近一次取得图片时保存的认证上下文提交（单次有效）。
+  Future<ECLoginStatus> ecLogin({String? captchaCode}) async {
     try {
       return await RetryHandler.retry(
-        operation: () async => await _performEcLogin(),
+        operation: () async => await _performEcLogin(captchaCode),
         retryIf: RetryHandler.shouldRetryOnError,
         maxAttempts: 3,
       );
@@ -74,93 +102,207 @@ class AUFEConnection {
     }
   }
 
-  Future<ECLoginStatus> _performEcLogin() async {
+  Future<ECLoginStatus> _performEcLogin(String? captchaCode) async {
     try {
-      // 1. 获取认证参数
-      final response = await _client.get(
-        '$serverUrl/por/login_auth.csp?apiversion=1',
-      );
-      final responseText = response.data.toString();
-
-      // 2. 提取TwfID
-      final twfIdMatch = RegExp(
-        r'<TwfID>(.*?)</TwfID>',
-      ).firstMatch(responseText);
-      if (twfIdMatch == null) {
-        return ECLoginStatus(failNotFoundTwfid: true);
+      if (captchaCode != null && captchaCode.isNotEmpty) {
+        final pending = _takePendingCaptcha();
+        if (pending == null) {
+          // 无有效上下文：不提交，重新获取认证页与验证码
+          return await _startCaptchaChallenge();
+        }
+        // 上下文取出即失效（单次有效），无论提交结果如何都不复用
+        return await _finishEcLogin(await _submitEcLogin(pending, captchaCode));
       }
-      _twfId = twfIdMatch.group(1);
 
-      // 3. 提取RSA密钥
-      final rsaKeyMatch = RegExp(
-        r'<RSA_ENCRYPT_KEY>(.*?)</RSA_ENCRYPT_KEY>',
-      ).firstMatch(responseText);
-      if (rsaKeyMatch == null) {
-        return ECLoginStatus(failNotFoundRsaKey: true);
+      // 无验证码：先取认证页
+      _pendingCaptcha = null;
+      final page = await _fetchEcAuth();
+      if (page.failure != null) return page.failure!;
+      final auth = page.auth!;
+      if (auth.rndImg) {
+        // 学校要求验证码：不提交密码，直接取图片
+        return await _captchaChallenge(auth);
       }
-      final rsaKey = rsaKeyMatch.group(1)!;
-
-      // 4. 提取RSA指数
-      final rsaExpMatch = RegExp(
-        r'<RSA_ENCRYPT_EXP>(.*?)</RSA_ENCRYPT_EXP>',
-      ).firstMatch(responseText);
-      if (rsaExpMatch == null) {
-        return ECLoginStatus(failNotFoundRsaExp: true);
-      }
-      final rsaExp = rsaExpMatch.group(1)!;
-
-      // 5. 提取CSRF代码
-      final csrfMatch = RegExp(
-        r'<CSRF_RAND_CODE>(.*?)</CSRF_RAND_CODE>',
-      ).firstMatch(responseText);
-      if (csrfMatch == null) {
-        return ECLoginStatus(failNotFoundCsrfCode: true);
-      }
-      final csrfCode = csrfMatch.group(1)!;
-
-      // 6. RSA加密密码
-      final passwordToEncrypt = '${ecPassword}_$csrfCode';
-      final encryptedPassword = _rsaEncrypt(passwordToEncrypt, rsaKey, rsaExp);
-
-      // 7. 执行登录
-      final loginResponse = await _client.post(
-        '$serverUrl/por/login_psw.csp?anti_replay=1&encrypt=1&type=cs',
-        data: {
-          'svpn_rand_code': '',
-          'mitm': '',
-          'svpn_req_randcode': csrfCode,
-          'svpn_name': userId,
-          'svpn_password': encryptedPassword,
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: {'Cookie': 'TWFID=$_twfId'},
-        ),
-      );
-
-      final loginResponseText = loginResponse.data.toString();
-
-      // 8. 检查登录结果
-      if (loginResponseText.contains('<Result>1</Result>')) {
-        _client.setCookie('TWFID', _twfId!);
-        _ecLogged = true;
-        // 同步Cookie到无重定向客户端和简单客户端
-        _clientNoRedirect.copyCookiesFrom(_client);
-        _simpleClient.copyCookiesFromHTTPClient(_client.getAllCookies());
-        return ECLoginStatus(success: true);
-      } else if (loginResponseText.contains('Invalid username or password!')) {
-        return ECLoginStatus(failInvalidCredentials: true);
-      } else if (loginResponseText.contains('[CDATA[maybe attacked]]') ||
-          loginResponseText.contains('CAPTCHA required')) {
-        return ECLoginStatus(failMaybeAttacked: true);
-      } else {
-        return ECLoginStatus(failUnknownError: true);
-      }
+      return await _finishEcLogin(await _submitEcLogin(auth, null));
     } on DioException {
       return ECLoginStatus(failNetworkError: true);
     } catch (e) {
       return ECLoginStatus(failUnknownError: true);
     }
+  }
+
+  /// 取新的认证页与验证码（不提交密码）
+  Future<ECLoginStatus> _startCaptchaChallenge() async {
+    final page = await _fetchEcAuth();
+    if (page.failure != null) return page.failure!;
+    final auth = page.auth!;
+    if (!auth.rndImg) return ECLoginStatus(failUnknownError: true);
+    return await _captchaChallenge(auth);
+  }
+
+  /// 拉取验证码图片，并保存待提交上下文（图片与上下文绑定同一 TWFID）
+  Future<ECLoginStatus> _captchaChallenge(_EcAuthContext auth) async {
+    final image = await _fetchCaptchaImage(auth.twfId);
+    if (image.isEmpty) return ECLoginStatus(failUnknownError: true);
+    _pendingCaptcha = auth;
+    LoggerService.info('🖼️ 学校要求验证码，已获取验证码图片');
+    return ECLoginStatus(captchaRequired: true, captchaImage: image);
+  }
+
+  /// 提交结果为需要验证码时，重新取认证页与图片，保证 captchaRequired 总是附带图片
+  Future<ECLoginStatus> _finishEcLogin(ECLoginStatus status) async {
+    if (status.captchaRequired) return await _startCaptchaChallenge();
+    return status;
+  }
+
+  /// 取出待提交上下文：单次有效，过期视为不存在
+  _EcAuthContext? _takePendingCaptcha() {
+    final pending = _pendingCaptcha;
+    _pendingCaptcha = null;
+    if (pending == null) return null;
+    if (DateTime.now().difference(pending.createdAt) > _captchaContextTtl) {
+      return null;
+    }
+    return pending;
+  }
+
+  /// 获取验证码图片（GET /por/rand_code.csp，绑定认证页的 TWFID）
+  Future<Uint8List> _fetchCaptchaImage(String twfId) async {
+    final response = await _client.get(
+      '$serverUrl/por/rand_code.csp',
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: {'Cookie': 'TWFID=$twfId'},
+      ),
+    );
+    return Uint8List.fromList(response.data as List<int>);
+  }
+
+  /// 获取认证页参数（TwfID / RSA / CSRF / RndImg）
+  Future<({_EcAuthContext? auth, ECLoginStatus? failure})> _fetchEcAuth() async {
+    // 1. 获取认证参数
+    final response = await _client.get(
+      '$serverUrl/por/login_auth.csp?apiversion=1',
+    );
+    final responseText = response.data.toString();
+
+    // 2. 提取TwfID
+    final twfIdMatch = RegExp(
+      r'<TwfID>(.*?)</TwfID>',
+    ).firstMatch(responseText);
+    if (twfIdMatch == null) {
+      return (auth: null, failure: ECLoginStatus(failNotFoundTwfid: true));
+    }
+    final twfId = twfIdMatch.group(1)!;
+    _twfId = twfId;
+
+    // 3. 提取RSA密钥
+    final rsaKeyMatch = RegExp(
+      r'<RSA_ENCRYPT_KEY>(.*?)</RSA_ENCRYPT_KEY>',
+    ).firstMatch(responseText);
+    if (rsaKeyMatch == null) {
+      return (auth: null, failure: ECLoginStatus(failNotFoundRsaKey: true));
+    }
+    final rsaKey = rsaKeyMatch.group(1)!;
+
+    // 4. 提取RSA指数
+    final rsaExpMatch = RegExp(
+      r'<RSA_ENCRYPT_EXP>(.*?)</RSA_ENCRYPT_EXP>',
+    ).firstMatch(responseText);
+    if (rsaExpMatch == null) {
+      return (auth: null, failure: ECLoginStatus(failNotFoundRsaExp: true));
+    }
+    final rsaExp = rsaExpMatch.group(1)!;
+
+    // 5. 提取CSRF代码
+    final csrfMatch = RegExp(
+      r'<CSRF_RAND_CODE>(.*?)</CSRF_RAND_CODE>',
+    ).firstMatch(responseText);
+    if (csrfMatch == null) {
+      return (auth: null, failure: ECLoginStatus(failNotFoundCsrfCode: true));
+    }
+    final csrfCode = csrfMatch.group(1)!;
+
+    // 6. 是否需要图形验证码（RndImg=1）
+    final rndImgMatch = RegExp(r'<RndImg>(.*?)</RndImg>').firstMatch(responseText);
+    final rndImg = rndImgMatch?.group(1)?.trim() == '1';
+
+    return (
+      auth: _EcAuthContext(
+        twfId: twfId,
+        csrfCode: csrfCode,
+        rsaKey: rsaKey,
+        rsaExp: rsaExp,
+        rndImg: rndImg,
+      ),
+      failure: null,
+    );
+  }
+
+  /// 提交 login_psw（可携带验证码），并按协议顺序判定结果
+  Future<ECLoginStatus> _submitEcLogin(
+    _EcAuthContext auth,
+    String? captchaCode,
+  ) async {
+    final codeSubmitted = captchaCode != null && captchaCode.isNotEmpty;
+
+    // RSA加密密码
+    final passwordToEncrypt = '${ecPassword}_${auth.csrfCode}';
+    final encryptedPassword = _rsaEncrypt(
+      passwordToEncrypt,
+      auth.rsaKey,
+      auth.rsaExp,
+    );
+
+    // 执行登录（验证码仅在此处发送，且不记录日志）
+    final loginResponse = await _client.post(
+      '$serverUrl/por/login_psw.csp?anti_replay=1&encrypt=1&type=cs',
+      data: {
+        'svpn_rand_code': captchaCode ?? '',
+        'mitm': '',
+        'svpn_req_randcode': auth.csrfCode,
+        'svpn_name': userId,
+        'svpn_password': encryptedPassword,
+      },
+      options: Options(
+        contentType: Headers.formUrlEncodedContentType,
+        headers: {'Cookie': 'TWFID=${auth.twfId}'},
+      ),
+    );
+
+    final loginResponseText = loginResponse.data.toString();
+
+    // 检查登录结果：成功 → 验证码 → 密码错误 → 未知
+    if (loginResponseText.contains('<Result>1</Result>')) {
+      _twfId = auth.twfId;
+      _client.setCookie('TWFID', auth.twfId);
+      _ecLogged = true;
+      // 同步Cookie到无重定向客户端和简单客户端
+      _clientNoRedirect.copyCookiesFrom(_client);
+      _simpleClient.copyCookiesFromHTTPClient(_client.getAllCookies());
+      return ECLoginStatus(success: true);
+    }
+
+    final captchaChallenge = loginResponseText.contains('20023') ||
+        loginResponseText.contains('CAPTCHA required') ||
+        loginResponseText.contains('characters are incorrect');
+    final maybeAttacked = loginResponseText.contains('20041') ||
+        loginResponseText.contains('maybe attacked') ||
+        loginResponseText.contains('[CDATA[maybe attacked]]');
+    if (captchaChallenge || maybeAttacked) {
+      if (codeSubmitted && captchaChallenge) {
+        return ECLoginStatus(captchaInvalid: true);
+      }
+      // 无图片：由调用方经 _finishEcLogin 重新取图
+      return ECLoginStatus(captchaRequired: true);
+    }
+
+    if (loginResponseText.contains('Invalid username or password!') ||
+        loginResponseText.contains('20004')) {
+      return ECLoginStatus(failInvalidCredentials: true);
+    }
+
+    return ECLoginStatus(failUnknownError: true);
   }
 
   /// RSA加密
@@ -260,6 +402,7 @@ class AUFEConnection {
       // 检查是否登录失败（用户名或密码错误）
       if (loginResponseText.contains('Invalid username or password') ||
           loginResponseText.contains('用户名或密码错误') ||
+          loginResponseText.contains('密码输入错误') ||
           loginResponseText.contains('errorMsg')) {
         return UAAPLoginStatus(failInvalidCredentials: true);
       }
@@ -399,6 +542,7 @@ class AUFEConnection {
 
   /// 关闭连接
   Future<void> close() async {
+    _pendingCaptcha = null;
     _client.close();
     _clientNoRedirect.close();
     _simpleClient.close();

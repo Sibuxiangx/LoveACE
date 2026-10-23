@@ -1,6 +1,7 @@
 package tech.loveace.appv3.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,8 +16,10 @@ import kotlinx.coroutines.launch
 import tech.loveace.appv3.analytics.Analytics
 import tech.loveace.appv3.data.local.CredentialStore
 import tech.loveace.appv3.data.local.ScheduleStore
+import tech.loveace.appv3.data.model.ECLoginStatus
 import tech.loveace.appv3.data.model.UserCredentials
 import tech.loveace.appv3.data.network.AUFEConnection
+import tech.loveace.appv3.util.hasFullWidthChars
 import tech.loveace.appv3.data.service.*
 
 enum class AuthState { Initial, Loading, Authenticated, Unauthenticated, Error }
@@ -27,7 +30,33 @@ data class AuthUiState(
     val userId: String = "",
     /** 学校 UAAP/CAS 强制改密拦截（不是密码错误：不清凭据、不计密码失败、不自动重试） */
     val passwordChangeRequired: Boolean = false,
+    /** 学校要求的验证码图片（GIF 原始字节）；非 null 时登录页显示验证码输入行 */
+    val captchaImage: ByteArray? = null,
+    /** 当前学号的登录冷却截止时刻（epoch ms）；不大于当前时间表示无冷却 */
+    val cooldownUntil: Long = 0L,
 )
+
+/**
+ * 登录失败冷却阶梯（按累计失败次数）：
+ * 第 1 次无冷却，第 2 次 30 秒，第 3 次 120 秒，第 4 次及以后 600 秒。
+ */
+internal fun loginCooldownMillis(failures: Int): Long = when {
+    failures <= 1 -> 0L
+    failures == 2 -> 30_000L
+    failures == 3 -> 120_000L
+    else -> 600_000L
+}
+
+/** 等待验证码提交的登录会话：连接对象内保存单次使用的认证上下文，凭据用于判断是否可复用 */
+private class CaptchaSession(
+    val connection: AUFEConnection,
+    val userId: String,
+    val ecPassword: String,
+    val password: String,
+) {
+    fun matches(userId: String, ecPassword: String, password: String): Boolean =
+        this.userId == userId && this.ecPassword == ecPassword && this.password == password
+}
 
 /**
  * 认证 ViewModel
@@ -38,6 +67,11 @@ data class AuthUiState(
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val credentialStore = CredentialStore(application)
+
+    private val loginPrefs = application.getSharedPreferences(LOGIN_PREFS_NAME, Context.MODE_PRIVATE)
+
+    /** 等待验证码提交的登录会话（同一连接，保证验证码的认证上下文可用） */
+    private var captchaSession: CaptchaSession? = null
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -75,24 +109,64 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     // ==================== Login ====================
 
-    fun login(userId: String, ecPassword: String, password: String) {
+    /**
+     * 登录（用户主动操作）。
+     * - 冷却期内不触网，仅更新冷却状态。
+     * - [captchaCode] 为 null：首次登录；学校要求验证码时返回图片并等待输入（不计失败）。
+     * - [captchaCode] 非空：在同一连接（同一认证上下文）上提交验证码。
+     */
+    fun login(userId: String, ecPassword: String, password: String, captchaCode: String? = null) {
+        val now = System.currentTimeMillis()
+        val cooldownUntil = loadCooldownUntil(userId)
+        if (cooldownUntil > now) {
+            _uiState.value = _uiState.value.copy(cooldownUntil = cooldownUntil)
+            return
+        }
+        val code = captchaCode?.trim()
+        if (code != null && hasFullWidthChars(code)) {
+            _uiState.value = _uiState.value.copy(errorMessage = "验证码含全角字符，请用英文半角")
+            return
+        }
         viewModelScope.launch {
-            _uiState.value = AuthUiState(state = AuthState.Loading)
+            val session = captchaSession
+            captchaSession = null
+            // 仅当验证码非空且凭据未变时复用连接，否则视为新登录（验证码上下文不存在则会重新取图）
+            val reusable = session?.takeIf { !code.isNullOrEmpty() && it.matches(userId, ecPassword, password) }
+            _uiState.value = AuthUiState(
+                state = AuthState.Loading,
+                captchaImage = _uiState.value.captchaImage,
+                cooldownUntil = cooldownUntil,
+            )
             try {
-                val conn = AUFEConnection(userId, ecPassword, password)
-                conn.startClient()
+                val conn = reusable?.connection ?: AUFEConnection(userId, ecPassword, password).also { it.startClient() }
 
                 // EC (VPN) login
-                val ecResult = conn.ecLogin()
+                val ecResult = conn.ecLogin(code)
                 if (!ecResult.success) {
-                    val msg = when {
-                        ecResult.failInvalidCredentials -> "VPN 账号或密码错误"
-                        ecResult.failMaybeAttacked -> "登录过于频繁，请稍后再试"
-                        ecResult.failNetworkError -> "网络连接失败"
-                        else -> "VPN 登录失败"
+                    val image = ecResult.captchaImage
+                    if (ecResult.failCaptchaRequired && image != null) {
+                        publishCaptchaRequired(conn, userId, ecPassword, password, image, CAPTCHA_REQUIRED_MESSAGE)
+                        return@launch
                     }
+                    if (ecResult.failCaptchaInvalid) {
+                        // 验证码错误：计失败，并在同一连接上立即获取新图片（不提交密码）
+                        recordLoginFailure(userId)
+                        Analytics.trackLoginFailed(userId, "验证码错误")
+                        val retry = conn.ecLogin(null)
+                        val retryImage = retry.captchaImage
+                        if (retry.failCaptchaRequired && retryImage != null) {
+                            publishCaptchaRequired(conn, userId, ecPassword, password, retryImage, "验证码错误，请重新输入")
+                        } else {
+                            val msg = ecFailureMessage(retry)
+                            Analytics.trackLoginFailed(userId, msg)
+                            publishLoginState(userId, AuthState.Error, errorMessage = msg)
+                        }
+                        return@launch
+                    }
+                    if (ecResult.failInvalidCredentials) recordLoginFailure(userId)
+                    val msg = ecFailureMessage(ecResult)
                     Analytics.trackLoginFailed(userId, msg)
-                    _uiState.value = AuthUiState(state = AuthState.Error, errorMessage = msg)
+                    publishLoginState(userId, AuthState.Error, errorMessage = msg)
                     return@launch
                 }
 
@@ -104,7 +178,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         // 不是密码错误：不清凭据、不计密码失败、不自动重试，本次会话作废
                         Log.w(TAG, "🏫 Password change required for $userId")
                         Analytics.trackLoginFailed(userId, "password_change_required")
-                        _uiState.value = AuthUiState(state = AuthState.Error, passwordChangeRequired = true)
+                        publishLoginState(userId, AuthState.Error, passwordChangeRequired = true)
                         return@launch
                     }
                     val msg = when {
@@ -112,8 +186,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         uaapResult.failNetworkError -> "网络连接失败"
                         else -> "UAAP 登录失败"
                     }
+                    if (uaapResult.failInvalidCredentials) recordLoginFailure(userId)
                     Analytics.trackLoginFailed(userId, msg)
-                    _uiState.value = AuthUiState(state = AuthState.Error, errorMessage = msg)
+                    publishLoginState(userId, AuthState.Error, errorMessage = msg)
                     return@launch
                 }
 
@@ -121,6 +196,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 initServices(conn)
                 wireSessionExpiredHandler(conn)
                 startHeartbeat()
+                resetLoginFailures(userId)
 
                 // 始终保存凭证（用于会话恢复和快速登录）
                 credentialStore.save(UserCredentials(userId, ecPassword, password))
@@ -136,6 +212,74 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    /**
+     * 进入验证码等待态。状态使用 Initial 而非 Error/Unauthenticated：后两者会触发导航回登录页，
+     * 导致用户已输入的学号、密码和验证码被重置。
+     */
+    private fun publishCaptchaRequired(
+        conn: AUFEConnection,
+        userId: String,
+        ecPassword: String,
+        password: String,
+        image: ByteArray,
+        message: String,
+    ) {
+        captchaSession = CaptchaSession(conn, userId, ecPassword, password)
+        publishLoginState(userId, AuthState.Initial, errorMessage = message, captchaImage = image)
+    }
+
+    /** 统一发布登录相关状态；冷却截止时刻从持久化存储读取 */
+    private fun publishLoginState(
+        userId: String,
+        state: AuthState,
+        errorMessage: String? = null,
+        captchaImage: ByteArray? = null,
+        passwordChangeRequired: Boolean = false,
+    ) {
+        _uiState.value = AuthUiState(
+            state = state,
+            errorMessage = errorMessage,
+            passwordChangeRequired = passwordChangeRequired,
+            captchaImage = captchaImage,
+            cooldownUntil = loadCooldownUntil(userId),
+        )
+    }
+
+    /** 用户切换学号（或进入登录页）：清除验证码状态，并载入该学号的持久化冷却 */
+    fun onUserIdChanged(userId: String) {
+        captchaSession = null
+        _uiState.value = _uiState.value.copy(captchaImage = null, cooldownUntil = loadCooldownUntil(userId))
+    }
+
+    private fun ecFailureMessage(status: ECLoginStatus): String = when {
+        status.failInvalidCredentials -> "VPN 账号或密码错误"
+        status.failNetworkError -> "网络连接失败"
+        else -> "VPN 登录失败"
+    }
+
+    /** 计入一次失败（密码错误 / 验证码错误），按阶梯写入冷却截止时刻 */
+    private fun recordLoginFailure(userId: String) {
+        val failures = loginPrefs.getInt(failuresKey(userId), 0) + 1
+        val until = System.currentTimeMillis() + loginCooldownMillis(failures)
+        loginPrefs.edit()
+            .putInt(failuresKey(userId), failures)
+            .putLong(cooldownKey(userId), until)
+            .apply()
+    }
+
+    private fun resetLoginFailures(userId: String) {
+        loginPrefs.edit()
+            .remove(failuresKey(userId))
+            .remove(cooldownKey(userId))
+            .apply()
+    }
+
+    private fun loadCooldownUntil(userId: String): Long = loginPrefs.getLong(cooldownKey(userId), 0L)
+
+    private fun failuresKey(userId: String) = "failures_$userId"
+
+    private fun cooldownKey(userId: String) = "cooldown_until_$userId"
 
     // ==================== Session Restore ====================
 
@@ -153,6 +297,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
                 val ecResult = conn.ecLogin()
                 if (!ecResult.success) {
+                    if (ecResult.failCaptchaRequired) {
+                        // 快速登录无法人工输入验证码：回到登录页（预填已保存账号）并提示，不清凭据
+                        Log.w(TAG, "🔐 Captcha required on session restore")
+                        _uiState.value = AuthUiState(state = AuthState.Unauthenticated, errorMessage = CAPTCHA_RELOGIN_MESSAGE)
+                        return@launch
+                    }
                     Analytics.trackLoginFailed(creds.userId, "VPN 登录失败")
                     _uiState.value = AuthUiState(state = AuthState.Unauthenticated)
                     return@launch
@@ -194,6 +344,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         stopHeartbeat()
+        captchaSession = null
         viewModelScope.launch {
             connection?.close()
             clearServices()
@@ -281,6 +432,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { conn.close() }
                 clearServices()
                 _uiState.value = AuthUiState(state = AuthState.Error, passwordChangeRequired = true)
+            } else if (conn.lastEcCaptchaRequired) {
+                // 自动重连无法人工输入验证码：停止重连，保留凭据（供登录页预填），回到登录页提示
+                Log.w(TAG, "🔐 Captcha required, stop reconnecting")
+                Analytics.trackSessionReconnectFailed()
+                stopHeartbeat()
+                runCatching { conn.close() }
+                clearServices()
+                _uiState.value = AuthUiState(state = AuthState.Unauthenticated, errorMessage = CAPTCHA_RELOGIN_MESSAGE)
             } else {
                 Log.e(TAG, "❌ Auto-reconnect failed, user needs to re-login")
                 Analytics.trackSessionReconnectFailed()
@@ -335,5 +494,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val TAG = "AuthViewModel"
         private const val HEARTBEAT_INTERVAL_MS = 4 * 60 * 1000L // 4 minutes
+        private const val LOGIN_PREFS_NAME = "login_throttle"
+        private const val CAPTCHA_REQUIRED_MESSAGE = "学校要求输入验证码"
+        private const val CAPTCHA_RELOGIN_MESSAGE = "学校要求输入验证码，请重新登录"
     }
 }

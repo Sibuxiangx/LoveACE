@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// EC登录状态
 class ECLoginStatus {
   final bool success;
@@ -6,7 +8,12 @@ class ECLoginStatus {
   final bool failNotFoundRsaExp;
   final bool failNotFoundCsrfCode;
   final bool failInvalidCredentials;
-  final bool failMaybeAttacked;
+  /// 学校要求输入验证码（RndImg=1 或 EC 20041 路径），[captchaImage] 同时携带图片
+  final bool captchaRequired;
+  /// 验证码提交后被判定错误（EC 20023）
+  final bool captchaInvalid;
+  /// 验证码图片字节（仅 captchaRequired 时存在）
+  final Uint8List? captchaImage;
   final bool failNetworkError;
   final bool failUnknownError;
 
@@ -17,7 +24,9 @@ class ECLoginStatus {
     this.failNotFoundRsaExp = false,
     this.failNotFoundCsrfCode = false,
     this.failInvalidCredentials = false,
-    this.failMaybeAttacked = false,
+    this.captchaRequired = false,
+    this.captchaInvalid = false,
+    this.captchaImage,
     this.failNetworkError = false,
     this.failUnknownError = false,
   });
@@ -31,7 +40,8 @@ class ECLoginStatus {
     if (failNotFoundRsaExp) return '未找到RSA指数';
     if (failNotFoundCsrfCode) return '未找到CSRF代码';
     if (failInvalidCredentials) return '用户名或密码错误';
-    if (failMaybeAttacked) return '可能受到攻击或需要验证码';
+    if (captchaRequired) return '学校要求输入验证码';
+    if (captchaInvalid) return '验证码错误，请重新输入';
     if (failNetworkError) return '网络连接错误';
     if (failUnknownError) return '未知错误';
     return '';
