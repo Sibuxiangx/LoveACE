@@ -52,6 +52,15 @@
 ## Pre-login notice
 - `AnnouncementService.fetchPreloginNotice()` reads the optional top-level `prelogin_notice` field of manifest v2; `LoginView` renders the banner below the brand header and must stay silent on fetch failure. Desktop ignores this field.
 
+## Login captcha and cooldown
+
+- `AUFEConnection.ecLogin(captchaCode:)` is the only EC entry point. Without a code it returns `captchaRequired` with `captchaImage` when the auth page has `<RndImg>1</RndImg>` or the POST answers 20041. With a code it must reuse the actor's pending auth context (single-use, 180 s); a 20023 answer is `captchaInvalid`, which counts as a failure and triggers a fresh challenge.
+- `AuthViewModel` keeps the connection that issued the challenge while credentials are unchanged; a changed userId or password starts a new connection.
+- `LoginThrottle` (in `AuthViewModel.swift`) stores UserDefaults keys `login_throttle.failures.<userId>` and `login_throttle.cooldown_until.<userId>`. The ladder is 1 → none, 2 → 30 s, 3 → 120 s, ≥4 → 600 s; success clears both keys. Only wrong-password and captcha-invalid count; network errors and captcha prompts do not.
+- Auto-reconnect and `restoreSession` that hit a captcha keep the saved credentials and return to the login screen with "学校要求输入验证码，请重新登录". Do not clear credentials on that path.
+- Do not map 20041 back to "登录频繁"; it means captcha required.
+- Full-width checks live in `Util/TextValidation.swift`. Keep them aligned with Android `util/TextValidation.kt` and desktop `utils/text_validation.dart`.
+
 ## Git/artifact quirks
 - `.gitignore` ignores `build/`, `DerivedData/`, `*.xcarchive`, `*.ipa`, `*.dSYM`, SPM build folders, and Xcode user state.
 - `build/` was previously tracked; treat staged deletions or ignored archives as artifacts and do not restore or commit them unless the user explicitly requests it.
