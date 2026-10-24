@@ -26,6 +26,7 @@
 - Single Android module: `:app`; package root is `tech.loveace.appv3`.
 - Compose entrypoint is `MainActivity.kt` / `RibbonApp`. Type-safe routes are in `ui/navigation/AppNavigation.kt`.
 - Portrait bottom-nav shell is `ui/screen/MainShell.kt`; landscape navigation is `ui/screen/landscape/LandscapeShell.kt`. User-facing features that belong in “More/教务服务” usually need both portrait and landscape entry points.
+- Landscape nav items are mapped by array index in `LandscapeShell`'s `when (selectedIndex)`. Inserting or removing an item means shifting every index after it in the same edit (for example “开课查询” is index 5, “我的” is 13).
 - Services are manually created in `AuthViewModel.initServices()` and cleared in `clearServices()`. New authenticated features normally add a `data/service/*Service`, `ui/viewmodel/*ViewModel`, screen(s), route, and an `AuthViewModel` service property.
 
 ## Network/session conventions
@@ -38,6 +39,7 @@
 - The captcha-waiting state uses `AuthState.Initial`, not `Error` or `Unauthenticated`: `MainActivity` navigates on those states and would reset the typed input. Auto-reconnect and session restore that need a captcha keep saved credentials and show "学校要求输入验证码，请重新登录".
 - `HttpClient` only supplies a default mobile UA when a request did not set `User-Agent`; service-specific UA headers are intentional.
 - JWC endpoints use the VPN host `http://jwcxk2-aufe-edu-cn.vpn2.aufe.edu.cn:8118`; keep historical field spellings from upstream APIs, including `coureSequenceNumber`.
+- 开课查询 (`CourseScheduleService.queryPage` + `CourseScheduleViewModel`, `ui/screen/CourseSchedule*.kt`) is a paged endpoint. `courseInfo` is requested with `PAGE_SIZE = 20`, and the next page loads only when the list nears its end. Never fetch a whole term in one go. The term list and the dropdown options come from the same `courseSchdule/index` page. If the page has no `select` for a dimension, that filter group is hidden. Records are de-duplicated by `courseRecordKey` across pages.
 - Auto teacher evaluation (`TeacherEvaluationService`/`TeacherEvaluationViewModel`) mirrors iOS/desktop behavior: first-visit protection wait (`TeacherEvaluationIndexProtection`, infoTime+5s), one immediate retry with a refreshed index token, verify-before-fail fallback, and one post-batch compensation round. Keep the three platforms consistent when touching it.
 
 ## Remote config

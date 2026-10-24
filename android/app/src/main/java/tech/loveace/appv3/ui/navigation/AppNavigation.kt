@@ -20,6 +20,7 @@ import kotlinx.serialization.Serializable
 @Serializable object CompetitionRoute
 @Serializable object ScheduleRoute
 @Serializable object SemesterScheduleRoute
+@Serializable object CourseScheduleRoute
 @Serializable object PlanRoute
 @Serializable object QRScanRoute
 @Serializable object RepairRoute
