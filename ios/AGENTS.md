@@ -64,3 +64,9 @@
 ## Git/artifact quirks
 - `.gitignore` ignores `build/`, `DerivedData/`, `*.xcarchive`, `*.ipa`, `*.dSYM`, SPM build folders, and Xcode user state.
 - `build/` was previously tracked; treat staged deletions or ignored archives as artifacts and do not restore or commit them unless the user explicitly requests it.
+
+## Course schedule query and free classroom (iOS)
+- Services: `Service/CourseScheduleService.swift` (`loadIndex`, `queryPage`, page size 20; record id uses the same 8-field key as Android `courseRecordKey`) and `Service/FreeClassroomService.swift` with pure rules in `Service/FreeClassroomRules.swift`. Endpoints and rules mirror Android `CourseScheduleService` and `FreeClassroomService`; change both platforms together.
+- The free-classroom search only returns status 01 rooms, so it supplies the free set. Results show every room of the scoped buildings grouped by floor, loaded from `classroomJson` and cached per building in the view model; stopped buildings and rooms with status 02/03 are hidden unless "显示停用教室" is on (`free_classroom.show_stopped` in UserDefaults).
+- School JSON fields may be numbers or strings: use `jsonInt`, `jsonText`, `jsonObjectArray` from `Util/JSONFlex.swift`, not `as? Int`.
+- Liquid Glass: use `compatGlassProminentButtonStyle()` only for floating primary actions. List rows and detail content stay on system materials.

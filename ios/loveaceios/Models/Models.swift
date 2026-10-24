@@ -653,7 +653,7 @@ struct ActivityDetail {
 // MARK: - Course Schedule Models
 
 struct CourseScheduleRecord: Codable, Identifiable {
-    var id: String { "\(kch ?? "")_\(kxh ?? "")_\(skxq ?? 0)_\(skjc ?? 0)" }
+    var id: String { [kch ?? "", kxh ?? "", String(skxq ?? 0), String(skjc ?? 0), String(cxjc ?? 0), skzc ?? "", jxlm ?? "", jasm ?? ""].joined(separator: "|") }
     let kch: String?
     let kxh: String?
     let kcm: String?

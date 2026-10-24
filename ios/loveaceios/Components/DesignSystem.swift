@@ -130,6 +130,15 @@ extension View {
             self
         }
     }
+    /// iOS 26 液态玻璃主按钮；低版本回退为 borderedProminent。
+    @ViewBuilder
+    func compatGlassProminentButtonStyle() -> some View {
+        if #available(iOS 26, *) {
+            self.buttonStyle(.glassProminent)
+        } else {
+            self.buttonStyle(.borderedProminent)
+        }
+    }
 }
 
 // MARK: - Compat Glass Container

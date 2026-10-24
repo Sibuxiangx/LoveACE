@@ -16,18 +16,24 @@ struct MoreView: View {
         ("教师评价", "checklist.checked", .purple, "teacherEvaluation"),
         ("竞赛信息", "trophy.fill", .orange, "competition"),
         ("劳动俱乐部", "figure.walk", .pink, "labor"),
+        ("开课查询", "book.closed.fill", .indigo, "courseSchedule"),
+        ("空教室", "building.2.fill", .cyan, "freeClassroom"),
     ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                CompatGlassContainer {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                        ForEach(features, id: \.tag) { feature in
-                            NavigationLink { destinationView(for: feature.tag) } label: {
-                                FeatureCard(title: feature.title, icon: feature.icon, tint: feature.tint)
+                // 非懒加载的两列行：功能数量少，全部直接布局，避免懒加载网格漏画后半部分
+                VStack(spacing: 12) {
+                    ForEach(0..<(features.count + 1) / 2, id: \.self) { row in
+                        HStack(spacing: 12) {
+                            ForEach(features.dropFirst(row * 2).prefix(2), id: \.tag) { feature in
+                                NavigationLink { destinationView(for: feature.tag) } label: {
+                                    FeatureCard(title: feature.title, icon: feature.icon, tint: feature.tint)
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -52,6 +58,8 @@ struct MoreView: View {
         case "teacherEvaluation": TeacherEvaluationView()
         case "competition": CompetitionView()
         case "labor": LaborClubView()
+        case "courseSchedule": CourseScheduleQueryView()
+        case "freeClassroom": FreeClassroomView()
         default: EmptyView()
         }
     }

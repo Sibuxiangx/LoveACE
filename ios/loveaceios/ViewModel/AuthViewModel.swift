@@ -93,6 +93,7 @@ final class AuthViewModel {
     private(set) var competitionService: CompetitionService?
     private(set) var studentScheduleService: StudentScheduleService?
     private(set) var courseScheduleService: CourseScheduleService?
+    private(set) var freeClassroomService: FreeClassroomService?
     private(set) var planService: PlanService?
     private(set) var repairService: RepairService?
     private(set) var teacherEvaluationService: TeacherEvaluationService?
@@ -438,6 +439,7 @@ final class AuthViewModel {
         competitionService = CompetitionService(connection: conn)
         studentScheduleService = StudentScheduleService(connection: conn)
         courseScheduleService = CourseScheduleService(connection: conn)
+        freeClassroomService = FreeClassroomService(connection: conn)
         planService = PlanService(connection: conn)
         repairService = RepairService(connection: conn)
         teacherEvaluationService = TeacherEvaluationService(connection: conn)
@@ -448,5 +450,6 @@ final class AuthViewModel {
         aacService = nil; laborClubService = nil; competitionService = nil
         studentScheduleService = nil; courseScheduleService = nil; planService = nil; repairService = nil
         teacherEvaluationService = nil
+        freeClassroomService = nil
     }
 }
