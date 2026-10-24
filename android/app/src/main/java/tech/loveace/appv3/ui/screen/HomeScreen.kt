@@ -164,27 +164,52 @@ fun HomeScreen(
                 }
             }
 
-            // ── 学业数据 ──
+            // ── 学业数据：2 列网格，与下方卡片列对齐 ──
             val info = academicState.academicInfo
             if (info != null) {
-                // 学业 hero：绩点、排名、均分、排名进度
                 item {
-                    AcademicOverviewCard(info, Modifier.padding(horizontal = 16.dp))
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        RibbonSectionTitle("学业", modifier = Modifier.padding(top = 12.dp, bottom = 10.dp))
+                    }
                 }
-
-                // 本学期课程 / 已修 / 不及格：一行三列
                 item {
-                    CourseCountsCard(info, Modifier.padding(horizontal = 16.dp))
+                    Row(
+                        Modifier.padding(horizontal = 16.dp).height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        GpaHeroCard(info, Modifier.weight(1f))
+                        CourseHeroCard(info, Modifier.weight(1f))
+                    }
+                }
+                item {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp).height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        StatCard(
+                            label = "已修课程",
+                            value = "${info.completedCourses}",
+                            icon = Icons.Default.CheckCircle,
+                            variant = RibbonCardVariant.PRIMARY_CONTAINER,
+                            modifier = Modifier.weight(1f),
+                        )
+                        val hasFailures = info.failedCourses > 0
+                        StatCard(
+                            label = "不及格",
+                            value = "${info.failedCourses}",
+                            icon = if (hasFailures) Icons.Default.Error else Icons.Default.Verified,
+                            variant = if (hasFailures) RibbonCardVariant.ERROR_CONTAINER else RibbonCardVariant.TERTIARY_CONTAINER,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             } else if (academicState.isLoading) {
                 item {
-                    Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                        AppCircularProgressIndicator(modifier = Modifier.size(32.dp))
-                    }
+                    BentoLoadingCard(Modifier.padding(horizontal = 16.dp).fillMaxWidth())
                 }
             }
 
-            // ── 一卡通 + 爱安财：并排等高 ──
+            // ── 一卡通 + 爱安财：与上方同一网格 ──
             val balance = yktState.balance
             val aacInfo = aacState.creditInfo
             if (balance != null || aacInfo != null || yktState.isLoading || aacState.isLoading) {
@@ -194,54 +219,47 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         when {
-                            balance != null -> BentoCard(
-                                title = "一卡通",
-                                badgeShape = RibbonShape.CLOVER_4,
-                                badgeIcon = Icons.Default.CreditCard,
+                            balance != null -> StatCard(
+                                label = "一卡通",
+                                value = "¥ ${"%.2f".format(balance.balance)}",
+                                icon = Icons.Default.CreditCard,
+                                variant = RibbonCardVariant.SECONDARY_CONTAINER,
                                 modifier = Modifier.weight(1f),
+                                compact = true,
                                 interactive = true,
                                 onClick = { onNavigateToDetail(YKTRoute) },
-                            ) {
-                                Text(
-                                    "¥ ${"%.2f".format(balance.balance)}",
-                                    style = RibbonNumeric.Medium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                Text(
-                                    "卡片余额",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                                footer = {
+                                    Text("卡片余额", style = MaterialTheme.typography.bodySmall)
+                                },
+                            )
                             yktState.isLoading -> BentoLoadingCard(Modifier.weight(1f))
                             else -> Spacer(Modifier.weight(1f))
                         }
                         when {
-                            aacInfo != null -> BentoCard(
-                                title = "爱安财",
-                                badgeShape = RibbonShape.COOKIE_8,
-                                badgeIcon = Icons.Default.VolunteerActivism,
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text(
-                                    "${"%.1f".format(aacInfo.totalScore)} / 10",
-                                    style = RibbonNumeric.Medium,
-                                )
-                                Text(
-                                    "毕业要求总分",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                RibbonChip(
-                                    if (aacInfo.isTypeAdopt) "已达标" else "未达标",
-                                    tone = if (aacInfo.isTypeAdopt) RibbonTone.SUCCESS else RibbonTone.WARNING,
-                                    icon = if (aacInfo.isTypeAdopt) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                )
-                                AppLinearProgressIndicator(
-                                    progress = { (aacInfo.totalScore / 10.0).toFloat().coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth().height(6.dp),
-                                    color = if (aacInfo.isTypeAdopt) LocalExtendedColors.current.success else MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            aacInfo != null -> {
+                                val passed = aacInfo.isTypeAdopt
+                                val variant = if (passed) RibbonCardVariant.SUCCESS_CONTAINER else RibbonCardVariant.WARNING_CONTAINER
+                                StatCard(
+                                    label = "爱安财",
+                                    value = "%.1f".format(aacInfo.totalScore),
+                                    icon = Icons.Default.VolunteerActivism,
+                                    variant = variant,
+                                    modifier = Modifier.weight(1f),
+                                    compact = true,
+                                    footer = {
+                                        Text("毕业要求 / 10 分", style = MaterialTheme.typography.bodySmall)
+                                        RibbonChip(
+                                            if (passed) "已达标" else "未达标",
+                                            tone = if (passed) RibbonTone.SUCCESS else RibbonTone.WARNING,
+                                            icon = if (passed) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                        )
+                                        AppLinearProgressIndicator(
+                                            progress = { (aacInfo.totalScore / 10.0).toFloat().coerceIn(0f, 1f) },
+                                            modifier = Modifier.fillMaxWidth().height(6.dp),
+                                            color = ribbonContentColor(variant),
+                                            trackColor = ribbonContentColor(variant).copy(alpha = 0.2f),
+                                        )
+                                    },
                                 )
                             }
                             aacState.isLoading -> BentoLoadingCard(Modifier.weight(1f))
@@ -254,132 +272,116 @@ fun HomeScreen(
     }
 }
 
-/** 学业 hero：绩点、排名标签、均分一行、排名进度；排名只在标签里出现一次 */
+/** 绩点大卡：环形进度 + 绩点，下方排名标签与均分（MD bento 大卡）。 */
 @Composable
-private fun AcademicOverviewCard(info: AcademicInfo, modifier: Modifier = Modifier) {
+private fun GpaHeroCard(info: AcademicInfo, modifier: Modifier = Modifier) {
     RibbonCard(
-        modifier = modifier.fillMaxWidth(),
-        variant = RibbonCardVariant.PRIMARY_CONTAINER,
+        modifier = modifier.fillMaxHeight(),
+        variant = RibbonCardVariant.SURFACE_LOW,
         radius = 32.dp,
-        padding = PaddingValues(22.dp),
+        padding = PaddingValues(20.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(contentAlignment = Alignment.Center) {
-                    AppCircularProgressIndicator(
-                        progress = { (info.gpa / 5.0).toFloat().coerceIn(0f, 1f) },
-                        modifier = Modifier.size(78.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    )
+        Column(
+            Modifier.fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                AppCircularProgressIndicator(
+                    progress = { (info.gpa / 5.0).toFloat().coerceIn(0f, 1f) },
+                    modifier = Modifier.size(112.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("%.2f".format(info.gpa), style = RibbonNumeric.Large, color = MaterialTheme.colorScheme.primary)
-                }
-                Spacer(Modifier.width(18.dp))
-                Text("绩点 / 5.0", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                if (info.hasAverageRank) {
-                    Surface(
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ) {
-                        Column(
-                            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text("排名", style = MaterialTheme.typography.labelSmall)
-                            Text("${info.averageRank} / ${info.averageRankTotal}", style = RibbonNumeric.Medium)
-                        }
-                    }
+                    Text(
+                        "绩点 / 5.0",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            val averageText = if (info.averageScore > 0.0) "%.2f".format(info.averageScore) else "--"
-            val rankNote = if (info.hasAverageRank) "" else " · 暂无排名"
-            Text(
-                "均分 $averageText（百分制）$rankNote",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
-            )
-            if (info.averageScore > 0.0 || info.hasAverageRank) {
-                AppLinearProgressIndicator(
-                    progress = {
-                        if (info.hasAverageRank) info.averageRankProgress
-                        else (info.averageScore / 100.0).toFloat().coerceIn(0f, 1f)
-                    },
-                    modifier = Modifier.fillMaxWidth().height(6.dp),
-                    color = MaterialTheme.colorScheme.secondary,
-                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                RibbonChip(
+                    if (info.hasAverageRank) "排名 ${info.averageRank}/${info.averageRankTotal}" else "暂无排名",
+                    tone = RibbonTone.PRIMARY,
+                )
+                val averageText = if (info.averageScore > 0.0) "%.2f".format(info.averageScore) else "--"
+                Text(
+                    "均分 $averageText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
 }
 
-/** 本学期课程 / 已修 / 不及格：一行三列；不及格非零时标红 */
+/** 本学期课程大卡：左上图标徽章，底部大数字与说明。 */
 @Composable
-private fun CourseCountsCard(info: AcademicInfo, modifier: Modifier = Modifier) {
+private fun CourseHeroCard(info: AcademicInfo, modifier: Modifier = Modifier) {
+    val variant = RibbonCardVariant.SECONDARY_CONTAINER
+    val content = ribbonContentColor(variant)
     RibbonCard(
-        modifier = modifier.fillMaxWidth(),
-        variant = RibbonCardVariant.SURFACE_LOW,
-        radius = 28.dp,
-        padding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
+        modifier = modifier.fillMaxHeight(),
+        variant = variant,
+        radius = 32.dp,
+        padding = PaddingValues(20.dp),
     ) {
-        Row(Modifier.fillMaxWidth()) {
-            CourseCount(label = "本学期课程", value = info.pendingCourses, modifier = Modifier.weight(1f))
-            CourseCount(label = "已修课程", value = info.completedCourses, modifier = Modifier.weight(1f))
-            CourseCount(
-                label = "不及格",
-                value = info.failedCourses,
-                modifier = Modifier.weight(1f),
-                alert = info.failedCourses > 0,
+        Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
+            ShapeBadge(
+                shape = RibbonShape.COOKIE_6,
+                size = 48.dp,
+                color = content.copy(alpha = 0.12f),
+                icon = Icons.Default.MenuBook,
+                iconTint = content,
             )
+            Column {
+                Text("${info.pendingCourses}", style = RibbonNumeric.XL, color = content)
+                Text("本学期课程", style = MaterialTheme.typography.titleMedium, color = content)
+                Text(
+                    "本学期已选课程总数",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = content.copy(alpha = 0.78f),
+                )
+            }
         }
     }
 }
 
+/** 统计小卡：左上图标 + 标题，下方大数字与说明（MD bento 小卡）。 */
 @Composable
-private fun CourseCount(label: String, value: Int, modifier: Modifier = Modifier, alert: Boolean = false) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            "$value",
-            style = RibbonNumeric.Large,
-            color = if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
-/** 并排小卡：图标 + 标题在上，主数字与说明在下。 */
-@Composable
-private fun BentoCard(
-    title: String,
-    badgeShape: RibbonShape,
-    badgeIcon: ImageVector,
+private fun StatCard(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    variant: RibbonCardVariant,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     interactive: Boolean = false,
     onClick: () -> Unit = {},
-    content: @Composable ColumnScope.() -> Unit,
+    footer: @Composable ColumnScope.() -> Unit = {},
 ) {
+    val content = ribbonContentColor(variant)
     RibbonCard(
-        modifier = modifier,
-        variant = RibbonCardVariant.SURFACE_LOW,
-        radius = 28.dp,
-        padding = PaddingValues(16.dp),
+        modifier = modifier.fillMaxHeight(),
+        variant = variant,
+        radius = 32.dp,
+        padding = PaddingValues(20.dp),
         interactive = interactive,
         onClick = onClick,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ShapeBadge(
-                    shape = badgeShape,
-                    size = 32.dp,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    icon = badgeIcon,
-                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
                 Spacer(Modifier.width(8.dp))
-                Text(title, style = MaterialTheme.typography.labelLarge)
+                Text(label, style = MaterialTheme.typography.labelLarge, color = content)
             }
-            content()
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(value, style = if (compact) RibbonNumeric.Large else RibbonNumeric.XL, color = content)
+                footer()
+            }
         }
     }
 }
@@ -389,10 +391,10 @@ private fun BentoLoadingCard(modifier: Modifier = Modifier) {
     RibbonCard(
         modifier = modifier,
         variant = RibbonCardVariant.SURFACE_LOW,
-        radius = 28.dp,
+        radius = 32.dp,
         padding = PaddingValues(16.dp),
     ) {
-        Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().defaultMinSize(minHeight = 120.dp), contentAlignment = Alignment.Center) {
             AppCircularProgressIndicator(modifier = Modifier.size(28.dp))
         }
     }
