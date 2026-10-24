@@ -1,18 +1,24 @@
 package tech.loveace.appv3.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.*
 import kotlinx.coroutines.flow.collect
 import tech.loveace.appv3.data.model.CourseScheduleRecord
 import tech.loveace.appv3.data.service.CourseScheduleService.CourseScheduleOption
@@ -29,19 +35,20 @@ import tech.loveace.appv3.ui.viewmodel.CourseScheduleUiState
 import tech.loveace.appv3.ui.viewmodel.CourseScheduleViewModel
 import tech.loveace.appv3.ui.viewmodel.courseRecordKey
 
-private val WEEKDAY_OPTIONS = listOf(
-    "" to "全部", "1" to "周一", "2" to "周二", "3" to "周三", "4" to "周四",
-    "5" to "周五", "6" to "周六", "7" to "周日",
+/** 上课星期：值 1..7，显示单字 */
+private val WEEKDAY_CHIPS = listOf(
+    "1" to "一", "2" to "二", "3" to "三", "4" to "四", "5" to "五", "6" to "六", "7" to "日",
 )
 
-/** 教务系统固定 10 节（11–12 节不排课），与桌面智能排课时间网格一致 */
-private val SESSION_OPTIONS = listOf("" to "全部") + (1..10).map { "$it" to "第${it}节" }
+/** 开始节次：教务系统固定 10 节（11–12 节不排课），与桌面时间网格一致 */
+private val SESSION_CHIPS = (1..10).map { "$it" to "$it" }
 
 /** 距离列表末尾还剩几条时开始加载下一页 */
 private const val LOAD_MORE_THRESHOLD = 3
 
 /**
- * 查询表单：学期 → 课程信息 → 开课范围（页面无对应 select 时整组隐藏）→ 上课时间 → 查询/重置
+ * 查询表单：常用条件在上（学期、课程名、课程号/教师、星期、节次），
+ * 院系/校区/教学楼/类别收进“更多条件”折叠区；查询与重置固定在底部。
  */
 @Composable
 internal fun CourseFormPane(
@@ -69,27 +76,96 @@ internal fun CourseFormPane(
 
     val form = state.form
     val options = state.options
-    Column(
-        modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        RibbonSectionTitle("学期与课程")
-        FilterDropdown(
-            label = "学期",
-            options = state.terms.map { it.termCode to it.termName },
-            selectedCode = form.termCode,
-            onSelect = { code -> vm.updateForm { it.copy(termCode = code) } },
-        )
-        FormTextField("课程号", form.kch) { value -> vm.updateForm { it.copy(kch = value) } }
-        FormTextField("课程名", form.kcm) { value -> vm.updateForm { it.copy(kcm = value) } }
-        FormTextField("授课教师", form.skjs) { value -> vm.updateForm { it.copy(skjs = value) } }
+    val hasScope = options.departments.isNotEmpty() || options.campuses.isNotEmpty() ||
+        options.buildings.isNotEmpty() || options.categories.isNotEmpty()
 
-        val hasScope = options.departments.isNotEmpty() || options.campuses.isNotEmpty() ||
-            options.buildings.isNotEmpty() || options.categories.isNotEmpty()
-        if (hasScope) {
-            RibbonSectionTitle("开课范围")
+    Column(modifier) {
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RibbonSectionTitle("学期与课程")
+            FilterDropdown(
+                label = "学期",
+                options = state.terms.map { it.termCode to it.termName },
+                selectedCode = form.termCode,
+                onSelect = { code -> vm.updateForm { it.copy(termCode = code) } },
+            )
+            FormTextField(label = "课程名", value = form.kcm) { value ->
+                vm.updateForm { it.copy(kcm = value) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FormTextField(label = "课程号", value = form.kch, modifier = Modifier.weight(1f)) { value ->
+                    vm.updateForm { it.copy(kch = value) }
+                }
+                FormTextField(label = "授课教师", value = form.skjs, modifier = Modifier.weight(1f)) { value ->
+                    vm.updateForm { it.copy(skjs = value) }
+                }
+            }
+
+            if (hasScope) {
+                MoreFilters(state, vm)
+            }
+
+            RibbonSectionTitle("上课时间")
+            FormSubLabel("上课星期")
+            ChoiceChips(
+                options = WEEKDAY_CHIPS,
+                selectedCode = form.skxq?.toString().orEmpty(),
+                onSelect = { code -> vm.updateForm { it.copy(skxq = code.toIntOrNull()) } },
+            )
+            FormSubLabel("开始节次")
+            ChoiceChips(
+                options = SESSION_CHIPS,
+                selectedCode = form.skjc?.toString().orEmpty(),
+                onSelect = { code -> vm.updateForm { it.copy(skjc = code.toIntOrNull()) } },
+            )
+        }
+
+        CourseFormActions(
+            enabled = form.termCode.isNotEmpty(),
+            onReset = vm::resetFilters,
+            onSearch = vm::search,
+        )
+    }
+}
+
+/** 低频条件折叠区：标题行显示已选数量，展开后才渲染下拉 */
+@Composable
+private fun MoreFilters(state: CourseScheduleUiState, vm: CourseScheduleViewModel) {
+    val form = state.form
+    val options = state.options
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val activeCount = listOf(form.kkxsh, form.kkxqh, form.jxlh, form.kclb).count { it.isNotEmpty() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.large)
+                .clickable { expanded = !expanded }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "更多条件",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            if (activeCount > 0) {
+                RibbonChip(text = "已选 $activeCount", tone = RibbonTone.PRIMARY)
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "收起更多条件" else "展开更多条件",
+            )
+        }
+
+        if (expanded) {
             if (options.departments.isNotEmpty()) {
                 FilterDropdown(
                     label = "开课院系",
@@ -123,35 +199,71 @@ internal fun CourseFormPane(
                 )
             }
         }
-
-        RibbonSectionTitle("上课时间")
-        FilterDropdown(
-            label = "上课星期",
-            options = WEEKDAY_OPTIONS,
-            selectedCode = form.skxq?.toString().orEmpty(),
-            onSelect = { code -> vm.updateForm { it.copy(skxq = code.toIntOrNull()) } },
-        )
-        FilterDropdown(
-            label = "开始节次",
-            options = SESSION_OPTIONS,
-            selectedCode = form.skjc?.toString().orEmpty(),
-            onSelect = { code -> vm.updateForm { it.copy(skjc = code.toIntOrNull()) } },
-        )
-
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = vm::search,
-            enabled = form.termCode.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Text("查询", style = MaterialTheme.typography.titleMedium)
-        }
-        TextButton(onClick = vm::resetFilters, modifier = Modifier.fillMaxWidth()) {
-            Text("重置条件")
-        }
-        Spacer(Modifier.height(16.dp))
     }
+}
+
+/** 底部固定操作栏：重置 + 查询 */
+@Composable
+private fun CourseFormActions(
+    enabled: Boolean,
+    onReset: () -> Unit,
+    onSearch: () -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(
+                onClick = onReset,
+                modifier = Modifier.height(52.dp),
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Text("重置")
+            }
+            Button(
+                onClick = onSearch,
+                enabled = enabled,
+                modifier = Modifier.weight(1f).height(52.dp),
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Text("查询", style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
+
+/** 单选芯片：再点一次取消选择（= 不限） */
+@Composable
+private fun ChoiceChips(
+    options: List<Pair<String, String>>,
+    selectedCode: String,
+    onSelect: (String) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { (code, label) ->
+            FilterChip(
+                selected = code == selectedCode,
+                onClick = { onSelect(if (code == selectedCode) "" else code) },
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FormSubLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /**
@@ -212,12 +324,18 @@ private fun ResultList(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(key = "summary") {
-            Text(
-                "共 ${state.totalCount} 条开课记录",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
+            Column(Modifier.padding(horizontal = 4.dp)) {
+                Text(
+                    "共 ${state.totalCount} 条开课记录",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "点击卡片可查看详细信息",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         items(state.records, key = { courseRecordKey(it) }) { record ->
             CourseRecordCard(record = record, onClick = { vm.select(record) })
@@ -357,17 +475,23 @@ private fun DetailRow(label: String, value: String?) {
 }
 
 @Composable
-private fun FormTextField(label: String, value: String, onValueChange: (String) -> Unit) {
+private fun FormTextField(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onValueChange: (String) -> Unit,
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         shape = MaterialTheme.shapes.large,
     )
 }
 
+/** 下拉：未选时字段为空、只显示标签；菜单首项“不限”清空选择 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterDropdown(
@@ -377,8 +501,11 @@ private fun FilterDropdown(
     onSelect: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedName = options.firstOrNull { it.first == selectedCode }?.second
-        ?: options.firstOrNull()?.second.orEmpty()
+    val selectedName = if (selectedCode.isEmpty()) {
+        ""
+    } else {
+        options.firstOrNull { it.first == selectedCode }?.second.orEmpty()
+    }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
             value = selectedName,
@@ -404,6 +531,6 @@ private fun FilterDropdown(
     }
 }
 
-/** 页面下拉选项前追加“全部”（空代码 = 不限） */
+/** 下拉选项前追加“不限”（空代码 = 不限） */
 private fun withAll(options: List<CourseScheduleOption>): List<Pair<String, String>> =
-    listOf("" to "全部") + options.map { it.code to it.name }
+    listOf("" to "不限") + options.map { it.code to it.name }
