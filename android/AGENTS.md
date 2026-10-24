@@ -9,8 +9,9 @@
 - Check/watch/download CI artifacts:
   - `gh run list --workflow build-apk.yml --branch main --limit 5`
   - `gh run watch <run-id> --exit-status`
-  - `gh run download <run-id> -n loveace-release-apk -D <dir>`
+  - `gh run download <run-id> -p 'LoveACE-*' -D <dir>`
 - `build-apk.yml` supports `dry_run=true`: builds and uploads the APK artifact but skips the `publish` job entirely. Use it to validate compilation before a real release.
+- APK/artifact name: `LoveACE-<version>-<build>-<sha7>-<yyyymmdd-HHMM>[-dryrun]` (Asia/Shanghai time). The build job renames `app-release.apk` before upload. The publish job restores `app-release.apk` before calling the CLI, so the S3 object key and release URL stay the same.
 - `setup-android@v3` must pin `packages: platform-tools` (the workflow does): the default value still references the retired `tools` package, which fails on runners with cmdline-tools 16+. GitHub also migrates `ubuntu-latest` between major OS versions; pin `ubuntu-24.04` if a runner image change breaks setup steps.
 - Debug APKs are signed with the runner debug key and will not install over release builds. Release APKs are signed in GitHub Actions from repository secrets; do not commit keystores or signing passwords.
 

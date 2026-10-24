@@ -33,6 +33,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       build: ${{ steps.version.outputs.build }}
+      apk_name: ${{ steps.apk.outputs.name }}
     defaults:
       run:
         working-directory: android
@@ -101,11 +102,25 @@ jobs:
           ANALYTICS_HASH_SALT: ${{ secrets.ANALYTICS_HASH_SALT }}
         run: ./gradlew assembleRelease
 
+      - name: Name release APK
+        id: apk
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          stamp="$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)"
+          suffix=""
+          if [ "$DRY_RUN" = "true" ]; then suffix="-dryrun"; fi
+          name="LoveACE-${VERSION}-${BUILD}-${GITHUB_SHA::7}-${stamp}${suffix}"
+          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/${name}.apk"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
       - name: Upload release APK
         uses: actions/upload-artifact@v5
         with:
-          name: loveace-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          name: ${{ steps.apk.outputs.name }}
+          path: android/app/build/outputs/apk/release/${{ steps.apk.outputs.name }}.apk
 
       - name: Confirm dry run
         if: ${{ inputs.dry_run }}
@@ -127,8 +142,13 @@ jobs:
       - name: Download release APK
         uses: actions/download-artifact@v5
         with:
-          name: loveace-release-apk
+          name: ${{ needs.build.outputs.apk_name }}
           path: ./release
+
+      - name: Restore canonical APK name
+        env:
+          APK_NAME: ${{ needs.build.outputs.apk_name }}
+        run: mv "release/${APK_NAME}.apk" release/app-release.apk
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
