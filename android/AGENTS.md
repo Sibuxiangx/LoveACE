@@ -27,7 +27,7 @@
 - Single Android module: `:app`; package root is `tech.loveace.appv3`.
 - Compose entrypoint is `MainActivity.kt` / `RibbonApp`. Type-safe routes are in `ui/navigation/AppNavigation.kt`.
 - Portrait bottom-nav shell is `ui/screen/MainShell.kt`; landscape navigation is `ui/screen/landscape/LandscapeShell.kt`. User-facing features that belong in “More/教务服务” usually need both portrait and landscape entry points.
-- Landscape nav items are mapped by array index in `LandscapeShell`'s `when (selectedIndex)`. Inserting or removing an item means shifting every index after it in the same edit (for example “开课查询” is index 5, “我的” is 13).
+- Landscape nav items are mapped by array index in `LandscapeShell`'s `when (selectedIndex)`. Inserting or removing an item means shifting every index after it in the same edit (for example “开课查询” is index 5, “空闲教室” is 6, “我的” is 14).
 - Services are manually created in `AuthViewModel.initServices()` and cleared in `clearServices()`. New authenticated features normally add a `data/service/*Service`, `ui/viewmodel/*ViewModel`, screen(s), route, and an `AuthViewModel` service property.
 
 ## Network/session conventions
@@ -41,6 +41,8 @@
 - `HttpClient` only supplies a default mobile UA when a request did not set `User-Agent`; service-specific UA headers are intentional.
 - JWC endpoints use the VPN host `http://jwcxk2-aufe-edu-cn.vpn2.aufe.edu.cn:8118`; keep historical field spellings from upstream APIs, including `coureSequenceNumber`.
 - 开课查询 (`CourseScheduleService.queryPage` + `CourseScheduleViewModel`, `ui/screen/CourseSchedule*.kt`) is a paged endpoint. `courseInfo` is requested with `PAGE_SIZE = 20`, and the next page loads only when the list nears its end. Never fetch a whole term in one go. The term list and the dropdown options come from the same `courseSchdule/index` page. If the page has no `select` for a dimension, that filter group is hidden. Records are de-duplicated by `courseRecordKey` across pages.
+- 空闲教室（`FreeClassroomService` + `FreeClassroomViewModel`，`ui/screen/FreeClassroom*.kt`）：查询接口 `freeClassroomQuery/search` 只返回所选周次与节次都空闲的教室，`weeks` 与 `wSection`（`weekday/section`，逗号分隔）必须非空，空值结果不可靠。全部教室用 `classroomCurriculum/{campus}/{building}/classroomJson` 枚举，不要用无条件查询，它会漏掉通慧楼等教学楼。占用来自详情页隐藏域 `wsSection`（`weekday_week_section`）。停用规则：教学楼备注或名称含“停用”的楼默认隐藏；房间名含“停用”的教室始终显示并带标记；状态码 `02` 或 `03` 的教室默认隐藏，打开“显示停用教室”后显示并带标记；名称含“虚拟”或座位数超过 1000 的记录不是实体教室，直接剔除；同一楼宇、同一房号的多行合并为一间。楼层为推测：三位数取首位，四位数取前两位，超过 12 层归入“其他”。
+- 空闲教室横屏是独立页面 `ui/screen/landscape/LandscapeFreeClassroomScreen.kt`：左侧为时段/范围筛选（按时间找）或楼列表（逐楼探索），右侧为结果或教室。它复用竖屏的 `queryControlItems` / `queryResultItems` / `BuildingList` / `RoomExplorer`，改其中任一处时两边都要检查。
 - Auto teacher evaluation (`TeacherEvaluationService`/`TeacherEvaluationViewModel`) mirrors iOS/desktop behavior: first-visit protection wait (`TeacherEvaluationIndexProtection`, infoTime+5s), one immediate retry with a refreshed index token, verify-before-fail fallback, and one post-batch compensation round. Keep the three platforms consistent when touching it.
 
 ## Remote config

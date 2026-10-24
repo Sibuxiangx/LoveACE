@@ -68,6 +68,7 @@ fun LandscapeShell(
         LandscapeNavItem("考试安排", Icons.Filled.EventNote, Icons.Outlined.EventNote, trackFeature = true),
         LandscapeNavItem("课程表", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth, trackFeature = true),
         LandscapeNavItem("开课查询", Icons.Filled.Search, Icons.Outlined.Search, trackFeature = true),
+        LandscapeNavItem("空闲教室", Icons.Filled.Place, Icons.Outlined.Place, trackFeature = true),
         LandscapeNavItem("培养方案", Icons.Filled.MenuBook, Icons.Outlined.MenuBook, trackFeature = true),
         LandscapeNavItem("自动评教", Icons.Filled.RateReview, Icons.Outlined.RateReview, trackFeature = true),
         LandscapeNavItem("一卡通", Icons.Filled.CreditCard, Icons.Outlined.CreditCard, "校园生活", trackFeature = true),
@@ -176,14 +177,15 @@ fun LandscapeShell(
                 3 -> LandscapeExamScreen(authViewModel)
                 4 -> LandscapeScheduleScreen(authViewModel)
                 5 -> LandscapeCourseScheduleScreen(authViewModel)
-                6 -> LandscapePlanScreen(authViewModel)
-                7 -> LandscapeTeacherEvaluationScreen(authViewModel)
-                8 -> LandscapeYKTScreen(authViewModel)
-                9 -> LandscapeElectricityScreen(authViewModel)
-                10 -> LandscapeRepairScreen(authViewModel)
-                11 -> LandscapeCompetitionScreen(authViewModel)
-                12 -> LandscapeLaborClubScreen(authViewModel, profileViewModel)
-                13 -> LandscapeSettingsScreen(
+                6 -> LandscapeFreeClassroomScreen(authViewModel)
+                7 -> LandscapePlanScreen(authViewModel)
+                8 -> LandscapeTeacherEvaluationScreen(authViewModel)
+                9 -> LandscapeYKTScreen(authViewModel)
+                10 -> LandscapeElectricityScreen(authViewModel)
+                11 -> LandscapeRepairScreen(authViewModel)
+                12 -> LandscapeCompetitionScreen(authViewModel)
+                13 -> LandscapeLaborClubScreen(authViewModel, profileViewModel)
+                14 -> LandscapeSettingsScreen(
                     authViewModel,
                     themeViewModel,
                     profileViewModel,

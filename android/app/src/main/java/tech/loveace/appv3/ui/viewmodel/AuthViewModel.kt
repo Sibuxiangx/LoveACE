@@ -98,6 +98,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var courseScheduleService: CourseScheduleService? = null
         private set
+    var freeClassroomService: FreeClassroomService? = null
+        private set
     var planService: PlanService? = null
         private set
     var repairService: RepairService? = null
@@ -465,6 +467,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         competitionService = CompetitionService(conn)
         studentScheduleService = StudentScheduleService(conn)
         courseScheduleService = CourseScheduleService(conn)
+        freeClassroomService = FreeClassroomService(conn)
         planService = PlanService(conn)
         repairService = RepairService(conn)
         teacherEvaluationService = TeacherEvaluationService(conn)
@@ -480,6 +483,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         competitionService = null
         studentScheduleService = null
         courseScheduleService = null
+        freeClassroomService = null
         planService = null
         repairService = null
         teacherEvaluationService = null
