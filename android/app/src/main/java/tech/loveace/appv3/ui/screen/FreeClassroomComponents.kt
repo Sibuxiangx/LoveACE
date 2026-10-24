@@ -76,6 +76,11 @@ internal fun FcTimePicker(state: FreeClassroomUiState, vm: FreeClassroomViewMode
                 )
             }
         }
+        Text(
+            "学校的课最少连着两节（如 1-2 节），把要用的节次都选上，才会显示这些节次都空的教室。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

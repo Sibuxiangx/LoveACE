@@ -123,6 +123,11 @@ internal fun CourseFormPane(
                 selectedCode = form.skjc?.toString().orEmpty(),
                 onSelect = { code -> vm.updateForm { it.copy(skjc = code.toIntOrNull()) } },
             )
+            Text(
+                "这里选的是课程开始的节次。比如 1-2 节的课，要选 1 才能查到。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         CourseFormActions(
