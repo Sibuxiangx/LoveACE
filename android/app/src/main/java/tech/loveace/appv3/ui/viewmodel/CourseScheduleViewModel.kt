@@ -19,9 +19,10 @@ data class CourseScheduleUiState(
     val indexError: String? = null,
     val terms: List<ScheduleTermItem> = emptyList(),
     val options: CourseScheduleOptions = CourseScheduleOptions(),
+    /** 筛选 sheet 编辑的草稿，点"查询"才生效 */
     val form: CourseScheduleQuery = CourseScheduleQuery(termCode = ""),
-    /** 已提交过查询：手机端切到结果页，横屏显示在右侧面板 */
-    val showResults: Boolean = false,
+    /** 最近一次提交的条件；null = 还没查询过（显示引导）。翻页沿用它，不跟随草稿。 */
+    val applied: CourseScheduleQuery? = null,
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     /** 首页失败：整页错误 */
@@ -48,10 +49,7 @@ class CourseScheduleViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(CourseScheduleUiState())
     val uiState: StateFlow<CourseScheduleUiState> = _uiState.asStateFlow()
 
-    /** 查询快照：提交时固定，翻页沿用，避免用户改表单后出现串页 */
-    private var activeQuery: CourseScheduleQuery? = null
-
-    /** 每次新查询或返回表单时递增，过期请求的结果直接丢弃 */
+    /** 每次新查询递增，过期请求的结果直接丢弃 */
     private var generation = 0
     private var job: Job? = null
 
@@ -97,6 +95,7 @@ class CourseScheduleViewModel : ViewModel() {
         _uiState.update { it.copy(form = CourseScheduleQuery(termCode = it.form.termCode)) }
     }
 
+    /** 按草稿条件查询，从第一页开始。 */
     fun search() {
         val svc = service ?: return
         val form = _uiState.value.form
@@ -106,12 +105,11 @@ class CourseScheduleViewModel : ViewModel() {
             kcm = form.kcm.trim(),
             skjs = form.skjs.trim(),
         )
-        activeQuery = query
         val gen = ++generation
         job?.cancel()
         _uiState.update {
             it.copy(
-                showResults = true,
+                applied = query,
                 isLoading = true,
                 isLoadingMore = false,
                 error = null,
@@ -127,8 +125,8 @@ class CourseScheduleViewModel : ViewModel() {
 
     fun loadMore() {
         val svc = service ?: return
-        val query = activeQuery ?: return
         val current = _uiState.value
+        val query = current.applied ?: return
         if (!current.hasMore || current.isLoadingMore) return
         val gen = generation
         _uiState.update { it.copy(isLoadingMore = true, loadMoreError = null) }
@@ -141,15 +139,6 @@ class CourseScheduleViewModel : ViewModel() {
 
     fun dismissDetail() {
         _uiState.update { it.copy(selected = null) }
-    }
-
-    /** 从结果页返回表单；表单条件保留，在途请求作废 */
-    fun backToForm() {
-        generation++
-        job?.cancel()
-        _uiState.update {
-            it.copy(showResults = false, isLoading = false, isLoadingMore = false, selected = null)
-        }
     }
 
     private suspend fun requestPage(

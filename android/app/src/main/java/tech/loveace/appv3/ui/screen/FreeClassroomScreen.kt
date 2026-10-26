@@ -2,52 +2,49 @@ package tech.loveace.appv3.ui.screen
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
-import tech.loveace.appv3.data.service.FcBuilding
 import tech.loveace.appv3.data.service.FcRoom
 import tech.loveace.appv3.ui.components.LoadingScreen
-import tech.loveace.appv3.ui.components.AppCircularProgressIndicator
-import tech.loveace.appv3.ui.md3e.RibbonCard
-import tech.loveace.appv3.ui.md3e.RibbonCardVariant
+import tech.loveace.appv3.ui.md3e.RibbonChip
 import tech.loveace.appv3.ui.md3e.RibbonSectionTitle
+import tech.loveace.appv3.ui.md3e.RibbonSlotGrid
 import tech.loveace.appv3.ui.md3e.RibbonState
 import tech.loveace.appv3.ui.md3e.RibbonStateKind
+import tech.loveace.appv3.ui.md3e.RibbonTone
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
-import tech.loveace.appv3.ui.viewmodel.FLOOR_OTHER
-import tech.loveace.appv3.ui.viewmodel.FcMode
 import tech.loveace.appv3.ui.viewmodel.FreeClassroomUiState
 import tech.loveace.appv3.ui.viewmodel.FreeClassroomViewModel
 import tech.loveace.appv3.ui.viewmodel.buildingKey
-import tech.loveace.appv3.ui.viewmodel.formatWeeks
-import tech.loveace.appv3.ui.viewmodel.visibleBuildings
-import tech.loveace.appv3.ui.viewmodel.visibleRooms
-import tech.loveace.appv3.ui.viewmodel.weekdayName
 import tech.loveace.appv3.ui.viewmodel.roomKey
-import androidx.compose.foundation.layout.PaddingValues
+import tech.loveace.appv3.ui.viewmodel.weekdayName
 
 internal const val PREFS_NAME = "free_classroom"
 
+/** 节次：教务系统 1..10 节 */
+private val SECTION_OPTIONS = (1..10).map { it to "$it" }
+
+/** 星期：1..7，显示单字 */
+private val WEEKDAY_OPTIONS = (1..7).map { it to weekdayName(it).removePrefix("周") }
+
 /**
- * 空闲教室（更多 → 教务服务）。两种模式：
- * - 按时间找：选教学周、星期、节次，列出所选时段全部空闲的教室（默认"现在有空的教室"）。
- * - 逐楼探索：选一栋楼，按楼层看每间教室；可选时段上色。
- * 右上角设置里可以打开"显示停用教室"。
+ * 空闲教室（更多 → 教务服务）。与 iOS 同一结构：时段（周次、星期、节次）→ 范围（可不选）→ 查询；
+ * 结果直接按楼、楼层列出全部教室并标出空闲或占用；右上角“现在有空”一键查询，设置里控制停用教室。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,32 +72,35 @@ fun FreeClassroomScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { vm.setSettingsOpen(true) }) {
-                        Icon(Icons.Default.Settings, "设置")
-                    }
+                    IconButton(onClick = vm::useNow) { Icon(Icons.Default.AccessTime, "现在有空") }
+                    IconButton(onClick = { vm.setSettingsOpen(true) }) { Icon(Icons.Default.Settings, "设置") }
                 },
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            FcModeSwitch(mode = state.mode, onChange = vm::setMode)
-            val initError = state.initError
-            when {
-                state.initLoading && state.buildings.isEmpty() -> Box(
-                    Modifier.fillMaxWidth().weight(1f),
-                    contentAlignment = Alignment.Center,
+        val modifier = Modifier.fillMaxSize().padding(padding)
+        val initError = state.initError
+        when {
+            state.initLoading && state.buildings.isEmpty() -> Box(modifier, contentAlignment = Alignment.Center) {
+                LoadingScreen("正在加载教学楼…")
+            }
+            initError != null && state.buildings.isEmpty() -> RibbonState(
+                kind = RibbonStateKind.ERROR,
+                title = "加载失败",
+                description = initError,
+                actionText = "重试",
+                onAction = vm::retryInit,
+                modifier = modifier,
+            )
+            else -> Box(modifier, contentAlignment = Alignment.TopCenter) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().widthIn(max = 720.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    LoadingScreen("正在加载教学楼…")
+                    freeClassroomControlItems(state, vm)
+                    freeClassroomResultItems(state, vm)
                 }
-                initError != null && state.buildings.isEmpty() -> RibbonState(
-                    kind = RibbonStateKind.ERROR,
-                    title = "加载失败",
-                    description = initError,
-                    actionText = "重试",
-                    onAction = vm::retryInit,
-                )
-                state.mode == FcMode.QUERY -> QueryPane(state, vm, Modifier.weight(1f))
-                else -> ExplorePane(state, vm, Modifier.weight(1f))
             }
         }
     }
@@ -118,265 +118,124 @@ fun FreeClassroomScreen(
     }
 }
 
-/* ============================ 按时间找 ============================ */
-
-@Composable
-private fun QueryPane(state: FreeClassroomUiState, vm: FreeClassroomViewModel, modifier: Modifier) {
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        queryControlItems(state, vm)
-        queryResultItems(state, vm)
+/** 时段与范围条件 + 查询按钮。竖屏与横屏共用。 */
+internal fun LazyListScope.freeClassroomControlItems(state: FreeClassroomUiState, vm: FreeClassroomViewModel) {
+    item(key = "week") {
+        FcWeekPicker(week = state.week, currentWeek = state.currentWeek, onSelect = vm::setWeek)
     }
-}
-
-/** 按时间找的筛选区：现在有空、时段、范围、查询按钮。竖屏与横屏共用。 */
-internal fun LazyListScope.queryControlItems(state: FreeClassroomUiState, vm: FreeClassroomViewModel) {
-    if (state.queryResults == null && state.queryError == null && !state.queryLoading) {
-        item { GuideCard() }
-    }
-    item {
-        FilledTonalButton(
-            onClick = vm::useNow,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Text("现在有空的教室", style = MaterialTheme.typography.titleMedium)
-        }
-    }
-    item { RibbonSectionTitle("① 选时段") }
-    item { FcTimePicker(state = state, vm = vm) }
-    item { RibbonSectionTitle("② 范围（可不选）") }
-    item { FcRangeFilters(state = state, vm = vm) }
-    item {
-        Button(
-            onClick = vm::runQuery,
-            enabled = state.sections.isNotEmpty() && !state.queryLoading,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Text("查询", style = MaterialTheme.typography.titleMedium)
-        }
-    }
-}
-
-/** 按时间找的结果区：加载、错误、空结果、按楼分组的教室。竖屏与横屏共用。 */
-internal fun LazyListScope.queryResultItems(state: FreeClassroomUiState, vm: FreeClassroomViewModel) {
-    val results = state.queryResults
-    val visible = if (results == null) {
-        emptyList()
-    } else {
-        visibleRooms(results, state.buildings, state.showStopped)
-    }
-    when {
-        state.queryLoading -> item {
-            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                AppCircularProgressIndicator()
-            }
-        }
-        state.queryError != null -> item {
-            RibbonState(
-                kind = RibbonStateKind.ERROR,
-                title = "查询失败",
-                description = state.queryError,
-                actionText = "重试",
-                onAction = vm::runQuery,
+    item(key = "weekday") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FcSubLabel("星期")
+            RibbonSlotGrid(
+                options = WEEKDAY_OPTIONS,
+                selected = setOf(state.weekday),
+                columns = 7,
+                onToggle = vm::setWeekday,
             )
         }
-        results == null -> Unit
-        visible.isEmpty() -> item {
-            RibbonState(
-                kind = RibbonStateKind.EMPTY,
-                title = "这个时段没有空闲教室",
-                description = "换个节次试试，或切到“逐楼探索”看看教室分布。",
-            )
-        }
-        else -> {
-            item { Text(summaryText(state, visible.size), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            groupByBuilding(visible).forEach { (key, rooms) ->
-                val first = rooms.first()
-                val stopped = state.buildings.any { it.stopped && buildingKey(it.campusNo, it.no) == key }
-                item(key = "h_$key") {
-                    FcBuildingHeader(
-                        campusName = first.campusName,
-                        buildingName = first.buildingName,
-                        stopped = stopped,
-                    )
-                }
-                items(rooms, key = { roomKey(it) }) { room ->
-                    FcRoomCard(room = room, onClick = { vm.selectRoom(room) })
+    }
+    item(key = "sections") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FcSubLabel("节次（可多选）")
+                Spacer(Modifier.weight(1f))
+                if (state.sections.isNotEmpty()) {
+                    RibbonChip(text = "已选 ${state.sections.size} 节", tone = RibbonTone.PRIMARY)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun GuideCard() {
-    RibbonCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = RibbonCardVariant.SURFACE_LOW,
-        radius = 24.dp,
-        padding = PaddingValues(16.dp),
-    ) {
-        Text("第一次用？", style = MaterialTheme.typography.titleSmall)
-        Spacer(Modifier.height(6.dp))
-        Text("1. 选教学周和节次（默认是本周和当前节）", style = MaterialTheme.typography.bodyMedium)
-        Text("2. 需要的话，选校区或教学楼", style = MaterialTheme.typography.bodyMedium)
-        Text("3. 点查询，列出所选时段全部空闲的教室", style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "也可以直接点“现在有空的教室”；想逐楼看分布，切到“逐楼探索”。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/* ============================ 逐楼探索 ============================ */
-
-@Composable
-private fun ExplorePane(state: FreeClassroomUiState, vm: FreeClassroomViewModel, modifier: Modifier) {
-    val building = state.exploreBuilding
-    if (building == null) {
-        BuildingList(state = state, vm = vm, modifier = modifier)
-    } else {
-        RoomExplorer(state = state, vm = vm, building = building, modifier = modifier)
-    }
-}
-
-@Composable
-internal fun BuildingList(state: FreeClassroomUiState, vm: FreeClassroomViewModel, modifier: Modifier) {
-    val buildings = visibleBuildings(state.buildings, state.showStopped)
-    val normal = buildings.filter { !it.stopped }
-    val stopped = buildings.filter { it.stopped }
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item {
+            RibbonSlotGrid(
+                options = SECTION_OPTIONS,
+                selected = state.sections,
+                columns = 5,
+                onToggle = vm::toggleSection,
+            )
             Text(
-                "点一栋楼，逐层看每间教室。",
-                style = MaterialTheme.typography.bodyMedium,
+                "节次可多选；教室需要在所选的每一节都空闲才算空闲。",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        normal.groupBy { it.campusNo }.forEach { (campusNo, list) ->
-            item(key = "c_$campusNo") {
-                RibbonSectionTitle(if (campusNo == "2") "西校" else "东校")
-            }
-            items(list, key = { buildingKey(it.campusNo, it.no) }) { building ->
-                FcBuildingCard(building = building, onClick = { vm.openBuilding(building) })
-            }
-        }
-        if (stopped.isNotEmpty()) {
-            item(key = "stopped_title") { RibbonSectionTitle("停用楼") }
-            items(stopped, key = { buildingKey(it.campusNo, it.no) }) { building ->
-                FcBuildingCard(building = building, onClick = { vm.openBuilding(building) })
-            }
+    }
+    item(key = "range") {
+        FcRangeSection(state = state, vm = vm)
+    }
+    item(key = "search") {
+        Button(
+            onClick = vm::search,
+            enabled = state.sections.isNotEmpty() && !state.searching,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Text("查询空教室", style = MaterialTheme.typography.titleMedium)
         }
     }
 }
 
-@Composable
-internal fun RoomExplorer(
-    state: FreeClassroomUiState,
-    vm: FreeClassroomViewModel,
-    building: FcBuilding,
-    modifier: Modifier,
-) {
-    var timeOpen by rememberSaveable { mutableStateOf(false) }
-    val rooms = visibleRooms(state.exploreRooms, state.buildings, state.showStopped)
-    val floors = rooms.mapNotNull { it.floor }.distinct().sorted()
-    val hasOther = rooms.any { it.floor == null }
-    val shown = if (state.exploreFloor == null) {
-        rooms
-    } else {
-        rooms.filter { (it.floor ?: FLOOR_OTHER) == state.exploreFloor }
-    }
-
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            TextButton(onClick = vm::closeBuilding) { Text("← 全部教学楼") }
-            Text(
-                "${building.campusName} · ${building.name}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+/**
+ * 结果：查询中、未查询引导、整页失败、空结果，或按楼分组（楼头 → 楼层 → 教室格子）。
+ * 竖屏与横屏共用。
+ */
+internal fun LazyListScope.freeClassroomResultItems(state: FreeClassroomUiState, vm: FreeClassroomViewModel) {
+    val distribution = state.distribution
+    val searchError = state.searchError
+    when {
+        state.searching -> item(key = "searching") { FcLoadingRow("正在查询…") }
+        distribution == null && searchError != null -> item(key = "error") {
+            RibbonState(
+                kind = RibbonStateKind.ERROR,
+                title = "查询失败",
+                description = searchError,
+                actionText = "重试",
+                onAction = vm::search,
             )
         }
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("用所选时段上色", style = MaterialTheme.typography.titleSmall)
+        distribution == null -> item(key = "guide") {
+            RibbonState(
+                kind = RibbonStateKind.EMPTY,
+                title = "选择时段后查询",
+                description = "默认是本周和今天的当前节次，结果按楼和楼层展示。",
+            )
+        }
+        else -> {
+            if (searchError != null) {
+                item(key = "partial-error") {
                     Text(
-                        "绿色 = 所选时段全部空闲",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        searchError,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
-                Switch(checked = state.exploreColorOn, onCheckedChange = vm::setExploreColor)
             }
-        }
-        item {
-            FcCollapsibleHeader(
-                title = timeSummary(state),
-                expanded = timeOpen,
-                onToggle = { timeOpen = !timeOpen },
-            )
-        }
-        if (timeOpen) {
-            item { FcTimePicker(state = state, vm = vm) }
-        }
-
-        when {
-            state.exploreLoading -> item {
-                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                    AppCircularProgressIndicator()
-                }
-            }
-            state.exploreError != null && state.exploreRooms.isEmpty() -> item {
-                RibbonState(
-                    kind = RibbonStateKind.ERROR,
-                    title = "读取教室失败",
-                    description = state.exploreError,
-                    actionText = "重试",
-                    onAction = { vm.openBuilding(building) },
-                )
-            }
-            rooms.isEmpty() -> item {
-                RibbonState(
-                    kind = RibbonStateKind.EMPTY,
-                    title = "这栋楼暂时没有可显示的教室",
-                )
-            }
-            else -> {
-                item {
-                    FcFloorChips(
-                        floors = floors,
-                        hasOther = hasOther,
-                        selected = state.exploreFloor,
-                        onSelect = vm::setExploreFloor,
+            if (distribution.isEmpty()) {
+                item(key = "none") {
+                    RibbonState(
+                        kind = RibbonStateKind.EMPTY,
+                        title = "没有可显示的教室",
+                        description = "换个节次或范围试试，也可以在设置里打开“显示停用教室”。",
                     )
                 }
-                floorGroups(shown).forEach { (floor, group) ->
-                    item(key = "f_$floor") {
-                        RibbonSectionTitle(if (floor == FLOOR_OTHER) "其他（推测不出楼层）" else "${floor} 层")
+            } else {
+                distribution.forEach { entry ->
+                    val bk = buildingKey(entry.building.campusNo, entry.building.no)
+                    item(key = "b_$bk") {
+                        FcBuildingHeader(distribution = entry)
                     }
-                    item(key = "g_$floor") {
-                        FcChipRow {
-                            group.forEach { room ->
-                                FcRoomTile(
-                                    room = room,
-                                    free = freeFlag(state, room),
-                                    onClick = { vm.selectRoom(room) },
-                                )
+                    entry.floors.forEach { group ->
+                        item(key = "f_${bk}_${group.floor ?: "other"}") {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FcSubLabel(floorLabel(group.floor))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    group.rooms.forEach { room ->
+                                        FcRoomTile(
+                                            room = room,
+                                            free = roomKey(room) in state.freeKeys,
+                                            onClick = { vm.selectRoom(room) },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -385,15 +244,6 @@ internal fun RoomExplorer(
         }
     }
 }
-
-private fun timeSummary(state: FreeClassroomUiState): String =
-    if (state.sections.isEmpty()) {
-        "时段（可选，用于上色）"
-    } else {
-        "时段：第 ${state.week} 周 · ${weekdayName(state.weekday)} 第 ${formatWeeks(state.sections.sorted())} 节"
-    }
-
-/* ============================ 弹层 ============================ */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -411,7 +261,11 @@ internal fun SettingsSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("高级设置", style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text(
+                "高级设置",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("显示停用教室", style = MaterialTheme.typography.titleMedium)
@@ -443,7 +297,7 @@ internal fun RoomDetailSheet(room: FcRoom, state: FreeClassroomUiState, vm: Free
             Text(
                 room.title,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontWeight = FontWeight.Bold,
             )
             Text(
                 "${room.campusName} · ${room.buildingName} · ${room.seats ?: "-"} 座 · ${room.typeName ?: "类型待定"}",
@@ -451,7 +305,11 @@ internal fun RoomDetailSheet(room: FcRoom, state: FreeClassroomUiState, vm: Free
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             stopText(room)?.let { text ->
-                Text("停用标记：$text", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                Text(
+                    "停用标记：$text",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             RibbonSectionTitle("占用情况")

@@ -4,6 +4,9 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,10 +20,18 @@ import tech.loveace.appv3.data.service.FcSlot
 import tech.loveace.appv3.data.service.FreeClassroomService
 import java.time.LocalDate
 
-enum class FcMode { QUERY, EXPLORE }
+/** 一层楼的教室；floor = null 表示推不出楼层，排在最后。 */
+data class FcFloorGroup(val floor: Int?, val rooms: List<FcRoom>)
+
+/** 一栋楼的分布：空闲数 / 可见教室数，以及按楼层分组的全部教室。 */
+data class FcBuildingDistribution(
+    val building: FcBuilding,
+    val freeCount: Int,
+    val totalCount: Int,
+    val floors: List<FcFloorGroup>,
+)
 
 data class FreeClassroomUiState(
-    val mode: FcMode = FcMode.QUERY,
     val initLoading: Boolean = false,
     val initError: String? = null,
     val buildings: List<FcBuilding> = emptyList(),
@@ -29,28 +40,20 @@ data class FreeClassroomUiState(
     val currentSection: Int = 1,
     val showStopped: Boolean = false,
     val settingsOpen: Boolean = false,
-    /** 时段：两种模式共用 */
+    /** 时段 */
     val week: Int = 1,
     val weekday: Int = LocalDate.now().dayOfWeek.value,
     val sections: Set<Int> = emptySet(),
-    /** 查询模式：范围条件，空字符串 = 不限 */
+    /** 范围条件，空字符串 = 不限 */
     val queryCampus: String = "",
     val queryBuilding: String = "",
     val queryType: String = "",
-    val queryLoading: Boolean = false,
-    val queryError: String? = null,
-    /** null = 还没查询过（显示引导） */
-    val queryResults: List<FcRoom>? = null,
-    /** 探索模式 */
-    val exploreBuilding: FcBuilding? = null,
-    val exploreRooms: List<FcRoom> = emptyList(),
-    val exploreLoading: Boolean = false,
-    val exploreError: String? = null,
-    val exploreColorOn: Boolean = false,
-    /** 上色用：所选时段空闲的教室键；null = 不上色 */
-    val exploreFree: Set<String>? = null,
-    /** 楼层筛选：null = 全部，FLOOR_OTHER = 其他，其余为楼层数 */
-    val exploreFloor: Int? = null,
+    /** 查询结果；null = 还没查询过（显示引导） */
+    val distribution: List<FcBuildingDistribution>? = null,
+    /** 所选时段全部空闲的教室键（roomKey） */
+    val freeKeys: Set<String> = emptySet(),
+    val searching: Boolean = false,
+    val searchError: String? = null,
     /** 详情 */
     val selectedRoom: FcRoom? = null,
     val occupancy: Set<String>? = null,
@@ -58,18 +61,17 @@ data class FreeClassroomUiState(
     val occupancyError: String? = null,
 )
 
-const val FLOOR_OTHER = -1
-
 private const val PREFS_SHOW_STOPPED = "show_stopped"
 
 class FreeClassroomViewModel : ViewModel() {
     private var service: FreeClassroomService? = null
     private var prefs: SharedPreferences? = null
     private var initialized = false
-    private var queryJob: Job? = null
-    private var exploreJob: Job? = null
-    private var freeJob: Job? = null
+    private var searchJob: Job? = null
     private var occupancyJob: Job? = null
+
+    /** 每栋楼的全部教室（教室课表），会话内缓存，避免重复请求。键为 buildingKey。 */
+    private val roomCache = mutableMapOf<String, List<FcRoom>>()
 
     private val _uiState = MutableStateFlow(FreeClassroomUiState())
     val uiState: StateFlow<FreeClassroomUiState> = _uiState.asStateFlow()
@@ -84,8 +86,11 @@ class FreeClassroomViewModel : ViewModel() {
         }
     }
 
-    fun retryInit() = loadInitial()
+    fun retryInit() {
+        loadInitial()
+    }
 
+    /** 首次进入：当前周、教室类型、教学楼、当前节次。 */
     private fun loadInitial() {
         val svc = service ?: return
         viewModelScope.launch {
@@ -113,25 +118,30 @@ class FreeClassroomViewModel : ViewModel() {
         }
     }
 
-    fun setMode(mode: FcMode) {
-        _uiState.update { it.copy(mode = mode) }
-    }
-
     fun setWeek(week: Int) {
         _uiState.update { it.copy(week = week) }
-        afterTimeChanged()
     }
 
     fun setWeekday(weekday: Int) {
         _uiState.update { it.copy(weekday = weekday) }
-        afterTimeChanged()
     }
 
     fun toggleSection(section: Int) {
         _uiState.update { st ->
             st.copy(sections = if (section in st.sections) st.sections - section else st.sections + section)
         }
-        afterTimeChanged()
+    }
+
+    fun setQueryCampus(campusNo: String) {
+        _uiState.update { it.copy(queryCampus = campusNo, queryBuilding = "") }
+    }
+
+    fun setQueryBuilding(buildingNo: String) {
+        _uiState.update { it.copy(queryBuilding = buildingNo) }
+    }
+
+    fun setQueryType(typeCode: String) {
+        _uiState.update { it.copy(queryType = typeCode) }
     }
 
     /** "现在有空的教室"：当前周、今天、当前节次，并直接查询。 */
@@ -143,142 +153,119 @@ class FreeClassroomViewModel : ViewModel() {
                 sections = setOf(st.currentSection),
             )
         }
-        afterTimeChanged()
-        if (_uiState.value.mode == FcMode.QUERY) runQuery()
-    }
-
-    /** 时段变化后：查询结果作废，探索上色重算。 */
-    private fun afterTimeChanged() {
-        _uiState.update { it.copy(queryResults = null, queryError = null) }
-        val st = _uiState.value
-        if (st.exploreColorOn && st.exploreBuilding != null) refreshExploreFree()
-    }
-
-    fun setQueryCampus(campusNo: String) {
-        _uiState.update { it.copy(queryCampus = campusNo, queryBuilding = "", queryResults = null) }
-    }
-
-    fun setQueryBuilding(buildingNo: String) {
-        _uiState.update { it.copy(queryBuilding = buildingNo, queryResults = null) }
-    }
-
-    fun setQueryType(typeCode: String) {
-        _uiState.update { it.copy(queryType = typeCode, queryResults = null) }
-    }
-
-    fun runQuery() {
-        val svc = service ?: return
-        val st = _uiState.value
-        if (st.sections.isEmpty()) {
-            _uiState.update { it.copy(queryResults = null, queryError = "先选一个节次，再查询") }
-            return
-        }
-        val query = FcQuery(
-            weeks = listOf(st.week),
-            slots = st.sections.sorted().map { FcSlot(st.weekday, it) },
-            campusNo = st.queryCampus,
-            buildingNo = st.queryBuilding,
-            typeCode = st.queryType,
-        )
-        queryJob?.cancel()
-        _uiState.update { it.copy(queryLoading = true, queryError = null) }
-        queryJob = viewModelScope.launch {
-            val result = svc.search(query, typeNameMap(st.types))
-            val rooms = result.data
-            if (result.success && rooms != null) {
-                _uiState.update { it.copy(queryLoading = false, queryResults = rooms) }
-            } else {
-                _uiState.update {
-                    it.copy(queryLoading = false, queryResults = null, queryError = result.error ?: "查询失败")
-                }
-            }
-        }
+        search()
     }
 
     fun setSettingsOpen(open: Boolean) {
         _uiState.update { it.copy(settingsOpen = open) }
     }
 
+    /** 切换"显示停用教室"并持久化；已有结果时按新设置重新查询。 */
     fun setShowStopped(show: Boolean) {
         prefs?.edit()?.putBoolean(PREFS_SHOW_STOPPED, show)?.apply()
         _uiState.update { it.copy(showStopped = show) }
+        if (_uiState.value.distribution != null) search()
     }
 
-    fun openBuilding(building: FcBuilding) {
-        val svc = service ?: return
-        exploreJob?.cancel()
-        _uiState.update {
-            it.copy(
-                exploreBuilding = building,
-                exploreRooms = emptyList(),
-                exploreLoading = true,
-                exploreError = null,
-                exploreFloor = null,
-                exploreFree = null,
-            )
-        }
-        exploreJob = viewModelScope.launch {
-            val result = svc.listRooms(building, typeNameMap(_uiState.value.types))
-            val rooms = result.data
-            if (result.success && rooms != null) {
-                _uiState.update { it.copy(exploreLoading = false, exploreRooms = rooms) }
-                if (_uiState.value.exploreColorOn) refreshExploreFree()
-            } else {
-                _uiState.update { it.copy(exploreLoading = false, exploreError = result.error ?: "获取教室失败") }
-            }
-        }
-    }
-
-    fun closeBuilding() {
-        exploreJob?.cancel()
-        freeJob?.cancel()
-        _uiState.update {
-            it.copy(
-                exploreBuilding = null,
-                exploreRooms = emptyList(),
-                exploreLoading = false,
-                exploreError = null,
-                exploreFree = null,
-                exploreFloor = null,
-            )
-        }
-    }
-
-    fun setExploreColor(on: Boolean) {
-        _uiState.update { it.copy(exploreColorOn = on, exploreFree = if (on) it.exploreFree else null) }
-        if (on) refreshExploreFree()
-    }
-
-    fun setExploreFloor(floor: Int?) {
-        _uiState.update { it.copy(exploreFloor = floor) }
-    }
-
-    /** 探索上色：用当前时段查一次该楼的空闲教室，空闲的标绿色。 */
-    private fun refreshExploreFree() {
+    /**
+     * 查询：先取所选时段的空闲教室（未选校区时西校、东校分别查询），
+     * 再取范围内各楼的全部教室，按楼、楼层展示；教室的空闲状态来自第一步。
+     */
+    fun search() {
         val svc = service ?: return
         val st = _uiState.value
-        val building = st.exploreBuilding ?: return
         if (st.sections.isEmpty()) {
-            _uiState.update { it.copy(exploreFree = null) }
+            _uiState.update { it.copy(searchError = "先选一个节次，再查询") }
             return
         }
-        freeJob?.cancel()
-        freeJob = viewModelScope.launch {
-            val query = FcQuery(
-                weeks = listOf(st.week),
-                slots = st.sections.sorted().map { FcSlot(st.weekday, it) },
-                campusNo = building.campusNo,
-                buildingNo = building.no,
-            )
-            val result = svc.search(query, typeNameMap(st.types))
-            val free = result.data
-            if (result.success && free != null) {
-                _uiState.update { it.copy(exploreFree = free.map { room -> roomKey(room) }.toSet()) }
-            } else {
-                _uiState.update { it.copy(exploreFree = null) }
+        searchJob?.cancel()
+        _uiState.update { it.copy(searching = true, searchError = null) }
+        searchJob = viewModelScope.launch {
+            val names = typeNameMap(st.types)
+            val slots = st.sections.sorted().map { FcSlot(st.weekday, it) }
+            val campuses = if (st.queryCampus.isEmpty()) listOf("2", "1") else listOf(st.queryCampus)
+            val free = mutableSetOf<String>()
+            val errors = mutableListOf<String>()
+            for (campus in campuses) {
+                val result = svc.search(
+                    FcQuery(
+                        weeks = listOf(st.week),
+                        slots = slots,
+                        campusNo = campus,
+                        buildingNo = st.queryBuilding,
+                        typeCode = st.queryType,
+                    ),
+                    names,
+                )
+                val rooms = result.data
+                if (result.success && rooms != null) {
+                    rooms.forEach { free.add(roomKey(it)) }
+                } else {
+                    errors.add(result.error ?: "查询空闲教室失败")
+                }
+            }
+            val scope = scopeBuildings(st.buildings, st.queryCampus, st.queryBuilding, st.showStopped)
+            val failed = loadRooms(scope, svc, names)
+            if (failed > 0) errors.add("$failed 栋楼的教室加载失败")
+            _uiState.update { cur ->
+                cur.copy(
+                    searching = false,
+                    freeKeys = free,
+                    distribution = buildDistribution(scope, free, cur.showStopped, cur.queryType),
+                    searchError = errors.joinToString("；").ifEmpty { null },
+                )
             }
         }
     }
+
+    /** 为尚未缓存的楼加载全部教室，最多 4 栋并发；返回加载失败的楼数。 */
+    private suspend fun loadRooms(
+        scope: List<FcBuilding>,
+        svc: FreeClassroomService,
+        names: Map<String, String>,
+    ): Int {
+        val missing = scope.filter { buildingKey(it.campusNo, it.no) !in roomCache }
+        var failed = 0
+        missing.chunked(4).forEach { batch ->
+            val loaded = coroutineScope {
+                batch.map { building ->
+                    async {
+                        val result = svc.listRooms(building, names)
+                        val rooms = result.data
+                        if (result.success && rooms != null) {
+                            roomCache[buildingKey(building.campusNo, building.no)] = rooms
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }.awaitAll()
+            }
+            failed += loaded.count { !it }
+        }
+        return failed
+    }
+
+    /** 把范围内的楼转成分布：类型与停用规则与设置一致，没有可显示教室的楼不出现。 */
+    private fun buildDistribution(
+        scope: List<FcBuilding>,
+        free: Set<String>,
+        showStopped: Boolean,
+        typeCode: String,
+    ): List<FcBuildingDistribution> =
+        scope.mapNotNull { building ->
+            val rooms = roomCache[buildingKey(building.campusNo, building.no)] ?: return@mapNotNull null
+            val visible = rooms
+                .filter { showStopped || !it.statusHidden }
+                .filter { typeCode.isEmpty() || it.typeCode == typeCode }
+            if (visible.isEmpty()) return@mapNotNull null
+            FcBuildingDistribution(
+                building = building,
+                freeCount = visible.count { roomKey(it) in free },
+                totalCount = visible.size,
+                floors = floorGroups(visible),
+            )
+        }
 
     fun selectRoom(room: FcRoom) {
         val svc = service ?: return
@@ -319,27 +306,30 @@ internal fun roomKey(room: FcRoom): String = "${room.campusNo}|${room.buildingNo
 
 internal fun buildingKey(campusNo: String, buildingNo: String): String = "$campusNo|$buildingNo"
 
-/** 可见楼宇：停用楼默认隐藏；正常楼在前，停用楼在后。 */
-internal fun visibleBuildings(buildings: List<FcBuilding>, showStopped: Boolean): List<FcBuilding> =
+/**
+ * 查询范围内的教学楼：按校区、教学楼筛选，按校区与名称排序；
+ * 停用楼只在打开"显示停用教室"时包含。
+ */
+internal fun scopeBuildings(
+    buildings: List<FcBuilding>,
+    campusNo: String,
+    buildingNo: String,
+    showStopped: Boolean,
+): List<FcBuilding> =
     buildings
-        .filter { showStopped || !it.stopped }
-        .sortedWith(compareBy<FcBuilding>({ it.stopped }, { it.campusNo }, { it.no }))
+        .filter {
+            (campusNo.isEmpty() || it.campusNo == campusNo) &&
+                (buildingNo.isEmpty() || it.no == buildingNo) &&
+                (showStopped || !it.stopped)
+        }
+        .sortedWith(compareBy<FcBuilding>({ it.campusNo }, { it.name }))
 
-/** 可见教室：停用楼的教室、状态码 02 / 03 的教室默认隐藏；名称含停用的教室始终显示，停用标记由 UI 处理。 */
-internal fun visibleRooms(rooms: List<FcRoom>, buildings: List<FcBuilding>, showStopped: Boolean): List<FcRoom> {
-    val stoppedKeys = buildings.filter { it.stopped }.map { buildingKey(it.campusNo, it.no) }.toSet()
-    return rooms
-        .filter { showStopped || (!it.statusHidden && buildingKey(it.campusNo, it.buildingNo) !in stoppedKeys) }
-        .sortedWith(
-            compareBy<FcRoom>(
-                { buildingKey(it.campusNo, it.buildingNo) in stoppedKeys },
-                { it.campusNo },
-                { it.buildingName },
-                { it.floor ?: Int.MAX_VALUE },
-                { it.code },
-            ),
-        )
-}
+/** 楼层分组：楼层升序，推不出楼层的放最后；同层内按房号排序。 */
+internal fun floorGroups(rooms: List<FcRoom>): List<FcFloorGroup> =
+    rooms
+        .groupBy { it.floor }
+        .map { (floor, list) -> FcFloorGroup(floor = floor, rooms = list.sortedBy { it.code }) }
+        .sortedBy { it.floor ?: Int.MAX_VALUE }
 
 /** 某个时段（星期 + 节次）在哪些周被占用。occupancy 的格式为 weekday_week_section。 */
 internal fun busyWeeksFor(occupancy: Set<String>, weekday: Int, section: Int): List<Int> =
