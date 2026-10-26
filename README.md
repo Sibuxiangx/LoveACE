@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" width="160" alt="LoveACE 标志" />
+  <img src="assets/icon.png" width="160" alt="LoveACE 标志" />
 </p>
 
 <h1 align="center">LoveACE</h1>
