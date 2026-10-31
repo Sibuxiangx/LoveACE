@@ -39,6 +39,13 @@ import tech.loveace.appv3.ui.md3e.*
 import tech.loveace.appv3.ui.theme.LocalExtendedColors
 import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.*
+import tech.loveace.appv3.ui.screen.AacTile
+import tech.loveace.appv3.ui.screen.AcademicCounts
+import tech.loveace.appv3.ui.screen.AcademicHero
+import tech.loveace.appv3.ui.screen.HomeTile
+import tech.loveace.appv3.ui.screen.LoadingTile
+import tech.loveace.appv3.ui.screen.SemesterStatusRow
+import tech.loveace.appv3.ui.screen.YktTile
 
 /**
  * 横屏首页：双栏布局
@@ -120,203 +127,54 @@ fun LandscapeHomeScreen(
             Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            // ── 左栏：学业数据 + 一卡通/爱安财 ──
+            // ── 左栏：学业 + 一卡通/爱安财 + 学期与日历（与竖屏共用卡片） ──
             Column(
                 Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val info = academicState.academicInfo
                 if (info != null) {
-                    LandscapeAcademicOverviewCard(info)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        LandscapeStatCard(
-                            label = "本学期课程", value = "${info.pendingCourses}",
-                            icon = Icons.Default.MenuBook,
-                            variant = RibbonCardVariant.SECONDARY_CONTAINER,
-                            modifier = Modifier.weight(1f),
-                        )
-                        LandscapeStatCard(
-                            label = "已修课程", value = "${info.completedCourses}",
-                            icon = Icons.Default.CheckCircle,
-                            variant = RibbonCardVariant.TERTIARY_CONTAINER,
-                            modifier = Modifier.weight(1f),
-                        )
-                        val hasFailures = info.failedCourses > 0
-                        LandscapeStatCard(
-                            label = "不及格", value = "${info.failedCourses}",
-                            icon = if (hasFailures) Icons.Default.Error else Icons.Default.Verified,
-                            variant = if (hasFailures) RibbonCardVariant.ERROR_CONTAINER else RibbonCardVariant.PRIMARY_CONTAINER,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    AcademicHero(info)
+                    AcademicCounts(info)
                 } else if (academicState.isLoading) {
-                    Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                        AppCircularProgressIndicator(modifier = Modifier.size(32.dp))
-                    }
+                    LoadingTile()
                 }
 
-                // 一卡通 + 爱安财 并排
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    val balance = yktState.balance
-                    RibbonCard(
-                        modifier = Modifier.weight(1f),
-                        variant = RibbonCardVariant.SURFACE_LOW,
-                        radius = 28.dp,
-                        padding = PaddingValues(16.dp),
+                // 一卡通 + 爱安财：等高双卡
+                val balance = yktState.balance
+                val aacInfo = aacState.creditInfo
+                if (balance != null || yktState.isLoading || aacInfo != null || aacState.isLoading) {
+                    Row(
+                        Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                ShapeBadge(
-                                    shape = RibbonShape.CLOVER_4,
-                                    size = 36.dp,
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    icon = Icons.Default.CreditCard,
-                                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("一卡通", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            if (balance != null) {
-                                Text(
-                                    "¥${"%.2f".format(balance.balance)}",
-                                    style = RibbonNumeric.Medium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            } else if (yktState.isLoading) {
-                                AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            } else {
-                                Text("--", style = RibbonNumeric.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                        when {
+                            balance != null -> YktTile(
+                                balanceText = "¥${"%.2f".format(balance.balance)}",
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                            yktState.isLoading -> LoadingTile(Modifier.weight(1f).fillMaxHeight())
+                            else -> Spacer(Modifier.weight(1f))
                         }
-                    }
-
-                    val aacInfo = aacState.creditInfo
-                    val extended = LocalExtendedColors.current
-                    RibbonCard(
-                        modifier = Modifier.weight(1f),
-                        variant = RibbonCardVariant.SURFACE_LOW,
-                        radius = 28.dp,
-                        padding = PaddingValues(16.dp),
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                ShapeBadge(
-                                    shape = RibbonShape.COOKIE_8,
-                                    size = 36.dp,
-                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                    icon = Icons.Default.VolunteerActivism,
-                                    iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("爱安财", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            if (aacInfo != null) {
-                                Row(verticalAlignment = Alignment.Bottom) {
-                                    Text(
-                                        "${"%.1f".format(aacInfo.totalScore)}",
-                                        style = RibbonNumeric.Medium,
-                                        color = if (aacInfo.isTypeAdopt) extended.success else MaterialTheme.colorScheme.primary,
-                                    )
-                                    Text(" / 10", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                AppLinearProgressIndicator(
-                                    progress = { (aacInfo.totalScore / 10.0).toFloat().coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth().height(6.dp),
-                                    color = if (aacInfo.isTypeAdopt) extended.success else MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                )
-                            } else if (aacState.isLoading) {
-                                AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            } else {
-                                Text("--", style = RibbonNumeric.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                        when {
+                            aacInfo != null -> AacTile(
+                                info = aacInfo,
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                            aacState.isLoading -> LoadingTile(Modifier.weight(1f).fillMaxHeight())
+                            else -> Spacer(Modifier.weight(1f))
                         }
                     }
                 }
 
-                // ── 学期 + 小日历 ──
+                // 学期 + 小日历
                 val semStatus = semesterState.status
-                RibbonCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = RibbonCardVariant.SURFACE_LOW,
-                    radius = 28.dp,
-                    padding = PaddingValues(20.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // 学期状态行
-                        when (semStatus) {
-                            is SemesterStatus.Loading -> {
-                                Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                                    AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
-                            }
-                            is SemesterStatus.Vacation -> {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    ShapeBadge(
-                                        shape = RibbonShape.COOKIE_12,
-                                        size = 36.dp,
-                                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                                        icon = Icons.Default.BeachAccess,
-                                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text("假期中", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                        if (semStatus.nextSemesterName != null) {
-                                            Text(
-                                                "${semStatus.nextSemesterName} · ${semStatus.nextStartDate} 开学（${semStatus.daysUntilStart}天后）",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            is SemesterStatus.InSession -> {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    ShapeBadge(
-                                        shape = RibbonShape.COOKIE_8,
-                                        size = 36.dp,
-                                        color = if (semStatus.isEnding) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                                        icon = if (semStatus.isEnding) Icons.Default.Timer else Icons.Default.School,
-                                        iconTint = if (semStatus.isEnding) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(semStatus.semesterName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                        Text(
-                                            if (semStatus.isEnding) "第${semStatus.currentWeek}周 · 学期即将结束" else "第${semStatus.currentWeek}周 · 共${semStatus.totalWeeks}周",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Text(
-                                        "${semStatus.currentWeek}/${semStatus.totalWeeks}",
-                                        style = RibbonNumeric.Large,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                                AppLinearProgressIndicator(
-                                    progress = { (semStatus.currentWeek.toFloat() / semStatus.totalWeeks).coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth().height(4.dp),
-                                    color = if (semStatus.isEnding) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                )
-                            }
-                            is SemesterStatus.Error -> {}
-                        }
-
-                        // 小日历
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        MiniCalendar()
-                    }
+                HomeTile(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    SemesterStatusRow(semStatus)
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Spacer(Modifier.height(12.dp))
+                    MiniCalendar()
                 }
             }
 
@@ -406,111 +264,6 @@ fun LandscapeHomeScreen(
 }
 
 
-@Composable
-private fun LandscapeAcademicOverviewCard(info: AcademicInfo) {
-    RibbonCard(
-        modifier = Modifier.fillMaxWidth(),
-        variant = RibbonCardVariant.PRIMARY_CONTAINER,
-        radius = 32.dp,
-        padding = PaddingValues(22.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(contentAlignment = Alignment.Center) {
-                    AppCircularProgressIndicator(
-                        progress = { (info.gpa / 5.0).toFloat().coerceIn(0f, 1f) },
-                        modifier = Modifier.size(82.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    )
-                    Text(
-                        "%.2f".format(info.gpa),
-                        style = RibbonNumeric.Large,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Spacer(Modifier.width(22.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("绩点 / 5.0", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Text(info.currentTerm.ifEmpty { "当前学期" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                LandscapeAcademicNumber(
-                    label = "均分",
-                    value = if (info.averageScore > 0.0) "%.2f".format(info.averageScore) else "--",
-                    supporting = "百分制",
-                )
-                Spacer(Modifier.width(10.dp))
-                LandscapeAcademicNumber(
-                    label = "均分排名",
-                    value = if (info.hasAverageRank) "#${info.averageRank}" else "--",
-                    supporting = if (info.hasAverageRank) "共 ${info.averageRankTotal} 人" else "暂无",
-                    highlighted = info.hasAverageRank,
-                )
-            }
-
-            AppLinearProgressIndicator(
-                progress = {
-                    if (info.hasAverageRank) info.averageRankProgress
-                    else (info.averageScore / 100.0).toFloat().coerceIn(0f, 1f)
-                },
-                modifier = Modifier.fillMaxWidth().height(5.dp),
-                color = MaterialTheme.colorScheme.secondary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LandscapeAcademicNumber(
-    label: String,
-    value: String,
-    supporting: String,
-    highlighted: Boolean = false,
-) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f),
-        contentColor = if (highlighted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-    ) {
-        Column(
-            Modifier.widthIn(min = 96.dp).padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(label, style = RibbonNumeric.Caption)
-            Text(value, style = RibbonNumeric.Medium)
-            Text(supporting, style = MaterialTheme.typography.bodySmall, color = LocalContentColor.current.copy(alpha = 0.72f))
-        }
-    }
-}
-
-@Composable
-private fun LandscapeStatCard(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    variant: RibbonCardVariant,
-    modifier: Modifier = Modifier,
-) {
-    val contentColor = ribbonContentColor(variant)
-    RibbonCard(
-        modifier = modifier,
-        variant = variant,
-        radius = 24.dp,
-        padding = PaddingValues(16.dp),
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, modifier = Modifier.size(16.dp), tint = contentColor)
-                Spacer(Modifier.width(6.dp))
-                Text(label, style = MaterialTheme.typography.labelMedium, color = contentColor)
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(value, style = RibbonNumeric.Large, color = contentColor)
-        }
-    }
-}
 
 
 
