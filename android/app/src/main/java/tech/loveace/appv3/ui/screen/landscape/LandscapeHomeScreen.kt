@@ -40,8 +40,7 @@ import tech.loveace.appv3.ui.theme.LocalExtendedColors
 import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.*
 import tech.loveace.appv3.ui.screen.AacTile
-import tech.loveace.appv3.ui.screen.AcademicCounts
-import tech.loveace.appv3.ui.screen.AcademicHero
+import tech.loveace.appv3.ui.screen.AcademicCard
 import tech.loveace.appv3.ui.screen.HomeTile
 import tech.loveace.appv3.ui.screen.LoadingTile
 import tech.loveace.appv3.ui.screen.SemesterStatusRow
@@ -134,8 +133,7 @@ fun LandscapeHomeScreen(
             ) {
                 val info = academicState.academicInfo
                 if (info != null) {
-                    AcademicHero(info)
-                    AcademicCounts(info)
+                    AcademicCard(info)
                 } else if (academicState.isLoading) {
                     LoadingTile()
                 }

@@ -89,8 +89,7 @@ fun HomeScreen(
             // ── 学业：hero + 课程计数 ──
             val info = academicState.academicInfo
             if (info != null) {
-                item(key = "academic-hero") { AcademicHero(info) }
-                item(key = "academic-counts") { AcademicCounts(info) }
+                item(key = "academic") { AcademicCard(info) }
             } else if (academicState.isLoading) {
                 item(key = "academic-loading") { LoadingTile() }
             }

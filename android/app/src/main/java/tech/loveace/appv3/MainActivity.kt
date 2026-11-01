@@ -8,6 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.layout.ContentScale
+import tech.loveace.appv3.ui.md3e.RibbonShape
+import tech.loveace.appv3.ui.md3e.ShapeBadge
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -192,11 +195,18 @@ fun RibbonApp(
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(
-                        painter = painterResource(R.drawable.logo),
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                    )
+                    ShapeBadge(
+                        shape = RibbonShape.COOKIE_8,
+                        size = 80.dp,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.logo),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                     Spacer(Modifier.height(24.dp))
                     AppCircularProgressIndicator(
                         modifier = Modifier.size(48.dp),

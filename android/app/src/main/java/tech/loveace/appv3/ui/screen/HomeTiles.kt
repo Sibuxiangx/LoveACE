@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,7 +36,7 @@ import tech.loveace.appv3.ui.theme.LocalExtendedColors
 import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.SemesterStatus
 
-/** 首页主数字（绩点）。 */
+/** 成绩卡主数字（绩点）。 */
 private val HeroNumeric = TextStyle(
     fontSize = 40.sp,
     fontWeight = FontWeight(800),
@@ -45,7 +44,7 @@ private val HeroNumeric = TextStyle(
     letterSpacing = (-0.5).sp,
 )
 
-/** hero 卡的形状：左上、左下、右下 28dp，右上 64dp（参考 Kazumi 规则卡）。 */
+/** 成绩卡的形状：左上、左下、右下 28dp，右上 64dp（参考 Kazumi 规则卡）。 */
 internal val HeroShape: Shape = RoundedCornerShape(
     topStart = 28.dp,
     topEnd = 64.dp,
@@ -179,52 +178,41 @@ internal fun SemesterStatusRow(status: SemesterStatus, modifier: Modifier = Modi
     }
 }
 
-/** 学业 hero：primary 底色的大卡，绩点为主数字，右侧是绩点环，下面是均分与排名人数。 */
+/**
+ * 成绩卡（整体一张）：主色大圆角卡，三段式——
+ * 顶部绩点数字 + 绩点环；中部均分与均分排名；底部课程计数一条。
+ * 竖屏与横屏共用。
+ */
 @Composable
-internal fun AcademicHero(info: AcademicInfo, modifier: Modifier = Modifier) {
+internal fun AcademicCard(info: AcademicInfo, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    HomeTile(color = colors.primary, modifier = modifier, shape = HeroShape, padding = PaddingValues(22.dp)) {
+    HomeTile(
+        color = colors.primary,
+        modifier = modifier,
+        shape = HeroShape,
+        padding = PaddingValues(20.dp),
+    ) {
+        // 顶部：绩点 + 绩点环
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
                     "绩点 / 5.0",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = colors.onPrimary,
-                )
-                Text(
-                    info.currentTerm.ifEmpty { "当前学期" },
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelLarge,
                     color = colors.onPrimary.copy(alpha = 0.8f),
                 )
-                Spacer(Modifier.height(8.dp))
                 Text("%.2f".format(info.gpa), style = HeroNumeric, color = colors.onPrimary)
-                if (info.hasAverageRank) {
-                    Spacer(Modifier.height(8.dp))
-                    Surface(
-                        shape = MaterialTheme.shapes.large,
-                        color = colors.onPrimary,
-                        contentColor = colors.primary,
-                    ) {
-                        Text(
-                            "均分排名 #${info.averageRank}",
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        )
-                    }
-                }
             }
-            Spacer(Modifier.width(12.dp))
-            Box(contentAlignment = Alignment.Center) {
-                AppCircularProgressIndicator(
-                    progress = { (info.gpa / 5.0).toFloat().coerceIn(0f, 1f) },
-                    modifier = Modifier.size(96.dp),
-                    color = colors.onPrimary,
-                    trackColor = colors.primaryContainer,
-                )
-            }
+            AppCircularProgressIndicator(
+                progress = { (info.gpa / 5.0).toFloat().coerceIn(0f, 1f) },
+                modifier = Modifier.size(64.dp),
+                color = colors.onPrimary,
+                trackColor = colors.primaryContainer,
+            )
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
+
+        // 中部：均分与均分排名
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             HeroMetric(
                 label = "均分",
@@ -233,35 +221,60 @@ internal fun AcademicHero(info: AcademicInfo, modifier: Modifier = Modifier) {
                 modifier = Modifier.weight(1f),
             )
             HeroMetric(
-                label = "排名人数",
-                value = if (info.averageRankTotal > 0) "${info.averageRankTotal}" else "--",
-                supporting = if (info.hasAverageRank) "第 ${info.averageRank} / ${info.averageRankTotal}" else "暂无排名",
+                label = "均分排名",
+                value = if (info.hasAverageRank) "#${info.averageRank}" else "--",
+                supporting = if (info.hasAverageRank) "共 ${info.averageRankTotal} 人" else "暂无排名",
                 modifier = Modifier.weight(1f),
             )
         }
-
         if (info.averageScore > 0.0 || info.hasAverageRank) {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             AppLinearProgressIndicator(
                 progress = {
                     if (info.hasAverageRank) info.averageRankProgress
                     else (info.averageScore / 100.0).toFloat().coerceIn(0f, 1f)
                 },
-                modifier = Modifier.fillMaxWidth().height(6.dp),
+                modifier = Modifier.fillMaxWidth().height(4.dp),
                 color = colors.onPrimary,
                 trackColor = colors.primaryContainer,
             )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                if (info.hasAverageRank) "均分排名越靠前，进度条越接近满格" else "均分进度",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onPrimary.copy(alpha = 0.8f),
-            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // 底部：课程计数一条
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = colors.onPrimary.copy(alpha = 0.12f),
+            contentColor = colors.onPrimary,
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CourseCount(
+                    label = "本学期课程",
+                    value = "${info.pendingCourses}",
+                    modifier = Modifier.weight(1f),
+                )
+                CourseCount(
+                    label = "已修",
+                    value = "${info.completedCourses}",
+                    modifier = Modifier.weight(1f),
+                )
+                CourseCount(
+                    label = "不及格",
+                    value = "${info.failedCourses}",
+                    alert = info.failedCourses > 0,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
 
-/** hero 内的半宽指标：primaryContainer 底色嵌在 primary 卡里。 */
+/** 成绩卡内的指标块：primaryContainer 底色，嵌在主色卡里。 */
 @Composable
 private fun HeroMetric(
     label: String,
@@ -276,7 +289,10 @@ private fun HeroMetric(
         color = colors.primaryContainer,
         contentColor = colors.onPrimaryContainer,
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
             Text(label, style = RibbonNumeric.Caption, color = colors.onPrimaryContainer.copy(alpha = 0.8f))
             Text(value, style = RibbonNumeric.Medium, color = colors.onPrimaryContainer)
             Text(
@@ -288,80 +304,27 @@ private fun HeroMetric(
     }
 }
 
-/** 课程计数 bento：本学期课程总数为宽卡，已修与不及格并排等高。 */
+/** 课程计数的一格：数字在上，标签在下。alert 时数字标红。 */
 @Composable
-internal fun AcademicCounts(info: AcademicInfo, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    val hasFailures = info.failedCourses > 0
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        HomeTile(color = colors.secondaryContainer, padding = PaddingValues(horizontal = 20.dp, vertical = 18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.MenuBook,
-                    null,
-                    modifier = Modifier.size(28.dp),
-                    tint = colors.onSecondaryContainer,
-                )
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "本学期课程总数",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSecondaryContainer,
-                    )
-                    Text(
-                        "待修课程",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSecondaryContainer.copy(alpha = 0.8f),
-                    )
-                }
-                Text(
-                    "${info.pendingCourses}",
-                    style = RibbonNumeric.Large,
-                    color = colors.onSecondaryContainer,
-                )
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            MetricTile(
-                label = "已修课程",
-                value = "${info.completedCourses}",
-                icon = Icons.Default.CheckCircle,
-                color = colors.tertiaryContainer,
-                contentColor = colors.onTertiaryContainer,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-            )
-            MetricTile(
-                label = "不及格",
-                value = "${info.failedCourses}",
-                icon = if (hasFailures) Icons.Default.Error else Icons.Default.Verified,
-                color = if (hasFailures) colors.errorContainer else colors.surfaceContainerHigh,
-                contentColor = if (hasFailures) colors.onErrorContainer else colors.onSurface,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-            )
-        }
-    }
-}
-
-/** 单个数字指标：左上图标，中间大数字，底部标签。 */
-@Composable
-internal fun MetricTile(
+private fun CourseCount(
     label: String,
     value: String,
-    icon: ImageVector,
-    color: Color,
-    contentColor: Color,
     modifier: Modifier = Modifier,
+    alert: Boolean = false,
 ) {
-    HomeTile(color = color, modifier = modifier, padding = PaddingValues(18.dp)) {
-        Icon(icon, null, modifier = Modifier.size(24.dp), tint = contentColor)
-        Spacer(Modifier.height(18.dp))
-        Text(value, style = RibbonNumeric.Large, color = contentColor)
-        Spacer(Modifier.height(2.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = contentColor)
+    val colors = MaterialTheme.colorScheme
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (alert) colors.errorContainer else colors.onPrimary,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onPrimary.copy(alpha = 0.8f),
+        )
     }
 }
 
