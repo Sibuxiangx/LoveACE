@@ -32,3 +32,14 @@ fun describeFullWidthChars(text: String): String =
     findFullWidthChars(text)
         .take(3)
         .joinToString(" ") { if (it.code == 0x3000) "␣" else "'$it'" }
+
+/**
+ * 教务密码是否为弱密码形式：6 位数字，或 5 位数字 + 1 个英文字母（字母在末位）。
+ * 只用于登录前提示用户去教务系统修改密码，不阻止登录。
+ */
+fun isWeakSchoolPassword(password: String): Boolean {
+    if (password.length != 6) return false
+    if (!password.take(5).all { it in '0'..'9' }) return false
+    val last = password.last()
+    return last in '0'..'9' || last in 'a'..'z' || last in 'A'..'Z'
+}

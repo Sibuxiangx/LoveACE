@@ -40,6 +40,7 @@ import tech.loveace.appv3.R
 import tech.loveace.appv3.data.model.UserCredentials
 import tech.loveace.appv3.util.describeFullWidthChars
 import tech.loveace.appv3.util.hasFullWidthChars
+import tech.loveace.appv3.util.isWeakSchoolPassword
 import tech.loveace.appv3.ui.md3e.*
 import tech.loveace.appv3.ui.viewmodel.AuthState
 import tech.loveace.appv3.ui.viewmodel.AuthUiState
@@ -197,6 +198,8 @@ private fun ManualLoginView(
     var showEcPwd by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
     var showPasswordHelp by remember { mutableStateOf(false) }
+    var showWeakPasswordDialog by remember { mutableStateOf(false) }
+    var showAdvancedConfirm by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     // VPN密码默认与教务密码相同：仅当保存过的密码确实不同时，才默认展开高级选项
     val savedSeparatePwd = initialEcPassword.isNotEmpty() && initialEcPassword != initialPassword
@@ -224,7 +227,20 @@ private fun ManualLoginView(
 
     fun tryLogin() {
         focusManager.clearFocus()
-        if (canLogin) onLogin(userId, effectiveEcPassword, password, captchaCode)
+        if (!canLogin) return
+        if (isWeakSchoolPassword(password)) {
+            showWeakPasswordDialog = true
+        } else {
+            onLogin(userId, effectiveEcPassword, password, captchaCode)
+        }
+    }
+
+    fun toggleAdvanced() {
+        if (showAdvanced) {
+            showAdvanced = false
+        } else {
+            showAdvancedConfirm = true
+        }
     }
 
     Column(
@@ -297,7 +313,7 @@ private fun ManualLoginView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.large)
-                        .clickable { showAdvanced = !showAdvanced }
+                        .clickable { toggleAdvanced() }
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -357,7 +373,7 @@ private fun ManualLoginView(
         Spacer(Modifier.height(16.dp))
 
         Button(
-            onClick = { onLogin(userId, effectiveEcPassword, password, captchaCode) },
+            onClick = { tryLogin() },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = MaterialTheme.shapes.extraLarge, enabled = canLogin,
         ) {
@@ -408,6 +424,53 @@ private fun ManualLoginView(
     }
 
     if (showPasswordHelp) { PasswordHelpDialog(onDismiss = { showPasswordHelp = false }) }
+
+    if (showWeakPasswordDialog) {
+        WeakPasswordDialog(
+            onDismiss = { showWeakPasswordDialog = false },
+            onConfirm = {
+                showWeakPasswordDialog = false
+                onLogin(userId, effectiveEcPassword, password, captchaCode)
+            },
+        )
+    }
+    if (showAdvancedConfirm) {
+        AdvancedOptionsConfirmDialog(
+            onDismiss = { showAdvancedConfirm = false },
+            onConfirm = {
+                showAdvancedConfirm = false
+                showAdvanced = true
+            },
+        )
+    }
+}
+
+@Composable
+internal fun WeakPasswordDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Lock, null) },
+        title = { Text("教务密码可能需要修改") },
+        text = {
+            Text("你的教务密码是 6 位数字，或 5 位数字加 1 个字母，这类密码较弱，学校系统可能会要求修改。\n\n请先登录学校教务处（智慧校园/教务处），按页面指引修改密码，再用新密码登录本 App。\n\n注意：这里指的是智慧校园/教务处的密码，不是校园网（网关）密码。")
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("继续登录") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+@Composable
+internal fun AdvancedOptionsConfirmDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Tune, null) },
+        title = { Text("高级选项") },
+        text = {
+            Text("学校系统已将智慧校园/教务处密码与校园网（网关）密码绑定，修改其中一个，另一个会一起修改。\n\n不建议两个密码设置成不同。也不要只在移动端修改而不管 PC 端。只有确认两个密码确实不同，才需要在这里填写网关密码。")
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("我知道了") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable

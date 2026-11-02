@@ -12,6 +12,8 @@ struct LoginView: View {
     @State private var showPasswordHelp = false
     @State private var preloginNotice: PreloginNotice?
     @State private var captchaInput = ""
+    @State private var showWeakPasswordAlert = false
+    @State private var showAdvancedConfirm = false
 
     var body: some View {
         ScrollView {
@@ -48,7 +50,7 @@ struct LoginView: View {
                         captchaField(image: captchaImage)
                     }
 
-                    DisclosureGroup(isExpanded: $showAdvancedOptions) {
+                    DisclosureGroup(isExpanded: advancedOptionsBinding) {
                         VStack(alignment: .leading, spacing: 10) {
                             Toggle("我的网关密码和教务密码不一样", isOn: $usesSeparateGatewayPassword)
                                 .font(.subheadline)
@@ -63,6 +65,12 @@ struct LoginView: View {
                             .font(.subheadline.weight(.medium))
                     }
                     .tint(.secondary)
+                    .alert("高级选项", isPresented: $showAdvancedConfirm) {
+                        Button("取消", role: .cancel) {}
+                        Button("我知道了") { showAdvancedOptions = true }
+                    } message: {
+                        Text("学校系统已将智慧校园/教务处密码与校园网（网关）密码绑定，修改其中一个，另一个会一起修改。\n\n不建议两个密码设置成不同。也不要只在移动端修改而不管 PC 端。只有确认两个密码确实不同，才需要在这里填写网关密码。")
+                    }
                 }
                 .padding(.horizontal, 32)
 
@@ -95,6 +103,12 @@ struct LoginView: View {
                 }
                 .padding(.horizontal, 32)
                 .padding(.top, 28)
+                .alert("教务密码可能需要修改", isPresented: $showWeakPasswordAlert) {
+                    Button("取消", role: .cancel) {}
+                    Button("继续登录") { submitLogin() }
+                } message: {
+                    Text("你的教务密码是 6 位数字，或 5 位数字加 1 个字母，这类密码较弱，学校系统可能会要求修改。\n\n请先登录学校教务处（智慧校园/教务处），按页面指引修改密码，再用新密码登录本 App。\n\n注意：这里指的是智慧校园/教务处的密码，不是校园网（网关）密码。")
+                }
 
                 Button {
                     showPasswordHelp = true
@@ -181,15 +195,42 @@ struct LoginView: View {
         return LoginThrottle.remainingSeconds(until: until, now: date)
     }
 
+    /// 展开高级选项前先弹窗确认；收起直接生效
+    private var advancedOptionsBinding: Binding<Bool> {
+        Binding(
+            get: { showAdvancedOptions },
+            set: { expanding in
+                if expanding {
+                    showAdvancedConfirm = true
+                } else {
+                    showAdvancedOptions = false
+                }
+            }
+        )
+    }
+
+    /// 登录入口：教务密码为弱密码形式时先弹窗，用户选择"继续登录"后才提交
+    private func requestLogin() {
+        if isWeakSchoolPassword(password) {
+            showWeakPasswordAlert = true
+        } else {
+            submitLogin()
+        }
+    }
+
+    private func submitLogin() {
+        authVM.login(
+            userId: userId,
+            password: password,
+            gatewayPassword: usesSeparateGatewayPassword ? ecPassword : nil,
+            captchaCode: authVM.captchaImage == nil ? nil : trimmedCaptchaInput
+        )
+    }
+
     private func loginButton(cooldownRemaining remaining: Int) -> some View {
         let loading = authVM.state == .loading
         return Button {
-            authVM.login(
-                userId: userId,
-                password: password,
-                gatewayPassword: usesSeparateGatewayPassword ? ecPassword : nil,
-                captchaCode: authVM.captchaImage == nil ? nil : trimmedCaptchaInput
-            )
+            requestLogin()
         } label: {
             Group {
                 if loading {

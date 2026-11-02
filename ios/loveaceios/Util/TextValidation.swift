@@ -26,3 +26,16 @@ func describeFullWidthChars(_ text: String) -> String {
         .map { $0 == "\u{3000}" ? "␣" : "'\($0)'" }
         .joined(separator: " ")
 }
+
+/// 教务密码是否为弱密码形式：6 位数字，或 5 位数字 + 1 个英文字母（字母在末位）。
+/// 只用于登录前提示，不阻止登录。与 Android TextValidation.kt 的 isWeakSchoolPassword 一致。
+func isWeakSchoolPassword(_ password: String) -> Bool {
+    let chars = Array(password)
+    guard chars.count == 6, chars.prefix(5).allSatisfy(isAsciiDigit) else { return false }
+    let last = chars[5]
+    return isAsciiDigit(last) || (last.isASCII && last.isLetter)
+}
+
+private func isAsciiDigit(_ c: Character) -> Bool {
+    c.isASCII && c.isNumber
+}

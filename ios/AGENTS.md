@@ -60,6 +60,7 @@
 - Auto-reconnect and `restoreSession` that hit a captcha keep the saved credentials and return to the login screen with "学校要求输入验证码，请重新登录". Do not clear credentials on that path.
 - Do not map 20041 back to "登录频繁"; it means captcha required.
 - Full-width checks live in `Util/TextValidation.swift`. Keep them aligned with Android `util/TextValidation.kt` and desktop `utils/text_validation.dart`.
+- Weak school password hint (`isWeakSchoolPassword` in `Util/TextValidation.swift`, same rule as Android): the manual login form shows an alert before submitting; "继续登录" submits anyway. Expanding 高级选项 shows a confirm alert first (`advancedOptionsBinding`). Hint only; quick login and auto-reconnect skip it.
 
 ## Git/artifact quirks
 - `.gitignore` ignores `build/`, `DerivedData/`, `*.xcarchive`, `*.ipa`, `*.dSYM`, SPM build folders, and Xcode user state.

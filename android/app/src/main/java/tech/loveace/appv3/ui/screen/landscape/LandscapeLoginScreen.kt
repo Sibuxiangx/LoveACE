@@ -20,6 +20,9 @@ import tech.loveace.appv3.ui.md3e.RibbonCard
 import tech.loveace.appv3.ui.md3e.RibbonCardVariant
 import tech.loveace.appv3.ui.md3e.RibbonShape
 import tech.loveace.appv3.ui.screen.PreloginNoticeCard
+import tech.loveace.appv3.ui.screen.AdvancedOptionsConfirmDialog
+import tech.loveace.appv3.ui.screen.WeakPasswordDialog
+import tech.loveace.appv3.util.isWeakSchoolPassword
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -184,6 +187,8 @@ private fun LandscapeManualLoginForm(
     var showEcPwd by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
     var showPasswordHelp by remember { mutableStateOf(false) }
+    var showWeakPasswordDialog by remember { mutableStateOf(false) }
+    var showAdvancedConfirm by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     // VPN密码默认与教务密码相同：仅当保存过的密码确实不同时，才默认展开高级选项
     val savedSeparatePwd = initialEcPassword.isNotEmpty() && initialEcPassword != initialPassword
@@ -211,7 +216,20 @@ private fun LandscapeManualLoginForm(
 
     fun tryLogin() {
         focusManager.clearFocus()
-        if (canLogin) onLogin(userId, effectiveEcPassword, password, captchaCode)
+        if (!canLogin) return
+        if (isWeakSchoolPassword(password)) {
+            showWeakPasswordDialog = true
+        } else {
+            onLogin(userId, effectiveEcPassword, password, captchaCode)
+        }
+    }
+
+    fun toggleAdvanced() {
+        if (showAdvanced) {
+            showAdvanced = false
+        } else {
+            showAdvancedConfirm = true
+        }
     }
 
     Column(
@@ -268,7 +286,7 @@ private fun LandscapeManualLoginForm(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.large)
-                        .clickable { showAdvanced = !showAdvanced }
+                        .clickable { toggleAdvanced() }
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -328,7 +346,7 @@ private fun LandscapeManualLoginForm(
         Spacer(Modifier.height(12.dp))
 
         Button(
-            onClick = { onLogin(userId, effectiveEcPassword, password, captchaCode) },
+            onClick = { tryLogin() },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = MaterialTheme.shapes.extraLarge, enabled = canLogin,
         ) {
@@ -376,6 +394,25 @@ private fun LandscapeManualLoginForm(
 
     if (showPasswordHelp) {
         LandscapePasswordHelpDialog(onDismiss = { showPasswordHelp = false })
+    }
+
+    if (showWeakPasswordDialog) {
+        WeakPasswordDialog(
+            onDismiss = { showWeakPasswordDialog = false },
+            onConfirm = {
+                showWeakPasswordDialog = false
+                onLogin(userId, effectiveEcPassword, password, captchaCode)
+            },
+        )
+    }
+    if (showAdvancedConfirm) {
+        AdvancedOptionsConfirmDialog(
+            onDismiss = { showAdvancedConfirm = false },
+            onConfirm = {
+                showAdvancedConfirm = false
+                showAdvanced = true
+            },
+        )
     }
 }
 
