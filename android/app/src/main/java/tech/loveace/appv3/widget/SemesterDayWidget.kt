@@ -130,13 +130,13 @@ private fun DayScheduleContent(state: WidgetState.InSession, isDark: Boolean) {
             val clickAction = actionStartActivity<MainActivity>(
                 actionParametersOf(NavTargetKey to "schedule")
             )
-            LazyColumn(
+            Column(
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .defaultWeight()
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
-                items(state.todayCourses, itemId = { it.sessionStart.toLong() }) { course ->
+                state.todayCourses.forEach { course ->
                     Box(modifier = GlanceModifier.clickable(clickAction)) {
                         CourseCard(course, colors)
                     }

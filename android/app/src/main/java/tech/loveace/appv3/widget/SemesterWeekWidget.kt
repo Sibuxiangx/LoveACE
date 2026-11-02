@@ -205,8 +205,8 @@ private fun WeekGridContent(
         val clickAction = actionStartActivity<MainActivity>(
             actionParametersOf(NavTargetKey to "schedule")
         )
-        LazyColumn(modifier = GlanceModifier.fillMaxWidth().defaultWeight().padding(horizontal = 1.dp)) {
-            item(itemId = 0L) {
+        Column(modifier = GlanceModifier.fillMaxWidth().defaultWeight().padding(horizontal = 1.dp)) {
+            Column(modifier = GlanceModifier.fillMaxWidth()) {
                 Row(modifier = GlanceModifier.fillMaxWidth().clickable(clickAction)) {
                     // Session number column
                     Column(modifier = GlanceModifier.width(TIME_COL_WIDTH)) {
