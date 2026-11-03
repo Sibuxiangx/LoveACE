@@ -52,7 +52,7 @@ class TeacherEvaluationViewModel : ViewModel() {
     private var service: TeacherEvaluationService? = null
     private var schedulerJob: Job? = null
     private var loaderJob: Job? = null
-    private var protectionAttempt = 0
+    private var protectionWaitDone = false
 
     private val _uiState = MutableStateFlow(TeacherEvaluationUiState())
     val uiState: StateFlow<TeacherEvaluationUiState> = _uiState.asStateFlow()
@@ -97,16 +97,9 @@ class TeacherEvaluationViewModel : ViewModel() {
                 addLog("评价暂未开启")
                 return@launch
             }
-            if (data.protection.requiresInitialWait) {
-                // 首次访问保护：显示倒计时，等待后重新拉取 index / 课程列表
-                if (protectionAttempt >= MAX_PROTECTION_WAITS) {
-                    _uiState.update {
-                        it.copy(isLoading = false, protectionWaitSeconds = 0, protectionWaitTotalSeconds = 0, error = "首次访问保护未解除，请稍后手动刷新重试")
-                    }
-                    addLog("首次访问保护未解除，已停止自动重试")
-                    return@launch
-                }
-                protectionAttempt++
+            if (data.protection.requiresInitialWait && !protectionWaitDone) {
+                // 首次访问保护：等待一次倒计时（infoTime+5s）后直接加载课程，不再因服务端状态重复等待
+                protectionWaitDone = true
                 val waitSeconds = data.protection.waitSeconds
                 _uiState.update {
                     it.copy(
@@ -128,7 +121,6 @@ class TeacherEvaluationViewModel : ViewModel() {
                 load()
                 return@launch
             }
-            protectionAttempt = 0
             _uiState.update {
                 it.copy(
                     isLoading = false,
@@ -393,8 +385,5 @@ class TeacherEvaluationViewModel : ViewModel() {
     companion object {
         private const val START_INTERVAL_MS = 6_000L
         private const val WAIT_BEFORE_SUBMIT_SECONDS = 140
-
-        /** 首次访问保护：最多自动等待重载次数（超过则要求手动刷新） */
-        private const val MAX_PROTECTION_WAITS = 2
     }
 }

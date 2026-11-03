@@ -18,7 +18,7 @@ final class TeacherEvaluationViewModel {
     private var launcherTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
     private var activeTasks: [Task<TeacherEvaluationResult, Never>] = []
-    private var protectionAttempt = 0
+    private var protectionWaitDone = false
     private let launchIntervalSeconds = 6
     private let countdownSeconds = 140
 
@@ -45,17 +45,9 @@ final class TeacherEvaluationViewModel {
             let result = await service.fetchCourses()
             if Task.isCancelled { return }
             let protection = await service.indexProtection
-            if protection.requiresInitialWait {
-                // 首次访问保护：显示倒计时，等待后重新拉取 index / 课程列表
-                if protectionAttempt >= Self.maxProtectionWaits {
-                    protectionWaitSeconds = 0
-                    protectionWaitTotalSeconds = 0
-                    isLoading = false
-                    error = "首次访问保护未解除，请稍后手动刷新重试"
-                    addLog("首次访问保护未解除，已停止自动重试")
-                    return
-                }
-                protectionAttempt += 1
+            if protection.requiresInitialWait && !protectionWaitDone {
+                // 首次访问保护：等待一次倒计时（infoTime+5s）后直接加载课程，不再因服务端状态重复等待
+                protectionWaitDone = true
                 let waitSeconds = protection.waitSeconds
                 protectionWaitTotalSeconds = waitSeconds
                 protectionWaitSeconds = waitSeconds
@@ -73,7 +65,6 @@ final class TeacherEvaluationViewModel {
                 loadCourses()
                 return
             }
-            protectionAttempt = 0
             protectionWaitSeconds = 0
             protectionWaitTotalSeconds = 0
             if result.success, let data = result.data {
@@ -381,7 +372,4 @@ final class TeacherEvaluationViewModel {
         guard let message else { return false }
         return message.contains("评价暂未开启") || message.contains("评估开关已关闭")
     }
-
-    /// 首次访问保护：最多自动等待重载次数（超过则要求手动刷新）
-    private static let maxProtectionWaits = 2
 }
