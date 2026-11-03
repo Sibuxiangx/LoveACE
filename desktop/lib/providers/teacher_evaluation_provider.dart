@@ -42,8 +42,6 @@ class TeacherEvaluationTaskState {
 class TeacherEvaluationProvider extends ChangeNotifier {
   final TeacherEvaluationService service;
   int _runId = 0;
-  int _loadId = 0;
-  int _protectionAttempt = 0;
 
   TeacherEvaluationState _state = TeacherEvaluationState.initial;
   bool _isRunning = false;
@@ -54,10 +52,6 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   List<TeacherEvaluationTaskState> _tasks = [];
   List<String> _logs = [];
 
-  /// 首次访问保护倒计时（秒），0 表示未处于保护等待
-  int _protectionWaitSeconds = 0;
-  int _protectionWaitTotalSeconds = 0;
-
   TeacherEvaluationProvider(this.service);
 
   TeacherEvaluationState get state => _state;
@@ -67,14 +61,11 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   List<TeacherEvaluationCourse> get courses => _courses;
   List<TeacherEvaluationTaskState> get tasks => _tasks;
   List<String> get logs => _logs;
-  int get protectionWaitSeconds => _protectionWaitSeconds;
-  int get protectionWaitTotalSeconds => _protectionWaitTotalSeconds;
   List<TeacherEvaluationCourse> get pendingCourses => _courses.where((course) => !course.isEvaluated).toList();
   int get evaluatedCount => _courses.where((course) => course.isEvaluated).length;
 
   Future<void> load() async {
     stop(resetRunning: false);
-    final loadId = ++_loadId;
     _state = TeacherEvaluationState.loading;
     _errorMessage = null;
     _closedMessage = '';
@@ -102,45 +93,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
       return;
     }
 
-    if (data.protection.requiresInitialWait) {
-      // 首次访问保护：显示倒计时，等待后重新拉取 index / 课程列表
-      if (_protectionAttempt >= _maxProtectionWaits) {
-        _state = TeacherEvaluationState.error;
-        _protectionWaitSeconds = 0;
-        _protectionWaitTotalSeconds = 0;
-        _errorMessage = '首次访问保护未解除，请稍后手动刷新重试';
-        _addLog('首次访问保护未解除，已停止自动重试');
-        notifyListeners();
-        return;
-      }
-      _protectionAttempt++;
-      final waitSeconds = data.protection.waitSeconds;
-      _state = TeacherEvaluationState.loaded;
-      _indexToken = data.tokenValue;
-      _courses = [];
-      _tasks = [];
-      _protectionWaitTotalSeconds = waitSeconds;
-      _protectionWaitSeconds = waitSeconds;
-      _addLog('首次评教需阅读须知，等待 $waitSeconds 秒后继续');
-      notifyListeners();
-      for (var second = waitSeconds; second >= 1; second--) {
-        if (loadId != _loadId) return; // 已被新的加载请求取代
-        _protectionWaitSeconds = second;
-        notifyListeners();
-        await Future.delayed(const Duration(seconds: 1));
-      }
-      if (loadId != _loadId) return;
-      _protectionWaitSeconds = 0;
-      _protectionWaitTotalSeconds = 0;
-      _addLog('保护等待结束，重新加载评教页');
-      await load();
-      return;
-    }
-
-    _protectionAttempt = 0;
     _state = TeacherEvaluationState.loaded;
-    _protectionWaitSeconds = 0;
-    _protectionWaitTotalSeconds = 0;
     _indexToken = data.tokenValue;
     _courses = data.courses;
     _tasks = [];
@@ -231,8 +184,6 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     _runId++;
     if (!resetRunning) return;
     _isRunning = false;
-    _protectionWaitSeconds = 0;
-    _protectionWaitTotalSeconds = 0;
     _tasks = _tasks.map((task) {
       if (task.status.isActive) {
         return task.copyWith(
@@ -386,9 +337,6 @@ class TeacherEvaluationProvider extends ChangeNotifier {
 
   static const _startInterval = Duration(seconds: 6);
   static const _waitBeforeSubmit = Duration(seconds: 140);
-
-  /// 首次访问保护：最多自动等待重载次数（超过则要求手动刷新）
-  static const _maxProtectionWaits = 2;
 }
 
 extension on TeacherEvaluationTaskStatus {
