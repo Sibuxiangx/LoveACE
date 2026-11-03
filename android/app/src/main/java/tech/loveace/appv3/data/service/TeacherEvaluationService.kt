@@ -17,7 +17,6 @@ import org.jsoup.nodes.Element
 import tech.loveace.appv3.data.model.TeacherEvaluationCourse
 import tech.loveace.appv3.data.model.TeacherEvaluationCourseList
 import tech.loveace.appv3.data.model.TeacherEvaluationIndex
-import tech.loveace.appv3.data.model.TeacherEvaluationIndexProtection
 import tech.loveace.appv3.data.model.TeacherEvaluationOption
 import tech.loveace.appv3.data.model.TeacherEvaluationPreparedForm
 import tech.loveace.appv3.data.model.TeacherEvaluationQuestionnaire
@@ -40,17 +39,6 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
                         tokenValue = index.tokenValue,
                         isClosed = true,
                         closedMessage = index.closedMessage.ifBlank { "评价暂未开启" },
-                    )
-                )
-            }
-            if (index.protection.requiresInitialWait) {
-                // 首次访问保护：先不出课程列表，由上层倒计时后重新拉取
-                Log.i(TAG, "loadCourses: first-visit protection, wait ${index.protection.waitSeconds}s")
-                return@withContext UniResponse.success(
-                    TeacherEvaluationCourseList(
-                        tokenValue = index.tokenValue,
-                        isClosed = false,
-                        protection = index.protection,
                     )
                 )
             }
@@ -189,30 +177,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             tokenValue = parseTokenValue(doc, html),
             isClosed = alert != null,
             closedMessage = alert?.text()?.trim().orEmpty(),
-            protection = parseIndexProtection(doc),
         )
-    }
-
-    /**
-     * 解析评教首页的“首次访问须知/倒计时”保护状态。
-     * 只读取隐藏 input 与 JS 状态变量，日志不记录页面原文。
-     */
-    private fun parseIndexProtection(doc: Document): TeacherEvaluationIndexProtection {
-        return runCatching {
-            val scripts = doc.select("script").joinToString("\n") { it.html() }
-            val (isFinished, finishedResolved) = scriptStringVar(scripts, "isFinished")
-            val (isFirstVisit, firstVisitResolved) = scriptStringVar(scripts, "isFirstVisit")
-            TeacherEvaluationIndexProtection(
-                schoolId = doc.inputIdValue("schoolId"),
-                infoOff = doc.inputIdValue("infoOff"),
-                infoTimeSeconds = doc.inputIdValue("infoTime").toIntOrNull() ?: 0,
-                isFinished = isFinished,
-                isFinishedResolved = finishedResolved,
-                isFirstVisit = isFirstVisit,
-                isFirstVisitResolved = firstVisitResolved,
-                hasAhcjTimer = scripts.contains("tsxxAhcj"),
-            )
-        }.getOrDefault(TeacherEvaluationIndexProtection.NONE)
     }
 
     private fun fetchCoursesInternal(): List<TeacherEvaluationCourse> {
@@ -381,14 +346,6 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
     }
 
     private fun Document.inputValue(name: String): String = selectFirst("input[name=$name]")?.attr("value").orEmpty()
-
-private fun Document.inputIdValue(id: String): String = selectFirst("input#$id")?.attr("value").orEmpty().trim()
-
-/** 提取页面脚本中的 `var name = "value";` 状态变量，返回 (值, 是否解析到) */
-private fun scriptStringVar(scripts: String, name: String): Pair<String, Boolean> {
-    val match = Regex("var\\s+$name\\s*=\\s*[\"']([^\"']*)[\"']").find(scripts) ?: return "" to false
-    return match.groupValues[1].trim() to true
-}
 
     private fun Element?.questionText(minLength: Int, selectorToExclude: String): String {
         if (this == null) return ""

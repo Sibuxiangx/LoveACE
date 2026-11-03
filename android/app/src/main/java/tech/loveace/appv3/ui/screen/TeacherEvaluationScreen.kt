@@ -123,14 +123,6 @@ fun TeacherEvaluationContent(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (state.protectionWaitSeconds > 0) {
-                item {
-                    InfoCard(
-                        "首次评教需阅读须知（${state.protectionWaitSeconds}/${state.protectionWaitTotalSeconds}s）",
-                        "教务系统首次评教有强制阅读倒计时，等待结束后将自动重新加载课程列表。",
-                    )
-                }
-            }
             item {
                 NoticeCard(
                     isRunning = state.isRunning,

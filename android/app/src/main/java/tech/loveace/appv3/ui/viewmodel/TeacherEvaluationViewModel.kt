@@ -37,9 +37,6 @@ data class TeacherEvaluationUiState(
     val tasks: List<TeacherEvaluationTaskState> = emptyList(),
     val logs: List<String> = emptyList(),
     val error: String? = null,
-    /** 首次访问保护倒计时（秒），0 表示未处于保护等待 */
-    val protectionWaitSeconds: Int = 0,
-    val protectionWaitTotalSeconds: Int = 0,
 ) {
     val pendingCourses: List<TeacherEvaluationCourse>
         get() = courses.filter { !it.isEvaluated }
@@ -52,7 +49,6 @@ class TeacherEvaluationViewModel : ViewModel() {
     private var service: TeacherEvaluationService? = null
     private var schedulerJob: Job? = null
     private var loaderJob: Job? = null
-    private var protectionWaitDone = false
 
     private val _uiState = MutableStateFlow(TeacherEvaluationUiState())
     val uiState: StateFlow<TeacherEvaluationUiState> = _uiState.asStateFlow()
@@ -97,35 +93,9 @@ class TeacherEvaluationViewModel : ViewModel() {
                 addLog("评价暂未开启")
                 return@launch
             }
-            if (data.protection.requiresInitialWait && !protectionWaitDone) {
-                // 首次访问保护：等待一次倒计时（infoTime+5s）后直接加载课程，不再因服务端状态重复等待
-                protectionWaitDone = true
-                val waitSeconds = data.protection.waitSeconds
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        indexToken = data.tokenValue,
-                        courses = emptyList(),
-                        tasks = emptyList(),
-                        protectionWaitTotalSeconds = waitSeconds,
-                        protectionWaitSeconds = waitSeconds,
-                    )
-                }
-                addLog("首次评教需阅读须知，等待 $waitSeconds 秒后继续")
-                for (second in waitSeconds downTo 1) {
-                    _uiState.update { it.copy(protectionWaitSeconds = second) }
-                    delay(1000)
-                }
-                _uiState.update { it.copy(protectionWaitSeconds = 0, protectionWaitTotalSeconds = 0) }
-                addLog("保护等待结束，重新加载评教页")
-                load()
-                return@launch
-            }
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    protectionWaitSeconds = 0,
-                    protectionWaitTotalSeconds = 0,
                     indexToken = data.tokenValue,
                     courses = data.courses,
                     tasks = emptyList(),
@@ -225,8 +195,6 @@ class TeacherEvaluationViewModel : ViewModel() {
             _uiState.update { state ->
                 state.copy(
                     isRunning = false,
-                    protectionWaitSeconds = 0,
-                    protectionWaitTotalSeconds = 0,
                     tasks = state.tasks.map { task ->
                         if (task.status.isActive()) {
                             task.copy(status = TeacherEvaluationTaskStatus.Cancelled, message = "已停止", countdownSeconds = 0)

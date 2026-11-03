@@ -10,15 +10,11 @@ final class TeacherEvaluationViewModel {
     var error: String?
     var isEvaluationClosed = false
     var lastResult: TeacherEvaluationBatchResult?
-    /// 首次访问保护倒计时（秒），0 表示未处于保护等待
-    var protectionWaitSeconds = 0
-    var protectionWaitTotalSeconds = 0
 
     private var service: TeacherEvaluationService?
     private var launcherTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
     private var activeTasks: [Task<TeacherEvaluationResult, Never>] = []
-    private var protectionWaitDone = false
     private let launchIntervalSeconds = 6
     private let countdownSeconds = 140
 
@@ -44,29 +40,6 @@ final class TeacherEvaluationViewModel {
             isEvaluationClosed = false
             let result = await service.fetchCourses()
             if Task.isCancelled { return }
-            let protection = await service.indexProtection
-            if protection.requiresInitialWait && !protectionWaitDone {
-                // 首次访问保护：等待一次倒计时（infoTime+5s）后直接加载课程，不再因服务端状态重复等待
-                protectionWaitDone = true
-                let waitSeconds = protection.waitSeconds
-                protectionWaitTotalSeconds = waitSeconds
-                protectionWaitSeconds = waitSeconds
-                courses = []
-                tasks = []
-                isLoading = false
-                addLog("首次评教需阅读须知，等待 \(waitSeconds) 秒后继续")
-                while protectionWaitSeconds > 0 {
-                    try? await Task.sleep(for: .seconds(1))
-                    if Task.isCancelled { return }
-                    protectionWaitSeconds = max(protectionWaitSeconds - 1, 0)
-                }
-                protectionWaitTotalSeconds = 0
-                addLog("保护等待结束，重新加载评教页")
-                loadCourses()
-                return
-            }
-            protectionWaitSeconds = 0
-            protectionWaitTotalSeconds = 0
             if result.success, let data = result.data {
                 courses = data
             } else if Self.isClosedMessage(result.error) {
