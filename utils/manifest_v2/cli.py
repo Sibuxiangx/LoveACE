@@ -27,6 +27,7 @@ from manifest import (
     utc_now,
 )
 from s3_client import CANONICAL_CDN_BASE_URL, S3Client
+import qq_group
 
 
 app = typer.Typer(help="LoveACE 发布管理工具")
@@ -406,6 +407,17 @@ def clear_prelogin_notice():
     manifest.prelogin_notice = None
     save_manifest_outputs(client, manifest)
     console.print("[green]Pre-login notice cleared[/]")
+
+
+@app.command("qq-group-publish")
+def qq_group_publish(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate and print without writing to S3"),
+):
+    """Publish the independent QQ group manifest; unchanged content is skipped."""
+    client = S3Client()
+    result_status, document = qq_group.publish(client, dry_run=dry_run)
+    console.print(f"[green]QQ group manifest {result_status}[/] [dim]{qq_group.QQ_GROUP_KEY}[/]")
+    console.print_json(json.dumps(document, ensure_ascii=False))
 
 
 @app.command()

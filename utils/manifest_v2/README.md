@@ -11,6 +11,8 @@ publisher derives the legacy OTA document required by shipped clients.
 | `loveace/manifest.json` | Legacy OTA projection |
 | `loveace/download.html` | Canonical manifest v2 download page |
 | `loveace/download_page_v2.html` | Alias of the manifest v2 download page |
+| `loveace/qq_group_v1.json` | Independent QQ group manifest; not referenced by `manifest_v2.json` |
+| `loveace/assets/qq-group-<hash>.png` | QQ group QR image, content-addressed |
 
 Native release URLs must use `https://release.loveace.top`. The publisher
 rejects any other `CDN_BASE_URL` and stores immutable artifacts under:
@@ -116,3 +118,19 @@ uv run python cli.py sync-semesters
 All GitHub Actions jobs that mutate a manifest use the
 `loveace-manifest-publish` concurrency group. Local publication must not run in
 parallel with those jobs.
+
+## QQ group manifest
+
+`qq_group/group.json` is the only source and `qq_group/qrcode.png` is the QR image.
+The `QQ Group Manifest` workflow publishes both; its `dry_run` input defaults to
+true. Locally:
+
+```bash
+uv run python cli.py qq-group-publish --dry-run
+uv run python cli.py qq-group-publish
+```
+
+The publisher skips the write when the content fingerprint is unchanged, so
+repeated runs are idempotent. The image is uploaded once per content hash.
+This document is independent of `manifest_v2.json`; no field in
+`manifest_v2.json` points to it.
