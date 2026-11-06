@@ -61,6 +61,7 @@
 - Do not map 20041 back to "登录频繁"; it means captcha required.
 - Full-width checks live in `Util/TextValidation.swift`. Keep them aligned with Android `util/TextValidation.kt` and desktop `utils/text_validation.dart`.
 - Weak school password hint (`isWeakSchoolPassword` in `Util/TextValidation.swift`, same rule as Android): the manual login form shows an alert before submitting; "继续登录" submits anyway. Expanding 高级选项 shows a confirm alert first (`advancedOptionsBinding`). Hint only; quick login and auto-reconnect skip it.
+- 高级选项 is a footnote-size `DisclosureGroup` below the help link in `LoginView`, not a form row. Keep it there so users do not read it as a second required password.
 - `ContentView` keeps `LoginView` mounted during `.loading`; do not swap it for a loading view. Rebuilding the login view on error wipes typed input, re-prefills remembered credentials, and `userIdDidChange` then clears the captcha. Prefill only when the userId and password fields are empty. The userId and password fields have no `textContentType`, so system AutoFill cannot overwrite what the user typed.
 
 ## Git/artifact quirks

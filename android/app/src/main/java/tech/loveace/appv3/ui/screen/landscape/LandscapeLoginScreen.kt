@@ -288,61 +288,6 @@ private fun LandscapeManualLoginForm(
                         refreshEnabled = !isLoading && cooldownSec == 0L,
                     )
                 }
-                // ── 高级选项：VPN密码默认与教务密码相同，默认折叠 ──
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable { toggleAdvanced() }
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "高级选项",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Icon(
-                        if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (showAdvanced) "收起高级选项" else "展开高级选项",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                AnimatedVisibility(
-                    visible = showAdvanced,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "我的网关密码和教务密码不一样",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(checked = useSeparatePwd, onCheckedChange = { useSeparatePwd = it }, enabled = !isLoading)
-                        }
-                        if (useSeparatePwd) {
-                            OutlinedTextField(
-                                value = ecPassword, onValueChange = { ecPassword = it },
-                                label = { Text("VPN密码") }, leadingIcon = { Icon(Icons.Default.VpnKey, null) },
-                                trailingIcon = { IconButton(onClick = { showEcPwd = !showEcPwd }) { Icon(if (showEcPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
-                                visualTransformation = if (showEcPwd) VisualTransformation.None else PasswordVisualTransformation(),
-                                singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { tryLogin() }),
-                                enabled = !isLoading,
-                                isError = hasFullWidthChars(ecPassword),
-                                supportingText = {
-                                    if (hasFullWidthChars(ecPassword)) Text("含全角字符 ${describeFullWidthChars(ecPassword)}，请用英文半角", fontSize = 12.sp)
-                                },
-                            )
-                        }
-                    }
-                }
             }
         }
 
@@ -396,6 +341,61 @@ private fun LandscapeManualLoginForm(
             Icon(Icons.Default.HelpOutline, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text("不知道密码是什么？")
+        }
+        // ── 高级选项：次要入口，默认折叠；网关密码与教务密码通常相同 ──
+        Row(
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable { toggleAdvanced() }
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "高级选项",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Icon(
+                if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (showAdvanced) "收起高级选项" else "展开高级选项",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        AnimatedVisibility(
+            visible = showAdvanced,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "我的网关密码和教务密码不一样",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = useSeparatePwd, onCheckedChange = { useSeparatePwd = it }, enabled = !isLoading)
+                }
+                if (useSeparatePwd) {
+                    OutlinedTextField(
+                        value = ecPassword, onValueChange = { ecPassword = it },
+                        label = { Text("VPN密码") }, leadingIcon = { Icon(Icons.Default.VpnKey, null) },
+                        trailingIcon = { IconButton(onClick = { showEcPwd = !showEcPwd }) { Icon(if (showEcPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
+                        visualTransformation = if (showEcPwd) VisualTransformation.None else PasswordVisualTransformation(),
+                        singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { tryLogin() }),
+                        enabled = !isLoading,
+                        isError = hasFullWidthChars(ecPassword),
+                        supportingText = {
+                            if (hasFullWidthChars(ecPassword)) Text("含全角字符 ${describeFullWidthChars(ecPassword)}，请用英文半角", fontSize = 12.sp)
+                        },
+                    )
+                }
+            }
         }
     }
 

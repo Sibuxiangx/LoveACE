@@ -50,27 +50,6 @@ struct LoginView: View {
                     if let captchaImage = authVM.captchaImage {
                         captchaField(image: captchaImage)
                     }
-
-                    DisclosureGroup(isExpanded: advancedOptionsBinding) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Toggle("我的网关密码和教务密码不一样", isOn: $usesSeparateGatewayPassword)
-                                .font(.subheadline)
-                            if usesSeparateGatewayPassword {
-                                inputField(icon: "network", placeholder: "网关密码", text: $ecPassword, isSecure: true, warning: fullWidthWarning(ecPassword))
-                            }
-                        }
-                        .padding(.top, 8)
-                    } label: {
-                        Label("高级选项", systemImage: "slider.horizontal.3")
-                            .font(.subheadline.weight(.medium))
-                    }
-                    .tint(.secondary)
-                    .alert("高级选项", isPresented: $showAdvancedConfirm) {
-                        Button("取消", role: .cancel) {}
-                        Button("我知道了") { showAdvancedOptions = true }
-                    } message: {
-                        Text("学校系统已将智慧校园/教务处密码与校园网（网关）密码绑定，修改其中一个，另一个会一起修改。\n\n不建议两个密码设置成不同。也不要只在移动端修改而不管 PC 端。只有确认两个密码确实不同，才需要在这里填写网关密码。")
-                    }
                 }
                 .padding(.horizontal, 32)
 
@@ -111,6 +90,29 @@ struct LoginView: View {
                         .font(.subheadline)
                 }
                 .padding(.top, 16)
+                DisclosureGroup(isExpanded: advancedOptionsBinding) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("我的网关密码和教务密码不一样", isOn: $usesSeparateGatewayPassword)
+                            .font(.footnote)
+                        if usesSeparateGatewayPassword {
+                            inputField(icon: "network", placeholder: "网关密码", text: $ecPassword, isSecure: true, warning: fullWidthWarning(ecPassword))
+                        }
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Text("高级选项")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .tint(.secondary)
+                .padding(.horizontal, 32)
+                .padding(.top, 20)
+                .alert("高级选项", isPresented: $showAdvancedConfirm) {
+                    Button("取消", role: .cancel) {}
+                    Button("我知道了") { showAdvancedOptions = true }
+                } message: {
+                    Text("学校系统已将智慧校园/教务处密码与校园网（网关）密码绑定，修改其中一个，另一个会一起修改。\n\n不建议两个密码设置成不同。也不要只在移动端修改而不管 PC 端。只有确认两个密码确实不同，才需要在这里填写网关密码。")
+                }
 
                 Spacer(minLength: 40)
             }
