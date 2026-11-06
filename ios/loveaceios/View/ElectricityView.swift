@@ -48,7 +48,7 @@ struct ElectricityView: View {
                     }
                 }
             } else {
-                Section("选择楼栋") {
+                Section {
                     ForEach(vm.buildings, id: \.["code"]) { b in
                         NavigationLink {
                             FloorPickerView(service: vm.getService()!, buildingCode: b["code"] ?? "", buildingName: b["name"] ?? "", onConfirm: { code, display in
@@ -59,6 +59,10 @@ struct ElectricityView: View {
                             Text(b["name"] ?? "")
                         }
                     }
+                } header: {
+                    Text("选择楼栋")
+                } footer: {
+                    Text("部分楼栋由于学校系统也没有提供查询，故彩带也无法查询")
                 }
             }
 

@@ -640,6 +640,11 @@ class _WinUIRoomSelectionDialogState extends State<_WinUIRoomSelectionDialog> {
                       if (value != null) _loadFloors(value);
                     },
                   ),
+            const SizedBox(height: 6),
+            Text(
+              '部分楼栋由于学校系统也没有提供查询，故彩带也无法查询',
+              style: FluentTheme.of(context).typography.caption,
+            ),
             const SizedBox(height: 16),
             // 楼层选择
             const Text('楼层'),

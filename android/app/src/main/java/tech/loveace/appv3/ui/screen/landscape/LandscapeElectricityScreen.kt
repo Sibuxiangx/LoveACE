@@ -210,6 +210,12 @@ private fun LandscapeRoomSelectionSheet(vm: ElectricityViewModel, onDismiss: () 
                 LandscapeRoomDropdown("楼栋", state.buildings, state.selectedBuilding?.let { mapOf("code" to it.code, "name" to it.name) }, state.buildings.isNotEmpty(), Modifier.weight(1f)) { vm.selectBuilding(it["code"]!!, it["name"]!!) }
                 LandscapeRoomDropdown("楼层", state.floors, state.selectedFloor?.let { mapOf("code" to it.code, "name" to it.name) }, state.selectedBuilding != null && state.floors.isNotEmpty(), Modifier.weight(1f)) { vm.selectFloor(it["code"]!!, it["name"]!!) }
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "部分楼栋由于学校系统也没有提供查询，故彩带也无法查询",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(12.dp))
             LandscapeRoomDropdown("房间", state.rooms, state.selectedRoom?.let { mapOf("code" to it.code, "name" to it.name) }, state.selectedFloor != null && state.rooms.isNotEmpty(), Modifier.fillMaxWidth()) { vm.selectRoom(it["code"]!!, it["name"]!!) }
             if (state.isLoading) { Spacer(Modifier.height(16.dp)); Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { AppCircularProgressIndicator(modifier = Modifier.size(32.dp)) } }

@@ -390,6 +390,12 @@ private fun RoomSelectionSheet(
                 enabled = state.buildings.isNotEmpty(),
                 onSelect = { vm.selectBuilding(it["code"]!!, it["name"]!!) },
             )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "部分楼栋由于学校系统也没有提供查询，故彩带也无法查询",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(16.dp))
 
             // 楼层
