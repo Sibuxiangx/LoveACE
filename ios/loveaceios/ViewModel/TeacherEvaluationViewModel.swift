@@ -114,11 +114,10 @@ final class TeacherEvaluationViewModel {
             return
         }
 
-        // 批后补偿：刷新列表，对失败且仍未评的课程补跑一轮
-        if results.contains(where: { !$0.success }) {
-            await refreshCoursesAfterEvaluation()
+        // 批后补偿：先刷新列表，再只对"准备失败/提交失败"且服务器确认未评的课程补跑一轮；刷新失败则不补偿
+        if results.contains(where: { !$0.success }), await refreshCoursesAfterEvaluation() {
             let stillPending = tasks
-                .filter { $0.status == .failed }
+                .filter { $0.status == .failed && Self.retryableErrorKinds.contains($0.errorKind ?? "") }
                 .filter { task in courses.first { $0.matches(task.course) }?.isEvaluated != true }
             if !stillPending.isEmpty {
                 addLog("批后补偿：\(stillPending.count) 门课程将自动重试一轮")
@@ -244,24 +243,25 @@ final class TeacherEvaluationViewModel {
             let submit = await service.submitEvaluation(formData: form)
             if submit.success { break }
 
-            // 验证兜底：submit 响应异常但服务器实际已记录时按成功处理
-            updateTask(taskId, status: .verifying, message: "提交响应异常，正在核实")
+            // 提交结果不确定：先核实；核实本身失败时绝不重新提交，避免重复提交
+            updateTask(taskId, status: .verifying, message: "提交结果不确定，正在核实")
             let fallback = await service.fetchCourses()
-            if fallback.success, let updated = fallback.data,
-               updated.first(where: { course.matches($0) })?.isEvaluated == true {
+            guard fallback.success, let updated = fallback.data else {
+                return failTask(taskId, course: course, message: "提交结果无法核实，未重新提交，请稍后刷新查看", errorKind: "verifyUnknown")
+            }
+            if updated.first(where: { course.matches($0) })?.isEvaluated == true {
                 updateTask(taskId, status: .completed, message: "提交成功（响应异常，已核实）", endTime: Date())
                 addLog("任务 \(taskId) [\(course.displayName)]：提交成功（响应异常，已核实）")
                 return TeacherEvaluationResult(course: course, success: true)
             }
 
-            // 立即重试一次完整流程：刷新 index token → 重新 prepare（不复用旧评价页 token）→ 等待 → 提交
+            // 服务器确认未记录：重新准备表单（prepare 内部会重新获取 token）后等待并提交一次
             guard !isRetry else {
                 return failTask(taskId, course: course, message: submit.error ?? "提交失败", errorKind: "submitFailed")
             }
             isRetry = true
-            addLog("任务 \(taskId) [\(course.displayName)]：提交失败，刷新 token 后重试一次")
-            await service.refreshIndexToken()
-            updateTask(taskId, status: .preparing, message: "提交失败，重新准备表单")
+            addLog("任务 \(taskId) [\(course.displayName)]：提交未生效，重新准备后提交一次")
+            updateTask(taskId, status: .preparing, message: "提交未生效，重新准备表单")
             let retried = await service.prepareEvaluation(course: course, totalCourses: tasks.count)
             guard retried.success, let retryForm = retried.data else {
                 return failTask(taskId, course: course, message: retried.error ?? "重试准备失败", errorKind: "submitFailed")
@@ -273,7 +273,7 @@ final class TeacherEvaluationViewModel {
         addLog("任务 \(taskId) [\(course.displayName)]：验证结果")
         let verify = await service.fetchCourses()
         guard verify.success, let updatedCourses = verify.data else {
-            return failTask(taskId, course: course, message: verify.error ?? "无法验证结果", errorKind: "verifyMismatch")
+            return failTask(taskId, course: course, message: "提交已返回成功，但刷新列表失败，请稍后刷新查看", errorKind: "verifyUnknown")
         }
         let updatedCourse = updatedCourses.first { course.matches($0) }
         guard updatedCourse?.isEvaluated == true else {
@@ -285,16 +285,18 @@ final class TeacherEvaluationViewModel {
         return TeacherEvaluationResult(course: course, success: true)
     }
 
-    private func refreshCoursesAfterEvaluation() async {
-        guard let service else { return }
+    @discardableResult
+    private func refreshCoursesAfterEvaluation() async -> Bool {
+        guard let service else { return false }
         addLog("刷新课程列表...")
         let result = await service.fetchCourses()
         if result.success, let data = result.data {
             courses = data
             addLog("课程列表已更新")
-        } else if let error = result.error {
-            addLog("课程列表刷新失败：\(error)")
+            return true
         }
+        addLog("课程列表刷新失败：\(result.error ?? "未知错误")")
+        return false
     }
 
     private func failTask(_ taskId: Int, course: TeacherEvaluationCourse, message: String, errorKind: String = "unknown") -> TeacherEvaluationResult {
@@ -340,6 +342,9 @@ final class TeacherEvaluationViewModel {
         logs.append("[\(formatter.string(from: Date()))] \(message)")
         if logs.count > 120 { logs.removeFirst(logs.count - 120) }
     }
+
+    /** 只有准备失败、提交失败会进入批后补偿；verifyUnknown 绝不自动重新提交 */
+    private static let retryableErrorKinds: Set<String> = ["prepareFailed", "submitFailed"]
 
     private static func isClosedMessage(_ message: String?) -> Bool {
         guard let message else { return false }

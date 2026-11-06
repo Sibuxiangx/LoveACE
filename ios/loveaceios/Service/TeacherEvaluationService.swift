@@ -6,7 +6,6 @@ private let teacherEvaluationLogger = Logger(subsystem: "tech.loveace.loveaceios
 
 actor TeacherEvaluationService {
     private let connection: AUFEConnection
-    private var token: String?
 
     static let baseURL = "http://jwcxk2-aufe-edu-cn.vpn2.aufe.edu.cn:8118"
 
@@ -14,16 +13,51 @@ actor TeacherEvaluationService {
         self.connection = connection
     }
 
+    /// 只对读请求做网络重试（index / search / evaluationPage）；提交（assessment）不重试，避免重复提交
+    private func withReadRetry<T>(_ operation: () async throws -> T) async throws -> T {
+        var attempt = 1
+        while true {
+            do {
+                return try await operation()
+            } catch let error as URLError where attempt < Self.readAttempts {
+                teacherEvaluationLogger.info("read request failed (attempt \(attempt)): \(error.code.rawValue)")
+                attempt += 1
+                try await Task.sleep(for: .seconds(1.5 * Double(attempt - 1)))
+            }
+        }
+    }
+
+    /// 评教 VPN 会话失效时接口会返回登录页 HTML
+    private static func looksLikeVpnLogin(_ html: String) -> Bool {
+        html.contains("login_auth.csp") || html.contains("svpn_name")
+    }
+
+    /// 把底层错误转成中文提示，不把系统英文原文直接显示给用户
+    private func evaluationErrorMessage(_ error: Error, fallback: String) -> String {
+        if error is URLError { return "网络连接异常，请检查网络后重试" }
+        if let serviceError = error as? ServiceError, case .parseError(let message) = serviceError {
+            return message
+        }
+        return fallback
+    }
+
+    private static let readAttempts = 3
+
     // MARK: - Course List
 
     func fetchCourses() async -> UniResponse<[TeacherEvaluationCourse]> {
         do {
             try await refreshEvaluationIndexState()
             let client = await connection.client!
-            let (data, response) = try await client.post(
-                "\(Self.baseURL)/student/teachingEvaluation/teachingEvaluation/search?sf_request_type=ajax",
-                formData: ["optType": "1", "pagesize": "50"]
-            )
+            let (data, response) = try await withReadRetry {
+                try await client.post(
+                    "\(Self.baseURL)/student/teachingEvaluation/teachingEvaluation/search?sf_request_type=ajax",
+                    formData: ["optType": "1", "pagesize": "50"]
+                )
+            }
+            if Self.looksLikeVpnLogin(String(data: data, encoding: .utf8) ?? "") {
+                throw ServiceError.parseError("会话已失效，请重新登录")
+            }
             guard response.statusCode == 200 else {
                 throw ServiceError.parseError("HTTP \(response.statusCode)")
             }
@@ -37,7 +71,7 @@ actor TeacherEvaluationService {
             return .success(courses)
         } catch {
             teacherEvaluationLogger.error("fetchCourses failed: \(error.localizedDescription)")
-            return .failure(error.localizedDescription, retryable: true)
+            return .failure(evaluationErrorMessage(error, fallback: "加载课程失败"), retryable: true)
         }
     }
 
@@ -70,6 +104,9 @@ actor TeacherEvaluationService {
             guard let html = try await accessEvaluationPage(course: course, totalCourses: totalCourses) else {
                 throw ServiceError.parseError("无法访问评价页面")
             }
+            if Self.looksLikeVpnLogin(html) {
+                throw ServiceError.parseError("会话已失效，请重新登录")
+            }
             let questionnaire = try parseQuestionnaire(html)
             let formData = buildFormData(questionnaire: questionnaire, course: course, totalCourses: totalCourses)
             guard formData["tokenValue"]?.isEmpty == false else {
@@ -78,52 +115,52 @@ actor TeacherEvaluationService {
             return .success(formData)
         } catch {
             teacherEvaluationLogger.error("prepareEvaluation failed: \(error.localizedDescription)")
-            return .failure(error.localizedDescription, retryable: true)
+            return .failure(evaluationErrorMessage(error, fallback: "准备评价表单失败"), retryable: true)
         }
     }
 
-    private func getToken() async throws -> String? {
-        if let token, !token.isEmpty { return token }
-        try await refreshEvaluationIndexState()
-        return token
-    }
-
-    private func refreshEvaluationIndexState() async throws {
+    /// 每次都重新拉取评教首页并返回本次的 index token；不做进程级缓存（缓存会随时间失效，并发任务之间还会互相覆盖）
+    @discardableResult
+    private func refreshEvaluationIndexState() async throws -> String {
         let client = await connection.client!
-        let (data, response) = try await client.get("\(Self.baseURL)/student/teachingEvaluation/evaluation/index")
+        let (data, response) = try await withReadRetry {
+            try await client.get("\(Self.baseURL)/student/teachingEvaluation/evaluation/index")
+        }
         guard response.statusCode == 200 else {
             throw ServiceError.parseError("HTTP \(response.statusCode)")
         }
         let html = String(data: data, encoding: .utf8) ?? ""
+        if Self.looksLikeVpnLogin(html) {
+            throw ServiceError.parseError("会话已失效，请重新登录")
+        }
         if isEvaluationClosedPage(html) {
-            token = nil
             throw ServiceError.parseError("评价暂未开启")
         }
-        token = parseToken(from: html)
-    }
-
-    /// 重新拉取评教首页（用于提交失败后的立即重试，刷新 index token）
-    func refreshIndexToken() async {
-        try? await refreshEvaluationIndexState()
+        guard let token = parseToken(from: html), !token.isEmpty else {
+            throw ServiceError.parseError("未找到评价页入口 token")
+        }
+        return token
     }
 
     private func accessEvaluationPage(course: TeacherEvaluationCourse, totalCourses: Int) async throws -> String? {
-        let pageToken = try await getToken() ?? ""
+        let pageToken = try await refreshEvaluationIndexState()
         let client = await connection.client!
-        let (data, response) = try await client.post(
-            "\(Self.baseURL)/student/teachingEvaluation/teachingEvaluation/evaluationPage",
-            formData: [
-                "count": String(totalCourses),
-                "evaluatedPeople": course.evaluatedPeople,
-                "evaluatedPeopleNumber": course.evaluatedPeopleNumber,
-                "questionnaireCode": course.questionnaireCode,
-                "questionnaireName": course.questionnaireName,
-                "coureSequenceNumber": course.coureSequenceNumber,
-                "evaluationContentNumber": course.evaluationContentNumber,
-                "evaluationContentContent": "",
-                "tokenValue": pageToken
-            ]
-        )
+        let (data, response) = try await withReadRetry {
+            try await client.post(
+                "\(Self.baseURL)/student/teachingEvaluation/teachingEvaluation/evaluationPage",
+                formData: [
+                    "count": String(totalCourses),
+                    "evaluatedPeople": course.evaluatedPeople,
+                    "evaluatedPeopleNumber": course.evaluatedPeopleNumber,
+                    "questionnaireCode": course.questionnaireCode,
+                    "questionnaireName": course.questionnaireName,
+                    "coureSequenceNumber": course.coureSequenceNumber,
+                    "evaluationContentNumber": course.evaluationContentNumber,
+                    "evaluationContentContent": "",
+                    "tokenValue": pageToken
+                ]
+            )
+        }
         guard response.statusCode == 200 else { return nil }
         return String(data: data, encoding: .utf8)
     }
@@ -138,12 +175,17 @@ actor TeacherEvaluationService {
             guard response.statusCode == 200 else {
                 throw ServiceError.parseError("网络请求失败（\(response.statusCode)）")
             }
+            if Self.looksLikeVpnLogin(String(data: data, encoding: .utf8) ?? "") {
+                throw ServiceError.parseError("会话已失效，请重新登录")
+            }
             guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw ServiceError.parseError("提交响应格式错误")
             }
+            let result = stringValue(root["result"], fallback: "error")
+            let serverMessage = stringValue(root["msg"], fallback: "")
             let submitResponse = TeacherEvaluationSubmitResponse(
-                result: stringValue(root["result"], fallback: "error"),
-                msg: stringValue(root["msg"], fallback: "未知错误")
+                result: result,
+                msg: serverMessage.isEmpty ? "服务端未返回原因（result=\(result)）" : serverMessage
             )
             if submitResponse.isSuccess {
                 return .success(submitResponse, message: submitResponse.msg)
@@ -151,7 +193,7 @@ actor TeacherEvaluationService {
             return .failure(submitResponse.msg, retryable: true)
         } catch {
             teacherEvaluationLogger.error("submitEvaluation failed: \(error.localizedDescription)")
-            return .failure(error.localizedDescription, retryable: true)
+            return .failure(evaluationErrorMessage(error, fallback: "提交评价失败"), retryable: true)
         }
     }
 

@@ -73,3 +73,13 @@
 - The free-classroom search only returns status 01 rooms, so it supplies the free set. Results show every room of the scoped buildings grouped by floor, loaded from `classroomJson` and cached per building in the view model; stopped buildings and rooms with status 02/03 are hidden unless "显示停用教室" is on (`free_classroom.show_stopped` in UserDefaults).
 - School JSON fields may be numbers or strings: use `jsonInt`, `jsonText`, `jsonObjectArray` from `Util/JSONFlex.swift`, not `as? Int`.
 - Liquid Glass: use `compatGlassProminentButtonStyle()` only for floating primary actions. List rows and detail content stay on system materials.
+
+## Teacher evaluation (iOS)
+
+- Services: `Service/TeacherEvaluationService.swift` (actor), `ViewModel/TeacherEvaluationViewModel.swift`, `View/TeacherEvaluationView.swift`. Endpoints and flow mirror Android `TeacherEvaluationService`; change both together.
+- Each course fetches a fresh index token inside `prepareEvaluation`; there is no actor-level token cache.
+- Read requests (index, search, evaluationPage) retry on `URLError` up to 3 attempts; the assessment POST never retries.
+- An unconfirmed submit is verified first. If verification fails the course is `verifyUnknown` and is never resubmitted. Only a verified "not evaluated" result allows one fresh prepare, a 140 s wait, and one more submit.
+- Post-batch compensation runs only for `prepareFailed`/`submitFailed` courses, after a successful list refresh; `verifyUnknown` is excluded.
+- A VPN login-page response is reported as "会话已失效，请重新登录"; `URLError` maps to a Chinese message, so raw `localizedDescription` text does not reach the UI.
+- `TeacherEvaluationView.onDisappear` calls `cancelEvaluation()`, which stops the batch and marks unfinished tasks cancelled. Android does not do this (its batch is ViewModel-scoped); the two platforms differ here until the user asks to unify.

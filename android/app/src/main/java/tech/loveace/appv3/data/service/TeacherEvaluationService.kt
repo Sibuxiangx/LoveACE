@@ -3,6 +3,7 @@ package tech.loveace.appv3.data.service
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -25,6 +26,7 @@ import tech.loveace.appv3.data.model.TeacherEvaluationSubmitResult
 import tech.loveace.appv3.data.model.TeacherEvaluationTextQuestion
 import tech.loveace.appv3.data.model.TeacherEvaluationTextType
 import tech.loveace.appv3.data.model.UniResponse
+import java.io.IOException
 import tech.loveace.appv3.data.network.AUFEConnection
 import kotlin.random.Random
 
@@ -52,7 +54,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             )
         } catch (e: Exception) {
             Log.e(TAG, "loadCourses failed", e)
-            UniResponse.failure(e.message ?: "获取评教课程失败", retryable = true)
+            UniResponse.failure(e.toEvaluationMessage("获取评教课程失败"), retryable = e.isRetryable())
         }
     }
 
@@ -62,7 +64,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             UniResponse.success(fetchIndexInternal().tokenValue)
         } catch (e: Exception) {
             Log.e(TAG, "fetchIndexToken failed", e)
-            UniResponse.failure(e.message ?: "刷新评教 token 失败", retryable = true)
+            UniResponse.failure(e.toEvaluationMessage("刷新评教 token 失败"), retryable = e.isRetryable())
         }
     }
 
@@ -73,14 +75,17 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
     ): UniResponse<TeacherEvaluationPreparedForm> = withContext(Dispatchers.IO) {
         try {
             if (indexToken.isBlank()) throw Exception("首页 token 为空")
-            val html = connection.client.post(
-                "$BASE_URL/student/teachingEvaluation/teachingEvaluation/evaluationPage",
-                formData = evaluationPageForm(course, pendingCount, indexToken),
-                headers = ajaxHeaders(),
-            ).use { response ->
-                if (!response.isSuccessful) throw Exception("评价页 HTTP ${response.code}")
-                response.body?.string() ?: throw Exception("评价页响应为空")
+            val html = withReadRetry {
+                connection.client.post(
+                    "$BASE_URL/student/teachingEvaluation/teachingEvaluation/evaluationPage",
+                    formData = evaluationPageForm(course, pendingCount, indexToken),
+                    headers = ajaxHeaders(),
+                ).use { response ->
+                    if (!response.isSuccessful) throw Exception("评价页 HTTP ${response.code}")
+                    response.body?.string() ?: throw Exception("评价页响应为空")
+                }
             }
+            throwIfSessionExpired(html)
 
             val questionnaire = parseQuestionnaire(html)
             if (questionnaire.tokenValue.isBlank()) throw Exception("未找到评价页 token")
@@ -113,7 +118,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             )
         } catch (e: Exception) {
             Log.e(TAG, "prepareEvaluation failed", e)
-            UniResponse.failure(e.message ?: "准备评价表单失败", retryable = true)
+            UniResponse.failure(e.toEvaluationMessage("准备评价表单失败"), retryable = e.isRetryable())
         }
     }
 
@@ -126,6 +131,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             ).use { response ->
                 response.body?.string() ?: throw Exception("提交响应为空")
             }
+            throwIfSessionExpired(body)
             val json = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull()
             val result = json?.string("result").orEmpty()
             val msg = json?.string("msg").orEmpty().ifBlank {
@@ -134,7 +140,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
                 } else if (json != null) {
                     "提交失败，服务端返回错误"
                 } else {
-                    body.take(120)
+                    "提交响应格式异常"
                 }
             }
             UniResponse.success(
@@ -145,7 +151,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             )
         } catch (e: Exception) {
             Log.e(TAG, "submitEvaluation failed", e)
-            UniResponse.failure(e.message ?: "提交评价失败", retryable = true)
+            UniResponse.failure(e.toEvaluationMessage("提交评价失败"), retryable = e.isRetryable())
         }
     }
 
@@ -159,17 +165,56 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             UniResponse.success(refreshedCourse?.isEvaluated == true)
         } catch (e: Exception) {
             Log.e(TAG, "verifyCourseEvaluated failed", e)
-            UniResponse.failure(e.message ?: "验证评教状态失败", retryable = true)
+            UniResponse.failure(e.toEvaluationMessage("验证评教状态失败"), retryable = e.isRetryable())
         }
     }
 
-    private fun fetchIndexInternal(): TeacherEvaluationIndex {
-        val html = connection.client.get(
-            "$BASE_URL/student/teachingEvaluation/evaluation/index",
-            headers = pageHeaders(),
-        ).use { response ->
-            response.body?.string() ?: throw Exception("首页响应为空")
+    /** 只对读请求做网络重试（index / search / evaluationPage）；提交（assessment）不重试，避免重复提交 */
+    private suspend fun <T> withReadRetry(block: () -> T): T {
+        var attempt = 1
+        while (true) {
+            try {
+                return block()
+            } catch (e: IOException) {
+                if (attempt >= READ_ATTEMPTS) throw e
+                Log.w(TAG, "read request failed (attempt $attempt), retrying: ${e.javaClass.simpleName}")
+                delay(READ_RETRY_DELAY_MS * attempt)
+                attempt++
+            }
         }
+    }
+
+    /** 被重定向到 VPN/CAS 登录页时视为会话失效：不可重试，需要用户重新登录 */
+    private fun throwIfSessionExpired(html: String) {
+        if (html.contains("login_auth.csp") || html.contains("svpn_name")) {
+            throw SessionExpiredException()
+        }
+    }
+
+    private class SessionExpiredException : Exception("会话已失效，请重新登录")
+
+    private fun Throwable.toEvaluationMessage(fallback: String): String = when (this) {
+        is SessionExpiredException -> "会话已失效，请重新登录"
+        is IOException -> "网络连接异常，请检查网络后重试"
+        is kotlinx.serialization.SerializationException -> "返回数据格式异常，请稍后重试"
+        else -> message?.takeIf { it.isNotBlank() } ?: fallback
+    }
+
+    private fun Throwable.isRetryable(): Boolean = this !is SessionExpiredException
+
+    private val READ_ATTEMPTS = 3
+    private val READ_RETRY_DELAY_MS = 1_500L
+
+    private suspend fun fetchIndexInternal(): TeacherEvaluationIndex {
+        val html = withReadRetry {
+            connection.client.get(
+                "$BASE_URL/student/teachingEvaluation/evaluation/index",
+                headers = pageHeaders(),
+            ).use { response ->
+                response.body?.string() ?: throw Exception("首页响应为空")
+            }
+        }
+        throwIfSessionExpired(html)
         val doc = Jsoup.parse(html)
         val alert = doc.select("#page-content-template .alert, .page-content .alert, .main-content .alert")
             .firstOrNull { it.text().contains("评估开关已关闭") }
@@ -180,14 +225,17 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
         )
     }
 
-    private fun fetchCoursesInternal(): List<TeacherEvaluationCourse> {
-        val body = connection.client.post(
-            "$BASE_URL/student/teachingEvaluation/teachingEvaluation/search?sf_request_type=ajax",
-            formData = mapOf("optType" to "1", "pagesize" to "50"),
-            headers = ajaxHeaders(),
-        ).use { response ->
-            response.body?.string() ?: throw Exception("课程列表响应为空")
+    private suspend fun fetchCoursesInternal(): List<TeacherEvaluationCourse> {
+        val body = withReadRetry {
+            connection.client.post(
+                "$BASE_URL/student/teachingEvaluation/teachingEvaluation/search?sf_request_type=ajax",
+                formData = mapOf("optType" to "1", "pagesize" to "50"),
+                headers = ajaxHeaders(),
+            ).use { response ->
+                response.body?.string() ?: throw Exception("课程列表响应为空")
+            }
         }
+        throwIfSessionExpired(body)
         val root = Json.parseToJsonElement(body).jsonObject
         val data = root["data"]?.jsonArrayOrNull() ?: JsonArray(emptyList())
         return data.mapNotNull { parseCourse(it.jsonObjectOrNull()) }

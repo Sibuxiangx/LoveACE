@@ -65,6 +65,7 @@ struct TeacherEvaluationView: View {
                     vm.error = "教师评价服务未初始化，请重新登录后再试"
                 }
             }
+            .onDisappear { vm.cancelEvaluation() }
         }
     }
 
