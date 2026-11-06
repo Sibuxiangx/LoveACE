@@ -13,5 +13,7 @@
 	<string>需要相机权限来扫描二维码签到</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 </dict>
 </plist>

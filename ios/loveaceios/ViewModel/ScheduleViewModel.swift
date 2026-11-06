@@ -1,5 +1,4 @@
 import Foundation
-import WidgetKit
 
 @MainActor @Observable
 final class ScheduleViewModel {
@@ -43,32 +42,8 @@ final class ScheduleViewModel {
             if result.success, let data = result.data {
                 courses = data.courses; totalUnits = data.allUnits
                 scheduleStore.saveCourses(data.courses)
-                let shouldSyncWidget = terms.first { $0.termCode == termCode }?.isCurrent == true
-                if shouldSyncWidget {
-                    Self.syncToWidget(data.courses)
-                }
             } else { error = result.error }
             isLoading = false
         }
-    }
-
-    private static func syncToWidget(_ courses: [ScheduleCourse]) {
-        var entries: [WidgetCourseEntry] = []
-        for course in courses {
-            for tp in course.timeAndPlaceList {
-                entries.append(WidgetCourseEntry(
-                    courseName: course.courseName,
-                    location: tp.locationDescription,
-                    teacher: course.attendClassTeacher,
-                    dayOfWeek: tp.classDay,
-                    startSession: tp.classSessions,
-                    endSession: tp.endSession,
-                    weekDescription: tp.weekDescription,
-                    classWeek: tp.classWeek
-                ))
-            }
-        }
-        WidgetDataBridge.saveCourses(entries)
-        WidgetCenter.shared.reloadAllTimelines()
     }
 }

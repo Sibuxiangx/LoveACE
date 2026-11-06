@@ -8,6 +8,21 @@ struct SettingsView: View {
     @State private var logArchiveURL: URL?
     @State private var isExportingLogs = false
     @State private var logExportError: String?
+    @State private var classReminderOn = ClassReminderScheduler.isEnabled
+    @State private var reminderDenied = false
+
+    private var classReminderBinding: Binding<Bool> {
+        Binding(
+            get: { classReminderOn },
+            set: { newValue in
+                Task {
+                    let granted = await ClassReminderScheduler.setEnabled(newValue, snapshot: WidgetSnapshotStore.load())
+                    classReminderOn = granted
+                    reminderDenied = newValue && !granted
+                }
+            }
+        )
+    }
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -35,6 +50,14 @@ struct SettingsView: View {
                         .multilineTextAlignment(.trailing)
                         .foregroundStyle(.secondary)
                     }
+                }
+
+                Section {
+                    Toggle(isOn: classReminderBinding) {
+                        Label("上课提醒", systemImage: "bell.badge")
+                    }
+                } footer: {
+                    Text(reminderDenied ? "未获得通知权限，请在系统设置中允许通知。" : "上课前 10 分钟通知。灵动岛在上课时显示，前台自动开启，也可在小组件中手动开启。")
                 }
 
                 Section("数据说明") {

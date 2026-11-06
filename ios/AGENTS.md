@@ -8,7 +8,7 @@
 ## Project map
 - Xcode project only: `loveaceios.xcodeproj`; schemes/targets are `loveaceios` and `loveaceiosWidget`.
 - Main app: bundle `cn.linota.loveace`, display name `彩带小工具`; widget: bundle `cn.linota.loveace.widget`; team `2PYK4BY5P6`.
-- App and widget share `group.cn.linota.loveace`; widget data bridge is `Shared/WidgetModels.swift` via `UserDefaults(suiteName:)`.
+- App and widget share `group.cn.linota.loveace`. The widget reads one versioned snapshot (`WidgetSnapshotStore`, key `widget_snapshot_v2`) and the shared schedule rules in `Shared/WidgetModels.swift`. Only `WidgetSyncCoordinator` writes the snapshot; widgets never fetch.
 - SwiftUI flow: `loveaceiosApp.swift` creates `AuthViewModel` -> `ContentView` restores/routes auth -> `MainTabView` tabs (`HomeView`, `AACView`, `MoreView`, `SettingsView`).
 - Services live in `loveaceios/Service` and are wired in `AuthViewModel.initServices(_:)`; login/session networking is `AUFEConnection` + `HTTPClient`.
 - Reuse `loveaceios/Components/DesignSystem.swift` (`glassCard`, `glassInteractiveCard`, `GlassBadge`, etc.) for UI instead of ad-hoc styling.
@@ -83,3 +83,13 @@
 - Post-batch compensation runs only for `prepareFailed`/`submitFailed` courses, after a successful list refresh; `verifyUnknown` is excluded.
 - A VPN login-page response is reported as "会话已失效，请重新登录"; `URLError` maps to a Chinese message, so raw `localizedDescription` text does not reach the UI.
 - `TeacherEvaluationView.onDisappear` calls `cancelEvaluation()`, which stops the batch and marks unfinished tasks cancelled. Android and desktop keep the batch running after the page is left; iOS stays different until the user asks to unify.
+
+## Widget, Live Activity, and class reminders
+
+- Session times come from the school's `sectionTime` (`SchoolCalendar`): 45 minutes per session, 10 sessions per day. Do not reintroduce a 50-minute table. Android `SESSION_TIMES` matches sessions 1-10 but also lists session 11 (20:50), which the school data does not have.
+- Sync triggers: `ContentView` runs `WidgetSyncCoordinator.sync` on each new session (`sessionGeneration`, covers login and auto-reconnect) and on every foreground. Sync is throttled to 30 minutes per user. A failed fetch keeps the old snapshot; a successful one overwrites it and calls `reloadAllTimelines` once. Do not call `reloadAllTimelines` from view models.
+- Week number, vacation countdown, and "学期即将结束" are computed in the widget from `SchoolTerm.phase` and the semester list. They do not depend on the app being opened.
+- The timeline reads the snapshot once and emits entries only at today's and tomorrow's class boundaries, with refresh after the next midnight. The medium widget shows only unfinished classes (in-progress first), never a `prefix` of the full day.
+- Live Activity (`CourseActivityAttributes`): `CourseLiveActivityController.sync` starts it from 10 minutes before a class until it ends, only while the app is in the foreground. `StartCourseActivityIntent` (`LiveActivityIntent`, also a widget button) can start it from the background when the user taps. There is no automatic start at class time without APNs push-to-start, which needs a server. An activity the app never ends lasts up to 8 hours, plus 4 hours on the Lock Screen. `NSSupportsLiveActivities` lives in `ios/Info.plist`.
+- Class reminders (`ClassReminderScheduler`): local notifications 10 minutes before class, for the next 14 days, capped at 60 pending. Identifiers are deterministic, so re-scheduling replaces rather than duplicates. Enabled from Settings > 上课提醒, which requests permission on toggle. Pending-count limit is from third-party sources; verify on device.
+- Logout and automatic sign-out call `WidgetSyncCoordinator.clearAll()`, which clears the snapshot, reminders, and Live Activities.

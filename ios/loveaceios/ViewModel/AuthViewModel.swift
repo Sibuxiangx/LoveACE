@@ -294,6 +294,7 @@ final class AuthViewModel {
         stopHeartbeat()
         clearServices()
         credentialStore.clear()
+        WidgetSyncCoordinator.clearAll()
         Analytics.shared.clearUser()
         state = .unauthenticated
         logger.info("Logged out")
@@ -416,6 +417,7 @@ final class AuthViewModel {
         stopHeartbeat()
         clearServices()
         credentialStore.clear()
+        WidgetSyncCoordinator.clearAll()
         currentAuthenticationAttempt = UUID()
         errorMessage = "会话已过期，请重新登录"
         state = .unauthenticated
