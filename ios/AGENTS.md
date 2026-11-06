@@ -82,4 +82,4 @@
 - An unconfirmed submit is verified first. If verification fails the course is `verifyUnknown` and is never resubmitted. Only a verified "not evaluated" result allows one fresh prepare, a 140 s wait, and one more submit.
 - Post-batch compensation runs only for `prepareFailed`/`submitFailed` courses, after a successful list refresh; `verifyUnknown` is excluded.
 - A VPN login-page response is reported as "会话已失效，请重新登录"; `URLError` maps to a Chinese message, so raw `localizedDescription` text does not reach the UI.
-- `TeacherEvaluationView.onDisappear` calls `cancelEvaluation()`, which stops the batch and marks unfinished tasks cancelled. Android does not do this (its batch is ViewModel-scoped); the two platforms differ here until the user asks to unify.
+- `TeacherEvaluationView.onDisappear` calls `cancelEvaluation()`, which stops the batch and marks unfinished tasks cancelled. Android and desktop keep the batch running after the page is left; iOS stays different until the user asks to unify.

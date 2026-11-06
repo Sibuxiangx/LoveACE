@@ -9,6 +9,7 @@ import '../../models/backend/uni_response.dart';
 import '../../models/jwc/teacher_evaluation.dart';
 import '../../services/aufe/connector.dart';
 import '../../services/logger_service.dart';
+import '../../utils/retry_handler.dart';
 
 class TeacherEvaluationService {
   final AUFEConnection connection;
@@ -22,57 +23,52 @@ class TeacherEvaluationService {
       if (index.isClosed) {
         return UniResponse.success(
           TeacherEvaluationCourseList(
-            tokenValue: index.tokenValue,
             isClosed: true,
             closedMessage: index.closedMessage.isNotEmpty ? index.closedMessage : '评价暂未开启',
           ),
         );
       }
-      if (index.tokenValue.isEmpty) throw Exception('未找到评教 token');
+      if (index.tokenValue.isEmpty) throw const TeacherEvaluationException('未找到评教 token');
       return UniResponse.success(
         TeacherEvaluationCourseList(
-          tokenValue: index.tokenValue,
           isClosed: false,
           courses: await _fetchCourses(),
         ),
       );
     } catch (e) {
       LoggerService.error('❌ 获取评教课程失败', error: e);
-      return UniResponse.failure(e.toString(), retryable: true);
-    }
-  }
-
-  /// 重新拉取评教首页并返回最新 token（用于提交失败后的立即重试）
-  Future<UniResponse<String>> fetchIndexToken() async {
-    try {
-      final index = await _fetchIndex();
-      return UniResponse.success(index.tokenValue);
-    } catch (e) {
-      LoggerService.error('❌ 刷新评教 token 失败', error: e);
-      return UniResponse.failure(e.toString(), retryable: true);
+      return UniResponse.failure(_evaluationErrorMessage(e, fallback: '获取评教课程失败'), retryable: true);
     }
   }
 
   Future<UniResponse<TeacherEvaluationPreparedForm>> prepareEvaluation(
     TeacherEvaluationCourse course,
     int pendingCount,
-    String indexToken,
   ) async {
     try {
-      if (indexToken.isEmpty) throw Exception('首页 token 为空');
-      final response = await connection.client.post(
-        '$baseUrl/student/teachingEvaluation/teachingEvaluation/evaluationPage',
-        data: _evaluationPageForm(course, pendingCount, indexToken),
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: _ajaxHeaders,
+      // 每门课都重新取首页 token，不复用批次开始时的快照
+      final index = await _fetchIndex();
+      if (index.isClosed) {
+        throw TeacherEvaluationException(index.closedMessage.isNotEmpty ? index.closedMessage : '评价暂未开启');
+      }
+      if (index.tokenValue.isEmpty) throw const TeacherEvaluationException('未找到评价页入口 token');
+      final response = await RetryHandler.retry(
+        operation: () async => await connection.client.post(
+          '$baseUrl/student/teachingEvaluation/teachingEvaluation/evaluationPage',
+          data: _evaluationPageForm(course, pendingCount, index.tokenValue),
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            headers: _ajaxHeaders,
+          ),
         ),
+        retryIf: _isTransientNetworkError,
       );
       final html = response.data.toString();
+      _throwIfSessionExpired(html);
       final questionnaire = _parseQuestionnaire(html);
-      if (questionnaire.tokenValue.isEmpty) throw Exception('未找到评价页 token');
+      if (questionnaire.tokenValue.isEmpty) throw const TeacherEvaluationException('未找到评价页 token');
       if (questionnaire.radioQuestions.isEmpty && questionnaire.textQuestions.isEmpty) {
-        throw Exception('未解析到评价题目');
+        throw const TeacherEvaluationException('未解析到评价题目');
       }
 
       final form = <String, String>{
@@ -100,7 +96,7 @@ class TeacherEvaluationService {
       );
     } catch (e) {
       LoggerService.error('❌ 准备评教表单失败', error: e);
-      return UniResponse.failure(e.toString(), retryable: true);
+      return UniResponse.failure(_evaluationErrorMessage(e, fallback: '准备评价表单失败'), retryable: true);
     }
   }
 
@@ -108,6 +104,7 @@ class TeacherEvaluationService {
     TeacherEvaluationPreparedForm prepared,
   ) async {
     try {
+      // 提交（assessment）不做网络重试，避免重复提交
       final response = await connection.client.post(
         '$baseUrl/student/teachingEvaluation/teachingEvaluation/assessment?sf_request_type=ajax',
         data: prepared.formData,
@@ -116,23 +113,23 @@ class TeacherEvaluationService {
           headers: _ajaxHeaders,
         ),
       );
-      final body = response.data.toString();
-      final Map<String, dynamic>? json = _tryDecodeJson(response.data);
-      final result = json?['result']?.toString() ?? '';
-      final message = (json?['msg']?.toString() ?? '').ifEmpty(
-        result.toLowerCase() == 'success'
-            ? '提交成功'
-            : (json != null ? '提交失败，服务端返回错误' : body.take(120)),
-      );
+      _throwIfSessionExpired(response.data.toString());
+      final json = _tryDecodeJson(response.data);
+      if (json == null) throw const TeacherEvaluationException('提交响应格式异常');
+      final result = json['result']?.toString() ?? '';
+      final success = result.toLowerCase() == 'success';
+      final serverMessage = json['msg']?.toString() ?? '';
       return UniResponse.success(
         TeacherEvaluationSubmitResult(
-          success: result.toLowerCase() == 'success',
-          message: message,
+          success: success,
+          message: serverMessage.isNotEmpty
+              ? serverMessage
+              : (success ? '提交成功' : '服务端未返回原因（result=$result）'),
         ),
       );
     } catch (e) {
       LoggerService.error('❌ 提交评教失败', error: e);
-      return UniResponse.failure(e.toString(), retryable: true);
+      return UniResponse.failure(_evaluationErrorMessage(e, fallback: '提交评价失败'), retryable: true);
     }
   }
 
@@ -145,16 +142,20 @@ class TeacherEvaluationService {
       final refreshedCourse = courseList.data!.courses.where((item) => item.matches(course)).firstOrNull;
       return UniResponse.success(refreshedCourse?.isEvaluated == true);
     } catch (e) {
-      return UniResponse.failure(e.toString(), retryable: true);
+      return UniResponse.failure(_evaluationErrorMessage(e, fallback: '刷新评教列表失败'), retryable: true);
     }
   }
 
   Future<TeacherEvaluationIndex> _fetchIndex() async {
-    final response = await connection.client.get(
-      '$baseUrl/student/teachingEvaluation/evaluation/index',
-      options: Options(headers: _pageHeaders),
+    final response = await RetryHandler.retry(
+      operation: () async => await connection.client.get(
+        '$baseUrl/student/teachingEvaluation/evaluation/index',
+        options: Options(headers: _pageHeaders),
+      ),
+      retryIf: _isTransientNetworkError,
     );
     final html = response.data.toString();
+    _throwIfSessionExpired(html);
     final doc = html_parser.parse(html);
     final alert = doc
         .querySelectorAll('#page-content-template .alert, .page-content .alert, .main-content .alert')
@@ -168,14 +169,18 @@ class TeacherEvaluationService {
   }
 
   Future<List<TeacherEvaluationCourse>> _fetchCourses() async {
-    final response = await connection.client.post(
-      '$baseUrl/student/teachingEvaluation/teachingEvaluation/search?sf_request_type=ajax',
-      data: {'optType': '1', 'pagesize': '50'},
-      options: Options(
-        contentType: Headers.formUrlEncodedContentType,
-        headers: _ajaxHeaders,
+    final response = await RetryHandler.retry(
+      operation: () async => await connection.client.post(
+        '$baseUrl/student/teachingEvaluation/teachingEvaluation/search?sf_request_type=ajax',
+        data: {'optType': '1', 'pagesize': '50'},
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          headers: _ajaxHeaders,
+        ),
       ),
+      retryIf: _isTransientNetworkError,
     );
+    _throwIfSessionExpired(response.data.toString());
     final root = _responseMap(response.data);
     final data = root['data'];
     if (data is! List) return [];
@@ -404,6 +409,43 @@ class TeacherEvaluationService {
   ];
 }
 
+/// 面向用户的评教错误：消息已是中文，可直接展示
+class TeacherEvaluationException implements Exception {
+  final String message;
+  const TeacherEvaluationException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+bool _isTransientNetworkError(Object error) =>
+    error is DioException &&
+    (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError);
+
+/// 评教接口会话过期时返回 VPN/CAS 登录页，判定与 Android/iOS 一致
+void _throwIfSessionExpired(String body) {
+  if (body.contains('login_auth.csp') || body.contains('svpn_name')) {
+    throw const TeacherEvaluationException('会话已失效，请重新登录');
+  }
+}
+
+String _evaluationErrorMessage(Object error, {required String fallback}) {
+  if (error is TeacherEvaluationException) return error.message;
+  if (error is DioException) {
+    if ('${error.error}'.contains('VPN会话已过期')) return '会话已失效，请重新登录';
+    if (_isTransientNetworkError(error)) return '网络连接异常，请检查网络后重试';
+    if (error.type == DioExceptionType.badResponse) {
+      return '网络请求失败（${error.response?.statusCode ?? '未知'}）';
+    }
+    return fallback;
+  }
+  if (error is FormatException) return '返回数据格式异常，请稍后重试';
+  return fallback;
+}
+
 extension on Map<String, dynamic> {
   String string(String key) => this[key]?.toString() ?? '';
 }
@@ -412,7 +454,6 @@ extension on String {
   String ifEmpty(String fallback) => isEmpty ? fallback : this;
   String? takeIfNotEmpty() => isNotEmpty ? this : null;
   String? takeIfLengthGreaterThan(int minLength) => length > minLength ? this : null;
-  String take(int maxLength) => length <= maxLength ? this : substring(0, maxLength);
   String sanitizeAnswer() => replaceAll(RegExp(r'\s+'), '');
   bool isValidAnswer() => length >= 4 && !RegExp(r'(.)\1\1').hasMatch(this);
   (double, double) scoreAndWeight() {

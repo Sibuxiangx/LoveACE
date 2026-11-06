@@ -11,13 +11,11 @@ class TeacherEvaluationIndex {
 }
 
 class TeacherEvaluationCourseList {
-  final String tokenValue;
   final bool isClosed;
   final String closedMessage;
   final List<TeacherEvaluationCourse> courses;
 
   const TeacherEvaluationCourseList({
-    required this.tokenValue,
     required this.isClosed,
     this.closedMessage = '',
     this.courses = const [],

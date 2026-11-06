@@ -13,7 +13,7 @@ class TeacherEvaluationTaskState {
   final TeacherEvaluationTaskStatus status;
   final String message;
   final int countdownSeconds;
-  /// 轻量错误分类：prepareFailed / submitFailed / verifyMismatch / unknown
+  /// 轻量错误分类：prepareFailed / submitFailed / verifyMismatch / verifyUnknown / unknown
   final String errorKind;
 
   const TeacherEvaluationTaskState({
@@ -46,7 +46,6 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   TeacherEvaluationState _state = TeacherEvaluationState.initial;
   bool _isRunning = false;
   String _closedMessage = '';
-  String _indexToken = '';
   String? _errorMessage;
   List<TeacherEvaluationCourse> _courses = [];
   List<TeacherEvaluationTaskState> _tasks = [];
@@ -85,7 +84,6 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     if (data.isClosed) {
       _state = TeacherEvaluationState.closed;
       _closedMessage = data.closedMessage.isNotEmpty ? data.closedMessage : '评价暂未开启';
-      _indexToken = data.tokenValue;
       _courses = [];
       _tasks = [];
       _addLog('评价暂未开启');
@@ -94,7 +92,6 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     }
 
     _state = TeacherEvaluationState.loaded;
-    _indexToken = data.tokenValue;
     _courses = data.courses;
     _tasks = [];
     _errorMessage = null;
@@ -104,7 +101,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
 
   Future<void> startBatch() async {
     final pending = pendingCourses;
-    if (_isRunning || pending.isEmpty || _indexToken.isEmpty) return;
+    if (_isRunning || pending.isEmpty) return;
 
     final runId = ++_runId;
     _isRunning = true;
@@ -114,23 +111,21 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _runRound(runId, pending, _indexToken);
+      await _runRound(runId, pending);
       if (!_isCurrentRun(runId)) return;
 
-      // 批后补偿：刷新列表，对失败且仍未评的课程补跑一轮
-      var retryCourses = _collectRetryCourses();
-      if (retryCourses.isNotEmpty) {
-        _addLog('批后补偿：${retryCourses.length} 门课程将自动重试一轮');
-        notifyListeners();
-        await _refreshAfterBatch();
-        retryCourses = _collectRetryCourses();
-        if (retryCourses.isNotEmpty) {
-          await _runRound(runId, retryCourses, _indexToken);
-          if (_isCurrentRun(runId)) await _refreshAfterBatch();
-        } else {
-          _addLog('批后补偿：失败课程刷新后均已确认已评，无需重试');
-        }
+      // 批后补偿：仅当存在 prepareFailed/submitFailed 失败课程，且列表刷新成功时才进行
+      if (!_tasks.any(_isRetryableFailure)) return;
+      if (!await _refreshAfterBatch() || !_isCurrentRun(runId)) return;
+      final retryCourses = _collectRetryCourses();
+      if (retryCourses.isEmpty) {
+        _addLog('批后补偿：失败课程刷新后均已确认已评，无需重试');
+        return;
       }
+      _addLog('批后补偿：${retryCourses.length} 门课程将自动重试一轮');
+      notifyListeners();
+      await _runRound(runId, retryCourses);
+      if (_isCurrentRun(runId)) await _refreshAfterBatch();
     } finally {
       if (_isCurrentRun(runId)) {
         _isRunning = false;
@@ -140,13 +135,13 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   }
 
   /// 按标准间隔启动一轮任务并等待全部完成
-  Future<void> _runRound(int runId, List<TeacherEvaluationCourse> courses, String indexToken) async {
+  Future<void> _runRound(int runId, List<TeacherEvaluationCourse> courses) async {
     final futures = <Future<void>>[];
     for (var i = 0; i < courses.length; i++) {
       if (!_isCurrentRun(runId)) break;
       if (i > 0) await Future.delayed(_startInterval);
       if (!_isCurrentRun(runId)) break;
-      futures.add(_runTask(runId, courses[i], courses.length, indexToken));
+      futures.add(_runTask(runId, courses[i], courses.length));
     }
     await Future.wait(futures);
   }
@@ -155,7 +150,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   List<TeacherEvaluationCourse> _collectRetryCourses() {
     final refreshed = _courses;
     final retryCourses = _tasks
-        .where((task) => task.status == TeacherEvaluationTaskStatus.failed)
+        .where(_isRetryableFailure)
         .map((task) => task.course)
         .where((course) {
       final refreshedCourse = refreshed.firstWhere(
@@ -180,6 +175,9 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     return retryCourses;
   }
 
+  bool _isRetryableFailure(TeacherEvaluationTaskState task) =>
+      task.status == TeacherEvaluationTaskStatus.failed && _retryableErrorKinds.contains(task.errorKind);
+
   void stop({bool resetRunning = true}) {
     _runId++;
     if (!resetRunning) return;
@@ -198,80 +196,75 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _runTask(
-    int runId,
-    TeacherEvaluationCourse course,
-    int pendingCount,
-    String indexToken,
-  ) async {
+  Future<void> _runTask(int runId, TeacherEvaluationCourse course, int pendingCount) async {
     if (!_isCurrentRun(runId)) return;
     _updateTask(course, TeacherEvaluationTaskStatus.preparing, '正在访问评价页并生成表单');
-    var prepare = await service.prepareEvaluation(course, pendingCount, indexToken);
-    if ((!prepare.success || prepare.data == null) && prepare.retryable) {
+    var prepare = await service.prepareEvaluation(course, pendingCount);
+    if (!prepare.success && prepare.retryable) {
       // 瞬时失败（网络抖动/HTTP 5xx）立即重试一次
       _addLog('${course.displayName} 准备失败，立即重试一次');
       _updateTask(course, TeacherEvaluationTaskStatus.preparing, '准备失败，立即重试');
-      prepare = await service.prepareEvaluation(course, pendingCount, indexToken);
+      prepare = await service.prepareEvaluation(course, pendingCount);
     }
-    var prepared = prepare.data;
     if (!_isCurrentRun(runId)) return;
-    if (!prepare.success || prepared == null) {
+    final firstPrepared = prepare.data;
+    if (!prepare.success || firstPrepared == null) {
       _failTask(course, prepare.error ?? '准备评价表单失败', errorKind: 'prepareFailed');
       return;
     }
 
-    await _awaitSubmitWait(runId, course, '等待提交');
+    // 最多提交两次；提交结果不确定时先核实，核实失败或第二次仍未生效即结束，绝不再次提交
+    var prepared = firstPrepared;
+    for (var attempt = 1; ; attempt++) {
+      final isRetry = attempt > 1;
+      await _awaitSubmitWait(runId, course, isRetry ? '重试等待提交' : '等待提交');
+      if (!_isCurrentRun(runId)) return;
+      _updateTask(course, TeacherEvaluationTaskStatus.submitting, isRetry ? '正在重新提交评价' : '正在提交评价');
+      final submit = await service.submitEvaluation(prepared);
+      if (!_isCurrentRun(runId)) return;
+      if (submit.success && submit.data?.success == true) break;
 
-    if (!_isCurrentRun(runId)) return;
-    _updateTask(course, TeacherEvaluationTaskStatus.submitting, '正在提交评价');
-    final submit = await service.submitEvaluation(prepared);
-    final submitResult = submit.data;
-    if (!submit.success || submitResult?.success != true) {
+      _updateTask(course, TeacherEvaluationTaskStatus.verifying, '提交结果不确定，正在核实');
+      final check = await service.verifyCourseEvaluated(course);
       if (!_isCurrentRun(runId)) return;
-      // 验证兜底：submit 响应异常但服务器实际已记录时按成功处理
-      _updateTask(course, TeacherEvaluationTaskStatus.verifying, '提交响应异常，正在核实');
-      final fallback = await service.verifyCourseEvaluated(course);
-      if (!_isCurrentRun(runId)) return;
-      if (fallback.success && fallback.data == true) {
+      if (!check.success) {
+        _failTask(course, '提交结果无法核实，未重新提交，请稍后刷新查看', errorKind: 'verifyUnknown');
+        return;
+      }
+      if (check.data == true) {
         _updateTask(course, TeacherEvaluationTaskStatus.success, '提交成功（响应异常，服务器已确认）');
         _addLog('${course.displayName} 提交成功（响应异常，已核实）');
         return;
       }
-      // 立即重试一次完整流程：刷新 index token → 重新 prepare（不复用旧评价页 token）→ 等待 → 提交
-      _addLog('${course.displayName} 提交失败，刷新 token 后重试一次');
-      _updateTask(course, TeacherEvaluationTaskStatus.preparing, '提交失败，重新准备表单');
-      final refreshedToken = await service.fetchIndexToken();
-      final retryPrepare = await service.prepareEvaluation(
-        course, pendingCount, (refreshedToken.data?.isNotEmpty ?? false) ? refreshedToken.data! : indexToken,
-      );
-      final retryPrepared = retryPrepare.data;
+      if (isRetry) {
+        _failTask(course, submit.data?.message ?? submit.error ?? '提交评价失败', errorKind: 'submitFailed');
+        return;
+      }
+
+      // 服务器确认未记录：重新准备（每次取新 token）后再提交一次
+      _addLog('${course.displayName} 提交未生效，重新准备后提交一次');
+      _updateTask(course, TeacherEvaluationTaskStatus.preparing, '提交未生效，重新准备表单');
+      final retryPrepare = await service.prepareEvaluation(course, pendingCount);
       if (!_isCurrentRun(runId)) return;
+      final retryPrepared = retryPrepare.data;
       if (!retryPrepare.success || retryPrepared == null) {
         _failTask(course, retryPrepare.error ?? '重试准备评价表单失败', errorKind: 'submitFailed');
         return;
       }
-
-      await _awaitSubmitWait(runId, course, '重试等待提交');
-
-      if (!_isCurrentRun(runId)) return;
-      _updateTask(course, TeacherEvaluationTaskStatus.submitting, '正在重新提交评价');
-      final retrySubmit = await service.submitEvaluation(retryPrepared);
-      final retrySubmitResult = retrySubmit.data;
-      if (!retrySubmit.success || retrySubmitResult?.success != true) {
-        _failTask(course, retrySubmitResult?.message ?? retrySubmit.error ?? '提交评价失败', errorKind: 'submitFailed');
-        return;
-      }
+      prepared = retryPrepared;
     }
 
-    if (!_isCurrentRun(runId)) return;
+    // 提交已返回成功：刷新课程列表确认服务器记录
     _updateTask(course, TeacherEvaluationTaskStatus.verifying, '正在刷新课程列表验证');
     final verified = await service.verifyCourseEvaluated(course);
     if (!_isCurrentRun(runId)) return;
-    if (verified.success && verified.data == true) {
+    if (!verified.success) {
+      _failTask(course, '提交已返回成功，但刷新列表失败，请稍后刷新查看', errorKind: 'verifyUnknown');
+    } else if (verified.data == true) {
       _updateTask(course, TeacherEvaluationTaskStatus.success, '提交成功，服务器已确认');
       _addLog('${course.displayName} 提交成功');
     } else {
-      _failTask(course, verified.error ?? '评教未生效，服务器未确认', errorKind: 'verifyMismatch');
+      _failTask(course, '评教未生效，服务器未确认', errorKind: 'verifyMismatch');
     }
   }
 
@@ -284,17 +277,18 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _refreshAfterBatch() async {
+  /// 刷新课程列表；失败返回 false，批后补偿据此跳过
+  Future<bool> _refreshAfterBatch() async {
     final result = await service.loadCourses();
     final data = result.data;
     if (result.success && data != null && !data.isClosed) {
       _courses = data.courses;
-      _indexToken = data.tokenValue;
       _addLog('批量任务结束，已刷新课程列表');
       notifyListeners();
-    } else if (result.error != null) {
-      _addLog('批量任务结束后刷新失败：${result.error}');
+      return true;
     }
+    _addLog('批量任务结束后刷新失败：${result.error ?? '评价已关闭或返回异常'}');
+    return false;
   }
 
   void _failTask(TeacherEvaluationCourse course, String message, {String errorKind = 'unknown'}) {
@@ -337,6 +331,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
 
   static const _startInterval = Duration(seconds: 6);
   static const _waitBeforeSubmit = Duration(seconds: 140);
+  static const _retryableErrorKinds = {'prepareFailed', 'submitFailed'};
 }
 
 extension on TeacherEvaluationTaskStatus {
