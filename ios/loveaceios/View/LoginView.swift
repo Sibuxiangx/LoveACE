@@ -21,9 +21,11 @@ struct LoginView: View {
                 Spacer(minLength: 80)
 
                 VStack(spacing: 14) {
-                    Image(systemName: "graduationcap.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.blue)
+                    Image("LoginAppIcon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 88, height: 88)
+                        .clipShape(.rect(cornerRadius: 20))
 
                     Text("彩带小工具")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -43,7 +45,6 @@ struct LoginView: View {
                 VStack(spacing: 16) {
                     inputField(icon: "person.fill", placeholder: "学号", text: $userId, isSecure: false, warning: fullWidthWarning(userId))
                         .keyboardType(.numberPad)
-                        .textContentType(.username)
 
                     passwordField(placeholder: "教务系统密码", text: $password, warning: fullWidthWarning(password))
                     if let captchaImage = authVM.captchaImage {
@@ -56,7 +57,6 @@ struct LoginView: View {
                                 .font(.subheadline)
                             if usesSeparateGatewayPassword {
                                 inputField(icon: "network", placeholder: "网关密码", text: $ecPassword, isSecure: true, warning: fullWidthWarning(ecPassword))
-                                    .textContentType(.password)
                             }
                         }
                         .padding(.top, 8)
@@ -103,12 +103,6 @@ struct LoginView: View {
                 }
                 .padding(.horizontal, 32)
                 .padding(.top, 28)
-                .alert("教务密码可能需要修改", isPresented: $showWeakPasswordAlert) {
-                    Button("取消", role: .cancel) {}
-                    Button("继续登录") { submitLogin() }
-                } message: {
-                    Text("你的教务密码是 6 位数字，或 5 位数字加 1 个字母，这类密码较弱，学校系统可能会要求修改。\n\n请先登录学校教务处（智慧校园/教务处），按页面指引修改密码，再用新密码登录本 App。\n\n注意：这里指的是智慧校园/教务处的密码，不是校园网（网关）密码。")
-                }
 
                 Button {
                     showPasswordHelp = true
@@ -119,6 +113,12 @@ struct LoginView: View {
                 .padding(.top, 16)
 
                 Spacer(minLength: 40)
+            }
+            .alert("教务密码可能需要修改", isPresented: $showWeakPasswordAlert) {
+                Button("取消", role: .cancel) {}
+                Button("继续登录") { submitLogin() }
+            } message: {
+                Text("你的教务密码是 6 位数字，或 5 位数字加 1 个字母，这类密码较弱，学校系统可能会要求修改。\n\n请先登录学校教务处（智慧校园/教务处），按页面指引修改密码，再用新密码登录本 App。\n\n注意：这里指的是智慧校园/教务处的密码，不是校园网（网关）密码。")
             }
         }
         .sheet(isPresented: $showPasswordHelp) {
@@ -141,7 +141,8 @@ struct LoginView: View {
             Text("你的账号被学校要求修改密码（通常是密码到期强制更换），这不是密码错误。请用浏览器登录学校教务系统（智慧校园/教务处），登录时会自动弹出“修改密码”页面，按提示完成修改。完成后回到本 App，用新密码重新登录即可。")
         }
         .onAppear {
-            if let creds = authVM.getRememberedCredentials() {
+            // 只在表单为空时预填：登录页重建时不能覆盖用户正在输入的内容
+            if userId.isEmpty && password.isEmpty, let creds = authVM.getRememberedCredentials() {
                 userId = creds.userId
                 password = creds.password
                 if creds.ecPassword != creds.password {
@@ -331,7 +332,6 @@ struct LoginView: View {
                         SecureField(placeholder, text: text)
                     }
                 }
-                .textContentType(.password)
                 Button { showPassword.toggle() } label: {
                     Image(systemName: showPassword ? "eye.slash" : "eye")
                         .foregroundStyle(.tertiary)

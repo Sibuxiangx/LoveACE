@@ -17,14 +17,14 @@ struct ContentView: View {
             case .initial:
                 LoadingView(message: "正在恢复会话...")
                     .onAppear { authVM.restoreSession() }
-            case .loading:
-                LoadingView(message: "登录中...")
             case .reconnecting:
                 LoadingView(message: "正在恢复连接...")
             case .authenticated:
                 MainTabView()
                     .id(authVM.sessionGeneration)
-            case .unauthenticated, .error:
+            case .unauthenticated, .error, .loading:
+                // 登录中也保持登录页挂载：切到加载页会销毁表单状态（输入的密码、验证码），
+                // 出错后重建会用记住的旧凭据覆盖输入并清空验证码
                 LoginView()
             }
         }

@@ -213,6 +213,13 @@ private fun LandscapeManualLoginForm(
     LaunchedEffect(userId) { onUserIdChanged(userId) }
     // 每张新图片（首次获取、点击刷新、验证码错误后重取）都清空已输入的验证码
     LaunchedEffect(uiState.captchaImage) { captchaInput = "" }
+    // 账号或密码错误：只清空两个密码输入框，学号保留
+    LaunchedEffect(uiState.passwordInvalid) {
+        if (uiState.passwordInvalid) {
+            password = ""
+            ecPassword = ""
+        }
+    }
 
     fun tryLogin() {
         focusManager.clearFocus()

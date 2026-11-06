@@ -34,6 +34,8 @@ data class AuthUiState(
     val captchaImage: ByteArray? = null,
     /** 当前学号的登录冷却截止时刻（epoch ms）；不大于当前时间表示无冷却 */
     val cooldownUntil: Long = 0L,
+    /** 账号或密码错误（学校 VPN 或教务系统）：登录页只清空密码输入框，保留学号 */
+    val passwordInvalid: Boolean = false,
 )
 
 /**
@@ -161,14 +163,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         } else {
                             val msg = ecFailureMessage(retry)
                             Analytics.trackLoginFailed(userId, msg)
-                            publishLoginState(userId, AuthState.Error, errorMessage = msg)
+                            publishLoginState(userId, AuthState.Error, errorMessage = msg, passwordInvalid = retry.failInvalidCredentials)
                         }
                         return@launch
                     }
                     if (ecResult.failInvalidCredentials) recordLoginFailure(userId)
                     val msg = ecFailureMessage(ecResult)
                     Analytics.trackLoginFailed(userId, msg)
-                    publishLoginState(userId, AuthState.Error, errorMessage = msg)
+                    publishLoginState(userId, AuthState.Error, errorMessage = msg, passwordInvalid = ecResult.failInvalidCredentials)
                     return@launch
                 }
 
@@ -190,7 +192,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     if (uaapResult.failInvalidCredentials) recordLoginFailure(userId)
                     Analytics.trackLoginFailed(userId, msg)
-                    publishLoginState(userId, AuthState.Error, errorMessage = msg)
+                    publishLoginState(userId, AuthState.Error, errorMessage = msg, passwordInvalid = uaapResult.failInvalidCredentials)
                     return@launch
                 }
 
@@ -238,11 +240,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         errorMessage: String? = null,
         captchaImage: ByteArray? = null,
         passwordChangeRequired: Boolean = false,
+        passwordInvalid: Boolean = false,
     ) {
         _uiState.value = AuthUiState(
             state = state,
             errorMessage = errorMessage,
             passwordChangeRequired = passwordChangeRequired,
+            passwordInvalid = passwordInvalid,
             captchaImage = captchaImage,
             cooldownUntil = loadCooldownUntil(userId),
         )
