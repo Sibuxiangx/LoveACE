@@ -3,7 +3,6 @@ package tech.loveace.appv3.ui.screen.landscape
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -20,12 +19,10 @@ import tech.loveace.appv3.ui.md3e.RibbonCard
 import tech.loveace.appv3.ui.md3e.RibbonCardVariant
 import tech.loveace.appv3.ui.md3e.RibbonShape
 import tech.loveace.appv3.ui.screen.PreloginNoticeCard
-import tech.loveace.appv3.ui.screen.AdvancedOptionsConfirmDialog
 import tech.loveace.appv3.ui.screen.WeakPasswordDialog
 import tech.loveace.appv3.util.isWeakSchoolPassword
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.layout.ContentScale
@@ -138,6 +135,8 @@ fun LandscapeLoginScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Text("快速登录", style = MaterialTheme.typography.titleMedium)
                             }
+                            Spacer(Modifier.height(12.dp))
+                            QqGroupLoginEntry(modifier = Modifier.widthIn(max = 300.dp))
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -152,7 +151,6 @@ fun LandscapeLoginScreen(
                     LandscapeManualLoginForm(
                         uiState = uiState,
                         initialUserId = rememberedCredentials?.userId ?: "",
-                        initialEcPassword = rememberedCredentials?.ecPassword ?: "",
                         initialPassword = rememberedCredentials?.password ?: "",
                         isLoading = isLoading,
                         onLogin = onLogin,
@@ -174,32 +172,22 @@ fun LandscapeLoginScreen(
 private fun LandscapeManualLoginForm(
     uiState: AuthUiState,
     initialUserId: String,
-    initialEcPassword: String,
     initialPassword: String,
     isLoading: Boolean,
     onLogin: (userId: String, ecPassword: String, password: String, captchaCode: String?) -> Unit,
     onUserIdChanged: (userId: String) -> Unit,
 ) {
     var userId by remember { mutableStateOf(initialUserId) }
-    var ecPassword by remember { mutableStateOf(initialEcPassword) }
     var password by remember { mutableStateOf(initialPassword) }
     var captchaInput by remember { mutableStateOf("") }
-    var showEcPwd by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
     var showPasswordHelp by remember { mutableStateOf(false) }
     var showWeakPasswordDialog by remember { mutableStateOf(false) }
-    var showAdvancedConfirm by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
-    // VPN密码默认与教务密码相同：仅当保存过的密码确实不同时，才默认展开高级选项
-    val savedSeparatePwd = initialEcPassword.isNotEmpty() && initialEcPassword != initialPassword
-    var useSeparatePwd by remember { mutableStateOf(savedSeparatePwd) }
-    var showAdvanced by remember { mutableStateOf(savedSeparatePwd) }
-    val effectiveEcPassword = if (useSeparatePwd) ecPassword else password
     // 全角字符校验：中文输入法容易混入全角数字/字母/标点，教务系统只认半角
     val fullWidthHint = when {
         hasFullWidthChars(userId) -> "学号含全角字符 ${describeFullWidthChars(userId)}，请切换为英文半角输入"
         hasFullWidthChars(password) -> "教务密码含全角字符 ${describeFullWidthChars(password)}，请切换为英文半角输入"
-        useSeparatePwd && hasFullWidthChars(ecPassword) -> "VPN密码含全角字符 ${describeFullWidthChars(ecPassword)}，请切换为英文半角输入"
         else -> null
     }
     // 验证码：仅当学校要求（已有图片）时生效；去掉首尾空白后必须非空且不含全角字符
@@ -207,7 +195,7 @@ private fun LandscapeManualLoginForm(
     val captchaOk = captchaCode == null || (captchaCode.isNotEmpty() && !hasFullWidthChars(captchaCode))
     // 冷却期内禁用登录按钮（不触网），剩余秒数每秒刷新
     val cooldownSec = rememberLoginCooldownSeconds(uiState.cooldownUntil)
-    val canLogin = !isLoading && cooldownSec == 0L && fullWidthHint == null && userId.isNotBlank() && password.isNotBlank() && (!useSeparatePwd || ecPassword.isNotBlank()) && captchaOk
+    val canLogin = !isLoading && cooldownSec == 0L && fullWidthHint == null && userId.isNotBlank() && password.isNotBlank() && captchaOk
 
     // 学号变化：清除验证码状态，并载入该学号的冷却
     LaunchedEffect(userId) { onUserIdChanged(userId) }
@@ -217,7 +205,6 @@ private fun LandscapeManualLoginForm(
     LaunchedEffect(uiState.passwordInvalid) {
         if (uiState.passwordInvalid) {
             password = ""
-            ecPassword = ""
         }
     }
 
@@ -227,15 +214,7 @@ private fun LandscapeManualLoginForm(
         if (isWeakSchoolPassword(password)) {
             showWeakPasswordDialog = true
         } else {
-            onLogin(userId, effectiveEcPassword, password, captchaCode)
-        }
-    }
-
-    fun toggleAdvanced() {
-        if (showAdvanced) {
-            showAdvanced = false
-        } else {
-            showAdvancedConfirm = true
+            onLogin(userId, password, password, captchaCode)
         }
     }
 
@@ -283,7 +262,7 @@ private fun LandscapeManualLoginForm(
                         image = image,
                         value = captchaInput,
                         onValueChange = { captchaInput = it },
-                        onRefresh = { onLogin(userId, effectiveEcPassword, password, null) },
+                        onRefresh = { onLogin(userId, password, password, null) },
                         enabled = !isLoading,
                         refreshEnabled = !isLoading && cooldownSec == 0L,
                     )
@@ -335,67 +314,14 @@ private fun LandscapeManualLoginForm(
                 }
             }
         }
+        Spacer(Modifier.height(12.dp))
+        QqGroupLoginEntry()
 
         Spacer(Modifier.height(12.dp))
         TextButton(onClick = { showPasswordHelp = true }) {
             Icon(Icons.Default.HelpOutline, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text("不知道密码是什么？")
-        }
-        // ── 高级选项：次要入口，默认折叠；网关密码与教务密码通常相同 ──
-        Row(
-            modifier = Modifier
-                .clip(MaterialTheme.shapes.large)
-                .clickable { toggleAdvanced() }
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "高级选项",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (showAdvanced) "收起高级选项" else "展开高级选项",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        AnimatedVisibility(
-            visible = showAdvanced,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "我的网关密码和教务密码不一样",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(checked = useSeparatePwd, onCheckedChange = { useSeparatePwd = it }, enabled = !isLoading)
-                }
-                if (useSeparatePwd) {
-                    OutlinedTextField(
-                        value = ecPassword, onValueChange = { ecPassword = it },
-                        label = { Text("VPN密码") }, leadingIcon = { Icon(Icons.Default.VpnKey, null) },
-                        trailingIcon = { IconButton(onClick = { showEcPwd = !showEcPwd }) { Icon(if (showEcPwd) Icons.Default.VisibilityOff else Icons.Default.Visibility, "切换可见") } },
-                        visualTransformation = if (showEcPwd) VisualTransformation.None else PasswordVisualTransformation(),
-                        singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { tryLogin() }),
-                        enabled = !isLoading,
-                        isError = hasFullWidthChars(ecPassword),
-                        supportingText = {
-                            if (hasFullWidthChars(ecPassword)) Text("含全角字符 ${describeFullWidthChars(ecPassword)}，请用英文半角", fontSize = 12.sp)
-                        },
-                    )
-                }
-            }
         }
     }
 
@@ -408,16 +334,7 @@ private fun LandscapeManualLoginForm(
             onDismiss = { showWeakPasswordDialog = false },
             onConfirm = {
                 showWeakPasswordDialog = false
-                onLogin(userId, effectiveEcPassword, password, captchaCode)
-            },
-        )
-    }
-    if (showAdvancedConfirm) {
-        AdvancedOptionsConfirmDialog(
-            onDismiss = { showAdvancedConfirm = false },
-            onConfirm = {
-                showAdvancedConfirm = false
-                showAdvanced = true
+                onLogin(userId, password, password, captchaCode)
             },
         )
     }
@@ -453,7 +370,9 @@ private fun LandscapeTelemetryNotice() {
 }
 
 @Composable
-private fun LandscapePasswordHelpDialog(onDismiss: () -> Unit) {
+private fun LandscapePasswordHelpDialog(
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.HelpOutline, null) },
@@ -466,16 +385,6 @@ private fun LandscapePasswordHelpDialog(onDismiss: () -> Unit) {
                     Column {
                         Text("教务密码（UAAP）", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Text("通常只需填写教务密码，彩带小工具会使用同一密码建立校内访问并登录教务系统", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
-                    shape = MaterialTheme.shapes.large,
-                ) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("只有在你确认网关密码与教务密码不同时，才需要在登录页的高级选项中单独填写 VPN 密码。", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Card(

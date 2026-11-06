@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import tech.loveace.appv3.R
 import tech.loveace.appv3.ui.components.SectionTitle
+import tech.loveace.appv3.ui.components.QqGroupSettingsRow
 import tech.loveace.appv3.ui.components.AppLinearProgressIndicator
 import tech.loveace.appv3.ui.theme.*
 import tech.loveace.appv3.service.CourseNotificationService
@@ -131,6 +132,8 @@ fun LandscapeSettingsScreen(
                         }
                     }
                 }
+
+                QqGroupSettingsRow()
 
                 // 关于
                 Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {

@@ -51,6 +51,7 @@
 
 ## Pre-login notice
 - `AnnouncementService.fetchPreloginNotice()` reads the optional top-level `prelogin_notice` field of manifest v2; `LoginView` renders the banner below the brand header and must stay silent on fetch failure. Desktop ignores this field.
+- QQ group entry: `QqGroupService.fetch()` (`Service/QqGroupService.swift`) reads `qq_group_v1.json` (key `qq_group_v1.json`, not manifest_v2), tries `loveace.linota.cn` then `release.loveace.top`, and shows entries only when `schema_version == 1` and `enabled == true`. Result is in-memory per screen, never persisted or logged. UI: `QqGroupEntryCard` under the login button and `QqGroupSettingsRow` in 我的, both opening `QqGroupPopup` (`View/QqGroupPopup.swift`).
 
 ## Login captcha and cooldown
 
@@ -60,8 +61,8 @@
 - Auto-reconnect and `restoreSession` that hit a captcha keep the saved credentials and return to the login screen with "学校要求输入验证码，请重新登录". Do not clear credentials on that path.
 - Do not map 20041 back to "登录频繁"; it means captcha required.
 - Full-width checks live in `Util/TextValidation.swift`. Keep them aligned with Android `util/TextValidation.kt` and desktop `utils/text_validation.dart`.
-- Weak school password hint (`isWeakSchoolPassword` in `Util/TextValidation.swift`, same rule as Android): the manual login form shows an alert before submitting; "继续登录" submits anyway. Expanding 高级选项 shows a confirm alert first (`advancedOptionsBinding`). Hint only; quick login and auto-reconnect skip it.
-- 高级选项 is a footnote-size `DisclosureGroup` below the help link in `LoginView`, not a form row. Keep it there so users do not read it as a second required password.
+- Weak school password hint (`isWeakSchoolPassword` in `Util/TextValidation.swift`, same rule as Android): the manual login form shows an alert before submitting; "继续登录" submits anyway. Hint only; quick login and auto-reconnect skip it.
+- The gateway-password option was removed; login uses one password (the gateway parameter is passed as nil).
 - `ContentView` keeps `LoginView` mounted during `.loading`; do not swap it for a loading view. Rebuilding the login view on error wipes typed input, re-prefills remembered credentials, and `userIdDidChange` then clears the captcha. Prefill only when the userId and password fields are empty. The userId and password fields have no `textContentType`, so system AutoFill cannot overwrite what the user typed.
 
 ## Git/artifact quirks

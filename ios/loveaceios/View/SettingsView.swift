@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var logExportError: String?
     @State private var classReminderOn = ClassReminderScheduler.isEnabled
     @State private var reminderDenied = false
+    @State private var qqGroupManifest: QqGroupManifest?
 
     private var classReminderBinding: Binding<Bool> {
         Binding(
@@ -103,6 +104,12 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if let qqGroupManifest {
+                    Section {
+                        QqGroupSettingsRow(manifest: qqGroupManifest)
+                    }
+                }
+
                 Section("法律信息") {
                     Link(destination: URL(string: "https://linota.cn/loveace/privacy")!) {
                         Label("隐私政策", systemImage: "hand.raised.fill")
@@ -167,6 +174,9 @@ struct SettingsView: View {
                 }
             }
             .onAppear { profileVM.setActiveUserId(authVM.userId) }
+            .task {
+                qqGroupManifest = await QqGroupService.fetch()
+            }
         }
     }
 

@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import tech.loveace.appv3.R
 import tech.loveace.appv3.ui.components.SectionTitle
+import tech.loveace.appv3.ui.components.QqGroupSettingsRow
 import tech.loveace.appv3.ui.components.AppLinearProgressIndicator
 import tech.loveace.appv3.ui.theme.*
 import tech.loveace.appv3.service.CourseNotificationService
@@ -298,6 +299,8 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            QqGroupSettingsRow()
 
             // 关于
             SectionTitle("关于")

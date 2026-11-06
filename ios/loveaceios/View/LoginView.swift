@@ -4,16 +4,13 @@ import UIKit
 struct LoginView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var userId = ""
-    @State private var ecPassword = ""
     @State private var password = ""
     @State private var showPassword = false
-    @State private var showAdvancedOptions = false
-    @State private var usesSeparateGatewayPassword = false
+    @State private var qqGroupManifest: QqGroupManifest?
     @State private var showPasswordHelp = false
     @State private var preloginNotice: PreloginNotice?
     @State private var captchaInput = ""
     @State private var showWeakPasswordAlert = false
-    @State private var showAdvancedConfirm = false
 
     var body: some View {
         ScrollView {
@@ -82,6 +79,11 @@ struct LoginView: View {
                 }
                 .padding(.horizontal, 32)
                 .padding(.top, 28)
+                if let qqGroupManifest {
+                    QqGroupEntryCard(manifest: qqGroupManifest)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 14)
+                }
 
                 Button {
                     showPasswordHelp = true
@@ -90,29 +92,6 @@ struct LoginView: View {
                         .font(.subheadline)
                 }
                 .padding(.top, 16)
-                DisclosureGroup(isExpanded: advancedOptionsBinding) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle("我的网关密码和教务密码不一样", isOn: $usesSeparateGatewayPassword)
-                            .font(.footnote)
-                        if usesSeparateGatewayPassword {
-                            inputField(icon: "network", placeholder: "网关密码", text: $ecPassword, isSecure: true, warning: fullWidthWarning(ecPassword))
-                        }
-                    }
-                    .padding(.top, 8)
-                } label: {
-                    Text("高级选项")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .tint(.secondary)
-                .padding(.horizontal, 32)
-                .padding(.top, 20)
-                .alert("高级选项", isPresented: $showAdvancedConfirm) {
-                    Button("取消", role: .cancel) {}
-                    Button("我知道了") { showAdvancedOptions = true }
-                } message: {
-                    Text("学校系统已将智慧校园/教务处密码与校园网（网关）密码绑定，修改其中一个，另一个会一起修改。\n\n不建议两个密码设置成不同。也不要只在移动端修改而不管 PC 端。只有确认两个密码确实不同，才需要在这里填写网关密码。")
-                }
 
                 Spacer(minLength: 40)
             }
@@ -131,6 +110,9 @@ struct LoginView: View {
             // 登录前公告：拉取失败或未启用时静默隐藏
             preloginNotice = await AnnouncementService.fetchPreloginNotice()
         }
+        .task {
+            qqGroupManifest = await QqGroupService.fetch()
+        }
         .alert(
             "学校要求修改密码",
             isPresented: Binding(
@@ -147,11 +129,6 @@ struct LoginView: View {
             if userId.isEmpty && password.isEmpty, let creds = authVM.getRememberedCredentials() {
                 userId = creds.userId
                 password = creds.password
-                if creds.ecPassword != creds.password {
-                    ecPassword = creds.ecPassword
-                    showAdvancedOptions = true
-                    usesSeparateGatewayPassword = true
-                }
             }
         }
         .onChange(of: userId) { _, newValue in
@@ -165,10 +142,8 @@ struct LoginView: View {
 
     private var canLogin: Bool {
         !userId.isEmpty && !password.isEmpty
-            && (!usesSeparateGatewayPassword || !ecPassword.isEmpty)
             && !hasFullWidthChars(userId)
             && !hasFullWidthChars(password)
-            && !(usesSeparateGatewayPassword && hasFullWidthChars(ecPassword))
             && captchaReady
     }
 
@@ -198,20 +173,6 @@ struct LoginView: View {
         return LoginThrottle.remainingSeconds(until: until, now: date)
     }
 
-    /// 展开高级选项前先弹窗确认；收起直接生效
-    private var advancedOptionsBinding: Binding<Bool> {
-        Binding(
-            get: { showAdvancedOptions },
-            set: { expanding in
-                if expanding {
-                    showAdvancedConfirm = true
-                } else {
-                    showAdvancedOptions = false
-                }
-            }
-        )
-    }
-
     /// 登录入口：教务密码为弱密码形式时先弹窗，用户选择"继续登录"后才提交
     private func requestLogin() {
         if isWeakSchoolPassword(password) {
@@ -225,7 +186,7 @@ struct LoginView: View {
         authVM.login(
             userId: userId,
             password: password,
-            gatewayPassword: usesSeparateGatewayPassword ? ecPassword : nil,
+            gatewayPassword: nil,
             captchaCode: authVM.captchaImage == nil ? nil : trimmedCaptchaInput
         )
     }
@@ -400,11 +361,6 @@ private struct PasswordHelpView: View {
                     )
                     passwordHelpImage("UAAP", description: "UAAP 登录界面")
 
-                    infoCard(
-                        icon: "slider.horizontal.3",
-                        tint: .orange,
-                        text: "只有在你确认网关密码与教务系统密码不同时，才需要在登录页的高级选项中单独填写网关密码。"
-                    )
 
                     infoCard(
                         icon: "info.circle.fill",
