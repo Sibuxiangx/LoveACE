@@ -9,8 +9,8 @@
 - Xcode project only: `loveaceios.xcodeproj`; schemes/targets are `loveaceios` and `loveaceiosWidget`.
 - Main app: bundle `cn.linota.loveace`, display name `彩带小工具`; widget: bundle `cn.linota.loveace.widget`; team `2PYK4BY5P6`.
 - App and widget share `group.cn.linota.loveace`. The widget reads one versioned snapshot (`WidgetSnapshotStore`, key `widget_snapshot_v2`) and the shared schedule rules in `Shared/WidgetModels.swift`. Only `WidgetSyncCoordinator` writes the snapshot; widgets never fetch.
-- SwiftUI flow: `loveaceiosApp.swift` creates `AuthViewModel` -> `ContentView` restores/routes auth -> `MainTabView` tabs (`HomeView`, `AACView`, `MoreView`, `SettingsView`).
-- More tab (`MoreView`) groups features into 教务服务 / 校园生活 / 素质拓展, the same taxonomy as the Android landscape nav, and has a search field. Add a new feature to one of those sections, not as a new tab.
+- SwiftUI flow: `loveaceiosApp.swift` creates `AuthViewModel` -> `ContentView` restores/routes auth -> `AdaptiveRootView`. iPhone is portrait-only (the orientation keys in `project.pbxproj` say so). On iPad, landscape (width > height) shows a `NavigationSplitView` sidebar; portrait shows a `TabView` (`HomeView`, `AACView`, `MoreView`, `SettingsView`). The selection is `AppDestination` at the root, so rotating keeps the current page.
+- The feature catalog lives in `View/AppCatalog.swift` (`AppCatalog.sections` and `AppCatalog.destinationView(for:)`) and is shared by the More tab and the iPad sidebar. Add a new feature there, in 教务服务 / 校园生活 / 素质拓展 (the same taxonomy as the Android landscape nav), not as a new tab. The More tab's search filters the same list.
 - Services live in `loveaceios/Service` and are wired in `AuthViewModel.initServices(_:)`; login/session networking is `AUFEConnection` + `HTTPClient`.
 - Reuse `loveaceios/Components/DesignSystem.swift` (`glassCard`, `glassInteractiveCard`, `GlassBadge`, etc.) for UI instead of ad-hoc styling.
 - SPM dependency is SwiftSoup, resolved in `loveaceios.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.

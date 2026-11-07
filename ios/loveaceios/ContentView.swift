@@ -28,7 +28,7 @@ struct ContentView: View {
             case .reconnecting:
                 LoadingView(message: "正在恢复连接...")
             case .authenticated:
-                MainTabView()
+                AdaptiveRootView()
                     .id(authVM.sessionGeneration)
             case .unauthenticated, .error, .loading:
                 // 登录中也保持登录页挂载：切到加载页会销毁表单状态（输入的密码、验证码），
