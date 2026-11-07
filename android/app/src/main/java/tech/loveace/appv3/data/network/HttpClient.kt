@@ -109,6 +109,10 @@ class HttpClient(
     fun copyCookiesFrom(other: HttpClient) {
         cookieJar.copyFrom(other.cookieJar)
     }
+    /** 把 other 的 Cookie 合并进本 client（保留本地已有 Cookie） */
+    fun mergeCookiesFrom(other: HttpClient) {
+        cookieJar.mergeFrom(other.cookieJar)
+    }
 
     fun close() {
         client.dispatcher.executorService.shutdown()

@@ -267,6 +267,8 @@ class PortalService(private val connection: AUFEConnection) {
         }
 
         val client = simpleClient()
+        // 门户 CAS 跳转写入的会话 Cookie 在 noRedirect 的 jar 里；合并进请求用的 client，否则 hpdata 会被网关当成未登录
+        client.mergeCookiesFrom(noRedirect)
         // 门户页加载时会先请求一次网页代理配置；结果不使用，失败不影响后续
         try {
             client.get("$BASE_URL/sf-webproxy/api/vpn-config", apiHeaders()).use { }
@@ -278,6 +280,7 @@ class PortalService(private val connection: AUFEConnection) {
             formData = HPDATA_FORM,
             headers = apiHeaders(),
         ).toReply()
+        Log.d(TAG, "portal hpdata status=${reply.code} bytes=${reply.body.size}")
         if (reply.code == 404 && reply.errorHeader == "securityIntercept") {
             interceptedUntil = System.currentTimeMillis() + INTERCEPT_COOLDOWN_MILLIS
             Log.w(TAG, "portal hpdata intercepted by VPN; cooling down")

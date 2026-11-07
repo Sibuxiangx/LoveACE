@@ -67,6 +67,16 @@ class SmartCookieJar : CookieJar {
             cookieStore[k] = v.toMutableList()
         }
     }
+    /** 合并 other 的 Cookie：同名同路径以 other 为准，本地其它 Cookie 保留（copyFrom 会整体替换，会冲掉其它服务的会话） */
+    fun mergeFrom(other: SmartCookieJar) {
+        for ((domain, cookies) in other.cookieStore) {
+            val existing = cookieStore.getOrPut(domain) { mutableListOf() }
+            for (cookie in cookies) {
+                existing.removeAll { it.name == cookie.name && it.path == cookie.path }
+                existing.add(cookie)
+            }
+        }
+    }
 
     fun clear() = cookieStore.clear()
 
