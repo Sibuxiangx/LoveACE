@@ -26,3 +26,6 @@ import kotlinx.serialization.Serializable
 @Serializable object QRScanRoute
 @Serializable object RepairRoute
 @Serializable object TeacherEvaluationRoute
+@Serializable object AccessRecordsRoute
+@Serializable object BorrowingRoute
+@Serializable object MailPasswordRoute

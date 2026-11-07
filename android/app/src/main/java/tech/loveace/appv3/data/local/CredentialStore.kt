@@ -1,6 +1,7 @@
 package tech.loveace.appv3.data.local
 
 import android.content.Context
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import tech.loveace.appv3.data.model.UserCredentials
@@ -30,11 +31,11 @@ class CredentialStore(context: Context) {
             .apply()
     }
 
-    fun load(): UserCredentials? {
-        val userId = prefs.getString(KEY_USER_ID, null) ?: return null
-        val ecPassword = prefs.getString(KEY_EC_PASSWORD, null) ?: return null
-        val password = prefs.getString(KEY_PASSWORD, null) ?: return null
-        return UserCredentials(userId, ecPassword, password)
+    fun load(): UserCredentials? = guardedRead<UserCredentials>("load") {
+        val userId = prefs.getString(KEY_USER_ID, null) ?: return@guardedRead null
+        val ecPassword = prefs.getString(KEY_EC_PASSWORD, null) ?: return@guardedRead null
+        val password = prefs.getString(KEY_PASSWORD, null) ?: return@guardedRead null
+        UserCredentials(userId, ecPassword, password)
     }
 
     fun clear() {
@@ -45,7 +46,7 @@ class CredentialStore(context: Context) {
             .apply()
     }
 
-    fun hasCredentials(): Boolean = prefs.contains(KEY_USER_ID)
+    fun hasCredentials(): Boolean = guardedRead<Boolean>("hasCredentials") { prefs.contains(KEY_USER_ID) } ?: false
 
     // Remember password (separate from session credentials)
     fun saveRemembered(credentials: UserCredentials) {
@@ -57,12 +58,12 @@ class CredentialStore(context: Context) {
             .apply()
     }
 
-    fun loadRemembered(): UserCredentials? {
-        if (!prefs.getBoolean(KEY_REMEMBER_ENABLED, false)) return null
-        val userId = prefs.getString(KEY_REMEMBERED_USER_ID, null) ?: return null
-        val ecPassword = prefs.getString(KEY_REMEMBERED_EC_PASSWORD, null) ?: return null
-        val password = prefs.getString(KEY_REMEMBERED_PASSWORD, null) ?: return null
-        return UserCredentials(userId, ecPassword, password)
+    fun loadRemembered(): UserCredentials? = guardedRead<UserCredentials>("loadRemembered") {
+        if (!prefs.getBoolean(KEY_REMEMBER_ENABLED, false)) return@guardedRead null
+        val userId = prefs.getString(KEY_REMEMBERED_USER_ID, null) ?: return@guardedRead null
+        val ecPassword = prefs.getString(KEY_REMEMBERED_EC_PASSWORD, null) ?: return@guardedRead null
+        val password = prefs.getString(KEY_REMEMBERED_PASSWORD, null) ?: return@guardedRead null
+        UserCredentials(userId, ecPassword, password)
     }
 
     fun clearRemembered() {
@@ -74,7 +75,17 @@ class CredentialStore(context: Context) {
             .apply()
     }
 
+    /** 读取凭证：Keystore 或解密失败时返回 null，且不清除已保存的凭证 */
+    private fun <T : Any> guardedRead(step: String, block: () -> T?): T? =
+        try {
+            block()
+        } catch (e: Exception) {
+            Log.w(TAG, "$step failed: ${e.javaClass.simpleName}")
+            null
+        }
+
     companion object {
+        private const val TAG = "CredentialStore"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_EC_PASSWORD = "ec_password"
         private const val KEY_PASSWORD = "password"

@@ -84,6 +84,8 @@ private val CAMPUS_TILES = listOf(
     FeatureTile("零星维修", Icons.Default.Build, "零星维修", "报修和查看维修进度", RibbonTone.TERTIARY, RibbonShape.COOKIE_8, RepairRoute),
     FeatureTile("一卡通", Icons.Default.CreditCard, "一卡通", "余额查询和消费记录", RibbonTone.PRIMARY, RibbonShape.CLOVER_4, YKTRoute),
     FeatureTile("电费查询", Icons.Default.ElectricBolt, "电费查询", "宿舍电费余额和用电记录", RibbonTone.SECONDARY, RibbonShape.COOKIE_6, ElectricityRoute),
+    FeatureTile("门禁查询", Icons.Default.MeetingRoom, "门禁查询", "宿舍与图书馆门禁记录", RibbonTone.SECONDARY, RibbonShape.PEBBLE_3, AccessRecordsRoute),
+    FeatureTile("我的借阅", Icons.Default.LibraryBooks, "我的借阅", "当前借阅与历史借还记录", RibbonTone.TERTIARY, RibbonShape.COOKIE_8, BorrowingRoute),
 )
 
 // 素质拓展

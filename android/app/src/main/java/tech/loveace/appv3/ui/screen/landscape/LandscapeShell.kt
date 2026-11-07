@@ -29,6 +29,9 @@ import tech.loveace.appv3.ui.theme.ThemeViewModel
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.OtaViewModel
 import tech.loveace.appv3.ui.viewmodel.ProfileViewModel
+import tech.loveace.appv3.ui.screen.AccessRecordsScreen
+import tech.loveace.appv3.ui.screen.BorrowingScreen
+import tech.loveace.appv3.ui.screen.MailPasswordScreen
 
 /** 横屏导航项 */
 data class LandscapeNavItem(
@@ -53,6 +56,8 @@ fun LandscapeShell(
     val profileState by profileViewModel.state.collectAsStateWithLifecycle()
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     var selectedIndex by remember { mutableIntStateOf(if (navigateToSchedule) 4 else 0) }
+    var mailPasswordOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedIndex) { mailPasswordOpen = false }
 
     LaunchedEffect(navigateToSchedule) {
         if (navigateToSchedule) {
@@ -73,6 +78,8 @@ fun LandscapeShell(
         LandscapeNavItem("自动评教", Icons.Filled.RateReview, Icons.Outlined.RateReview, trackFeature = true),
         LandscapeNavItem("一卡通", Icons.Filled.CreditCard, Icons.Outlined.CreditCard, "校园生活", trackFeature = true),
         LandscapeNavItem("电费查询", Icons.Filled.ElectricBolt, Icons.Outlined.ElectricBolt, trackFeature = true),
+        LandscapeNavItem("门禁查询", Icons.Filled.MeetingRoom, Icons.Outlined.MeetingRoom, trackFeature = true),
+        LandscapeNavItem("我的借阅", Icons.Filled.LibraryBooks, Icons.Outlined.LibraryBooks, trackFeature = true),
         LandscapeNavItem("零星维修", Icons.Filled.Build, Icons.Outlined.Build, trackFeature = true),
         LandscapeNavItem("竞赛信息", Icons.Filled.EmojiEvents, Icons.Outlined.EmojiEvents, "素质拓展", trackFeature = true),
         LandscapeNavItem("劳动俱乐部", Icons.Filled.Handshake, Icons.Outlined.Handshake, trackFeature = true),
@@ -182,15 +189,22 @@ fun LandscapeShell(
                 8 -> LandscapeTeacherEvaluationScreen(authViewModel)
                 9 -> LandscapeYKTScreen(authViewModel)
                 10 -> LandscapeElectricityScreen(authViewModel)
-                11 -> LandscapeRepairScreen(authViewModel)
-                12 -> LandscapeCompetitionScreen(authViewModel)
-                13 -> LandscapeLaborClubScreen(authViewModel, profileViewModel)
-                14 -> LandscapeSettingsScreen(
-                    authViewModel,
-                    themeViewModel,
-                    profileViewModel,
-                    otaViewModel,
-                )
+                11 -> AccessRecordsScreen(authViewModel, onBack = { selectedIndex = 0 })
+                12 -> BorrowingScreen(authViewModel, onBack = { selectedIndex = 0 })
+                13 -> LandscapeRepairScreen(authViewModel)
+                14 -> LandscapeCompetitionScreen(authViewModel)
+                15 -> LandscapeLaborClubScreen(authViewModel, profileViewModel)
+                16 -> if (mailPasswordOpen) {
+                    MailPasswordScreen(authViewModel, onBack = { mailPasswordOpen = false })
+                } else {
+                    LandscapeSettingsScreen(
+                        authViewModel,
+                        themeViewModel,
+                        profileViewModel,
+                        otaViewModel,
+                        onOpenMailPassword = { mailPasswordOpen = true },
+                    )
+                }
             }
         }
     }

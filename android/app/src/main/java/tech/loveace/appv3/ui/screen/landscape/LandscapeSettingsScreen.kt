@@ -53,6 +53,7 @@ fun LandscapeSettingsScreen(
     themeViewModel: ThemeViewModel,
     profileViewModel: ProfileViewModel,
     otaViewModel: OtaViewModel,
+    onOpenMailPassword: () -> Unit,
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val themeConfig by themeViewModel.themeConfig.collectAsStateWithLifecycle()
@@ -217,6 +218,23 @@ fun LandscapeSettingsScreen(
                 Modifier.weight(0.6f).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // 账号
+                SectionTitle("账号")
+                Card(
+                    Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onOpenMailPassword() }.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(12.dp))
+                        Text("企业邮箱初始密码", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
                 // 主题色选择
                 SectionTitle("主题颜色")
                 Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {

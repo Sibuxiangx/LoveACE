@@ -1,11 +1,8 @@
 package tech.loveace.appv3.ui.screen.landscape
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -15,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -25,6 +21,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.ui.components.*
 import tech.loveace.appv3.ui.md3e.*
+import tech.loveace.appv3.ui.screen.YKTErrorCard
+import tech.loveace.appv3.ui.screen.consumptionSection
 import tech.loveace.appv3.ui.theme.LocalExtendedColors
 import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.AuthViewModel
@@ -39,8 +37,8 @@ import tech.loveace.appv3.ui.viewmodel.YKTViewModel
 fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(authViewModel.yktService) {
-        authViewModel.yktService?.let { vm.init(it); vm.loadAll() }
+    LaunchedEffect(authViewModel.yktService, authViewModel.portalService) {
+        authViewModel.yktService?.let { vm.init(it, authViewModel.portalService); vm.loadAll() }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -55,10 +53,10 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
         topBar = { TopAppBar(title = { Text("一卡通") }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        when {
-            state.isLoading && state.balance == null -> LoadingScreen()
-            state.error != null && state.balance == null -> ErrorScreen(state.error!!) { vm.loadAll() }
-            else -> Row(
+        if (state.isLoading && state.balance == null) {
+            LoadingScreen()
+        } else {
+            Row(
                 Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
             ) {
@@ -67,7 +65,8 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                     Modifier.weight(0.45f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    state.balance?.let { balance ->
+                    val balance = state.balance
+                    if (balance != null) {
                         RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.PRIMARY_CONTAINER, radius = 32.dp, padding = PaddingValues(22.dp)) {
                             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -83,66 +82,19 @@ fun LandscapeYKTScreen(authViewModel: AuthViewModel, vm: YKTViewModel = viewMode
                                 }
                             }
                         }
+                    } else {
+                        state.error?.let { message -> YKTErrorCard(message) { vm.loadBalance() } }
                     }
                     LandscapePaymentCard(state, vm, authViewModel)
                 }
 
-                // 右栏：消费记录
-                Column(Modifier.weight(0.55f)) {
-                    when {
-                        state.isTransactionsLoading -> {
-                            // 加载中
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                RibbonState(RibbonStateKind.LOADING, "消费记录加载中，请稍候...", description = "一卡通消费记录加载较慢，请耐心等待")
-                            }
-                        }
-                        state.transactionsError != null -> {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                RibbonState(RibbonStateKind.ERROR, "消费记录加载失败", description = state.transactionsError)
-                            }
-                        }
-                        state.transactions.isNotEmpty() -> {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                contentPadding = PaddingValues(bottom = 16.dp),
-                            ) {
-                                item {
-                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                                        ShapeBadge(shape = RibbonShape.COOKIE_12, size = 44.dp, color = MaterialTheme.colorScheme.tertiaryContainer, icon = Icons.Default.Receipt, iconTint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                        Spacer(Modifier.width(12.dp))
-                                        Column {
-                                            Text("近期交易", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                            Text("共 ${state.transactions.size} 条记录", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                                items(state.transactions.take(20), key = { "${it.transactionTime}_${it.accountingTime}_${it.balance}" }) { tx ->
-                                    val extended = LocalExtendedColors.current
-                                    ListItem(
-                                        headlineContent = { Text(tx.area.ifEmpty { tx.operationType }, style = MaterialTheme.typography.bodyMedium) },
-                                        supportingContent = { Text(tx.transactionTime.ifEmpty { tx.accountingTime }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                        leadingContent = {
-                                            ShapeBadge(
-                                                shape = if (tx.isIncome) RibbonShape.FLOWER_5 else RibbonShape.PEBBLE_3,
-                                                size = 36.dp,
-                                                color = if (tx.isIncome) extended.successContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                icon = if (tx.isIncome) Icons.Default.Add else Icons.Default.Remove,
-                                                iconTint = if (tx.isIncome) extended.onSuccessContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        },
-                                        trailingContent = { Text(tx.amountText, style = RibbonNumeric.Medium, color = if (tx.isIncome) extended.success else MaterialTheme.colorScheme.onSurface) },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    )
-                                }
-                            }
-                        }
-                        else -> {
-                            // 余额已加载但消费记录还没开始加载
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                RibbonState(RibbonStateKind.EMPTY, "暂无消费记录")
-                            }
-                        }
-                    }
+                // 右栏：本月消费
+                LazyColumn(
+                    Modifier.weight(0.55f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                ) {
+                    consumptionSection(state, vm)
                 }
             }
         }

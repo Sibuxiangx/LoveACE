@@ -88,6 +88,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var yktService: YKTService? = null
         private set
+    var portalService: PortalService? = null
+        private set
     var isimService: ISIMService? = null
         private set
     var aacService: AACService? = null
@@ -465,6 +467,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private fun initServices(conn: AUFEConnection) {
         jwcService = JWCService(conn)
         yktService = YKTService(conn)
+        portalService = PortalService(conn)
         isimService = ISIMService(conn)
         aacService = AACService(conn)
         laborClubService = LaborClubService(conn)
@@ -481,6 +484,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         connection = null
         jwcService = null
         yktService = null
+        portalService = null
         isimService = null
         aacService = null
         laborClubService = null

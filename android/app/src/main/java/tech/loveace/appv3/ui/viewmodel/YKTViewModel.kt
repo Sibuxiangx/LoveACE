@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import tech.loveace.appv3.data.model.*
+import tech.loveace.appv3.data.service.PortalService
 import tech.loveace.appv3.data.service.YKTService
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -14,10 +15,15 @@ import java.time.format.DateTimeFormatter
 data class YKTUiState(
     val isLoading: Boolean = false,
     val balance: CardBalance? = null,
-    val transactions: List<TransactionRecord> = emptyList(),
-    val isTransactionsLoading: Boolean = false,
-    val transactionsError: String? = null,
     val error: String? = null,
+    // 本月消费（门户）
+    val consumption: List<ConsumptionRecord> = emptyList(),
+    val consumptionTotal: Int = 0,
+    val consumptionPage: Int = 0,
+    val isConsumptionLoading: Boolean = false,
+    val consumptionError: String? = null,
+    /** 本月消费第一页已成功加载（区分"尚未加载"与"本月确实没有记录"） */
+    val consumptionLoaded: Boolean = false,
     // 充值解锁
     val isPaymentUnlocked: Boolean = false,
     // 电费充值
@@ -38,43 +44,105 @@ data class YKTUiState(
 
 class YKTViewModel : ViewModel() {
     private var service: YKTService? = null
+    private var portal: PortalService? = null
     private val _uiState = MutableStateFlow(YKTUiState())
     val uiState: StateFlow<YKTUiState> = _uiState.asStateFlow()
+    /** 每次重新加载本月消费时递增；旧请求返回时丢弃 */
+    private var consumptionGeneration = 0
 
-    fun init(service: YKTService) { this.service = service }
+    fun init(service: YKTService, portal: PortalService?) {
+        this.service = service
+        this.portal = portal
+    }
 
+    /** 余额（ykt）与本月消费（门户）各自加载，互不等待 */
     fun loadAll() {
+        loadBalance()
+        reloadConsumption()
+    }
+
+    /** 只加载余额：首页与余额卡重试使用 */
+    fun loadBalance() {
         val svc = service ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             svc.initSession()
-            // 先加载余额
             val balanceResult = svc.getBalance()
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 balance = balanceResult.data,
                 error = balanceResult.error,
             )
-            // 余额加载成功后，异步加载消费记录（不阻塞UI）
-            if (balanceResult.data != null) {
-                loadTransactions()
-            }
         }
     }
 
-    private fun loadTransactions() {
-        val svc = service ?: return
+    /** 本月消费第一页：清空旧结果并递增代数，旧请求返回后丢弃 */
+    fun reloadConsumption() {
+        consumptionGeneration += 1
+        val generation = consumptionGeneration
+        val svc = portal
+        _uiState.value = _uiState.value.copy(
+            consumption = emptyList(),
+            consumptionTotal = 0,
+            consumptionPage = 0,
+            consumptionLoaded = false,
+            consumptionError = if (svc == null) "请先登录" else null,
+            isConsumptionLoading = svc != null,
+        )
+        if (svc == null) return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isTransactionsLoading = true, transactionsError = null)
-            val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-            val end = LocalDate.now().format(fmt)
-            val start = LocalDate.now().minusDays(30).format(fmt)
-            val txResult = svc.getTransactions(start, end)
+            val result = svc.consumptionRecords(1)
+            val page = result.data
+            if (generation != consumptionGeneration) return@launch
+            if (!result.success || page == null) {
+                _uiState.value = _uiState.value.copy(
+                    isConsumptionLoading = false,
+                    consumptionError = result.error ?: "加载失败，请稍后重试",
+                )
+                return@launch
+            }
             _uiState.value = _uiState.value.copy(
-                isTransactionsLoading = false,
-                transactions = txResult.data ?: emptyList(),
-                transactionsError = txResult.error,
+                isConsumptionLoading = false,
+                consumption = page.records,
+                consumptionTotal = page.total,
+                consumptionPage = 1,
+                consumptionLoaded = true,
             )
+        }
+    }
+
+    /** 加载下一页：已显示数量未达到总数时才请求；服务端返回空页时停止翻页 */
+    fun loadMoreConsumption() {
+        val svc = portal ?: return
+        val state = _uiState.value
+        if (state.isConsumptionLoading || state.consumption.size >= state.consumptionTotal) return
+        val generation = consumptionGeneration
+        val next = state.consumptionPage + 1
+        _uiState.value = state.copy(isConsumptionLoading = true, consumptionError = null)
+        viewModelScope.launch {
+            val result = svc.consumptionRecords(next)
+            val page = result.data
+            if (generation != consumptionGeneration) return@launch
+            if (!result.success || page == null) {
+                _uiState.value = _uiState.value.copy(
+                    isConsumptionLoading = false,
+                    consumptionError = result.error ?: "加载失败，请稍后重试",
+                )
+                return@launch
+            }
+            _uiState.value = if (page.records.isEmpty()) {
+                _uiState.value.copy(
+                    isConsumptionLoading = false,
+                    consumptionTotal = _uiState.value.consumption.size,
+                )
+            } else {
+                _uiState.value.copy(
+                    isConsumptionLoading = false,
+                    consumption = _uiState.value.consumption + page.records,
+                    consumptionTotal = page.total,
+                    consumptionPage = next,
+                )
+            }
         }
     }
 

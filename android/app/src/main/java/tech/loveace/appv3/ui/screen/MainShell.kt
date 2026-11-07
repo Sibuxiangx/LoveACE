@@ -133,6 +133,7 @@ private fun PortraitShell(
                     themeViewModel = themeViewModel,
                     profileViewModel = profileViewModel,
                     otaViewModel = otaViewModel,
+                    onNavigateToDetail = onNavigateToDetail,
                 )
             }
         }

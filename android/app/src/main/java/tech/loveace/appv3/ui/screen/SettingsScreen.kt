@@ -50,6 +50,7 @@ import tech.loveace.appv3.ui.viewmodel.AuthViewModel
 import tech.loveace.appv3.ui.viewmodel.OtaDialogMode
 import tech.loveace.appv3.ui.viewmodel.OtaViewModel
 import tech.loveace.appv3.ui.viewmodel.ProfileViewModel
+import tech.loveace.appv3.ui.navigation.MailPasswordRoute
 import tech.loveace.appv3.util.AppLogger
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,6 +61,7 @@ fun SettingsScreen(
     onBack: (() -> Unit)? = null,
     profileViewModel: ProfileViewModel = viewModel(),
     otaViewModel: OtaViewModel,
+    onNavigateToDetail: (Any) -> Unit,
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val themeConfig by themeViewModel.themeConfig.collectAsStateWithLifecycle()
@@ -254,6 +256,23 @@ fun SettingsScreen(
                         }
                         Switch(checked = themeConfig.useDynamicColor, onCheckedChange = { themeViewModel.setDynamicColor(it) })
                     }
+                }
+            }
+
+            // 账号
+            SectionTitle("账号")
+            Card(
+                Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onNavigateToDetail(MailPasswordRoute) }.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(12.dp))
+                    Text("企业邮箱初始密码", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 

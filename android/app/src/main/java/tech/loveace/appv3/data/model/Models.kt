@@ -110,28 +110,6 @@ data class CardBalance(
     val balanceText: String = "",
 )
 
-@Serializable
-data class TransactionRecord(
-    val accountingTime: String = "",
-    val transactionTime: String = "",
-    val expense: Double? = null,
-    val income: Double? = null,
-    val operationType: String = "",
-    val balance: Double = 0.0,
-    val area: String = "",
-    val terminalId: String = "",
-) {
-    val isExpense get() = expense != null && expense > 0
-    val isIncome get() = income != null && income > 0
-    val amount get() = if (isIncome) income!! else -(expense ?: 0.0)
-    val amountText: String
-        get() = when {
-            isIncome -> "+${"%.2f".format(income)}元"
-            isExpense -> "-${"%.2f".format(expense)}元"
-            else -> "0.00元"
-        }
-}
-
 // ==================== ISIM Models ====================
 @Serializable
 data class ElectricityBalance(

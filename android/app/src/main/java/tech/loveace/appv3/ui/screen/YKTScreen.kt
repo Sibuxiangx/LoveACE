@@ -1,10 +1,8 @@
 package tech.loveace.appv3.ui.screen
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -15,9 +13,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,8 +36,8 @@ import tech.loveace.appv3.ui.viewmodel.YKTViewModel
 fun YKTScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: YKTViewModel = viewModel()) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(authViewModel.yktService) {
-        authViewModel.yktService?.let { vm.init(it); vm.loadAll() }
+    LaunchedEffect(authViewModel.yktService, authViewModel.portalService) {
+        authViewModel.yktService?.let { vm.init(it, authViewModel.portalService); vm.loadAll() }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -58,31 +59,23 @@ fun YKTScreen(authViewModel: AuthViewModel, onBack: () -> Unit, vm: YKTViewModel
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        when {
-            state.isLoading && state.balance == null -> LoadingScreen()
-            state.error != null && state.balance == null -> ErrorScreen(state.error!!) { vm.loadAll() }
-            else -> LazyColumn(
+        if (state.isLoading && state.balance == null) {
+            LoadingScreen()
+        } else {
+            LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                state.balance?.let { balance -> item { BalanceCard(balance) } }
-                item { PaymentCard(state, vm, authViewModel) }
-                if (state.isTransactionsLoading) {
-                    item { TransactionLoadingIndicator() }
-                } else if (state.transactions.isNotEmpty()) {
-                    item { TransactionHeader(state.transactions) }
-                    items(state.transactions.take(20), key = { "${it.transactionTime}_${it.accountingTime}_${it.balance}" }) { tx -> TransactionItem(tx) }
-                    if (state.transactions.size > 20) {
-                        item {
-                            Text("仅显示最近 20 条记录", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
-                        }
-                    }
-                } else if (state.transactionsError != null) {
-                    item { TransactionErrorHint(state.transactionsError!!) }
+                val balance = state.balance
+                val balanceError = state.error
+                if (balance != null) {
+                    item { BalanceCard(balance) }
+                } else if (balanceError != null) {
+                    item { YKTErrorCard(balanceError) { vm.loadBalance() } }
                 }
+                item { PaymentCard(state, vm, authViewModel) }
+                consumptionSection(state, vm)
             }
         }
     }
@@ -447,11 +440,88 @@ private fun PurchaseHistorySection(history: ElectricPurchaseQueryResult) {
     }
 }
 
-// ── 交易记录加载中 ──
+// ── 本月消费（竖屏与横屏共用同一状态与文案） ──
 
+internal fun LazyListScope.consumptionSection(state: YKTUiState, vm: YKTViewModel) {
+    item(key = "consumption_header") { RibbonSectionTitle(text = "本月消费") }
+    val error = state.consumptionError
+    when {
+        state.consumption.isNotEmpty() -> item(key = "consumption_list") { ConsumptionListCard(state, vm) }
+        state.isConsumptionLoading -> item(key = "consumption_loading") { ConsumptionLoadingCard() }
+        error != null -> item(key = "consumption_error") { YKTErrorCard(error) { vm.reloadConsumption() } }
+        state.consumptionLoaded -> item(key = "consumption_empty") { ConsumptionEmptyCard() }
+    }
+}
 
 @Composable
-private fun TransactionLoadingIndicator() {
+private fun ConsumptionListCard(state: YKTUiState, vm: YKTViewModel) {
+    RibbonListCard {
+        state.consumption.forEachIndexed { index, record ->
+            ConsumptionRow(record)
+            if (index < state.consumption.lastIndex) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                )
+            }
+        }
+        if (state.consumption.size < state.consumptionTotal) {
+            TextButton(
+                onClick = { vm.loadMoreConsumption() },
+                enabled = !state.isConsumptionLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (state.isConsumptionLoading) {
+                    AppCircularProgressIndicator(modifier = Modifier.size(18.dp))
+                } else {
+                    Text("加载更多")
+                }
+            }
+        }
+        Text(
+            "已显示 ${state.consumption.size} 条，共 ${state.consumptionTotal} 条",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        )
+        state.consumptionError?.let { error ->
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.ErrorOutline, null, modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.width(8.dp))
+                Text(error, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                TextButton(onClick = { vm.loadMoreConsumption() }) { Text("重试") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConsumptionRow(record: ConsumptionRecord) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(record.area, style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${record.date} ${record.time}", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Text("¥${record.amount}", style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace, textAlign = TextAlign.End,
+            modifier = Modifier.widthIn(min = 72.dp))
+    }
+}
+
+@Composable
+private fun ConsumptionLoadingCard() {
     RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
         Row(
             Modifier.fillMaxWidth(),
@@ -460,81 +530,33 @@ private fun TransactionLoadingIndicator() {
         ) {
             AppCircularProgressIndicator(modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(12.dp))
-            Text("消费记录加载中，请稍候...", style = MaterialTheme.typography.bodyMedium,
+            Text("加载消费记录...", style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-// ── 交易记录加载失败 ──
-
 @Composable
-private fun TransactionErrorHint(error: String) {
-    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.ERROR_CONTAINER, radius = 28.dp, padding = PaddingValues(16.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+private fun ConsumptionEmptyCard() {
+    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.SURFACE_LOW, radius = 28.dp, padding = PaddingValues(20.dp)) {
+        Text("本月暂无消费记录", style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth())
+    }
+}
+
+/** 错误卡：错误文案 + 重试（余额失败与本月消费首页失败共用） */
+@Composable
+internal fun YKTErrorCard(message: String, onRetry: () -> Unit) {
+    RibbonCard(Modifier.fillMaxWidth(), variant = RibbonCardVariant.ERROR_CONTAINER, radius = 28.dp, padding = PaddingValues(20.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.ErrorOutline, null, modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.error)
+                tint = MaterialTheme.colorScheme.onErrorContainer)
             Spacer(Modifier.width(8.dp))
-            Text("消费记录加载失败: $error", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer)
+            Text(message, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            FilledTonalButton(onClick = onRetry, shape = RoundedCornerShape(50)) { Text("重试") }
         }
     }
-}
-
-// ── 交易记录标题 ──
-
-@Composable
-private fun TransactionHeader(transactions: List<TransactionRecord>) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        ShapeBadge(
-            shape = RibbonShape.COOKIE_8,
-            size = 40.dp,
-            color = MaterialTheme.colorScheme.tertiaryContainer,
-            icon = Icons.Default.Receipt,
-            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-        )
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text("近期交易", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("共 ${transactions.size} 条记录", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-// ── 交易记录项 ──
-
-@Composable
-private fun TransactionItem(tx: TransactionRecord) {
-    ListItem(
-        headlineContent = {
-            Text(tx.area.ifEmpty { tx.operationType }, style = MaterialTheme.typography.bodyMedium)
-        },
-        supportingContent = {
-            Text(tx.transactionTime.ifEmpty { tx.accountingTime },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        },
-        leadingContent = {
-            val extended = LocalExtendedColors.current
-            ShapeBadge(
-                shape = if (tx.isIncome) RibbonShape.COOKIE_6 else RibbonShape.FLOWER_5,
-                size = 36.dp,
-                color = if (tx.isIncome) extended.successContainer
-                else MaterialTheme.colorScheme.surfaceContainerHigh,
-                icon = if (tx.isIncome) Icons.Default.Add else Icons.Default.Remove,
-                iconTint = if (tx.isIncome) extended.onSuccessContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
-        trailingContent = {
-            val extended = LocalExtendedColors.current
-            Text(tx.amountText, style = RibbonNumeric.Medium,
-                color = if (tx.isIncome) extended.success else MaterialTheme.colorScheme.onSurface)
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
 }

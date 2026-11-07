@@ -7,7 +7,7 @@ import tech.loveace.appv3.data.model.*
 import tech.loveace.appv3.data.network.AUFEConnection
 
 /**
- * 一卡通系统服务 - 余额查询、消费记录
+ * 一卡通系统服务 - 余额查询、电费充值
  */
 class YKTService(private val connection: AUFEConnection) {
 
@@ -34,46 +34,6 @@ class YKTService(private val connection: AUFEConnection) {
             Log.e(TAG, "getBalance failed", e)
             UniResponse.failure(e.message ?: "查询余额失败", retryable = true)
         }
-    }
-
-    suspend fun getTransactions(startDate: String, endDate: String): UniResponse<List<TransactionRecord>> =
-        withContext(Dispatchers.IO) {
-            try {
-                Log.d(TAG, "💳 正在查询消费记录: $startDate ~ $endDate")
-                val response = connection.client.post(
-                    "$BASE_URL/queryUserCostList.action",
-                    formData = mapOf("startDate" to startDate, "endDate" to endDate),
-                )
-                val html = response.body?.string() ?: throw Exception("响应为空")
-                val records = parseTransactionHtml(html)
-                Log.d(TAG, "💳 消费记录查询成功: 共${records.size}条")
-                UniResponse.success(records)
-            } catch (e: Exception) {
-                Log.e(TAG, "getTransactions failed", e)
-                UniResponse.failure(e.message ?: "查询消费记录失败", retryable = true)
-            }
-        }
-
-    private fun parseTransactionHtml(html: String): List<TransactionRecord> {
-        val records = mutableListOf<TransactionRecord>()
-        val rowRegex = Regex(
-            "<tr>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*</tr>",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-        )
-        for (match in rowRegex.findAll(html)) {
-            try {
-                val g = match.groupValues.drop(1).map { it.replace(Regex("<[^>]*>"), "").replace("&nbsp;", " ").trim() }
-                records.add(TransactionRecord(
-                    accountingTime = g[0], transactionTime = g[1],
-                    expense = g[2].replace(Regex("[^\\d.\\-]"), "").toDoubleOrNull(),
-                    income = g[3].replace(Regex("[^\\d.\\-]"), "").toDoubleOrNull(),
-                    operationType = g[4],
-                    balance = g[5].replace(Regex("[^\\d.\\-]"), "").toDoubleOrNull() ?: 0.0,
-                    area = g[6], terminalId = g[7],
-                ))
-            } catch (_: Exception) { continue }
-        }
-        return records
     }
 
     companion object {

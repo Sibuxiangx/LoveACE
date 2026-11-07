@@ -105,7 +105,7 @@ fun LandscapeHomeScreen(
         authViewModel.aacService?.let { aacVm.init(it); aacVm.loadAll() }
     }
     LaunchedEffect(authViewModel.yktService) {
-        authViewModel.yktService?.let { yktVm.init(it); yktVm.loadAll() }
+        authViewModel.yktService?.let { yktVm.init(it, authViewModel.portalService); yktVm.loadBalance() }
     }
 
     Column(Modifier.fillMaxSize()) {
