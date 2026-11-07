@@ -17,8 +17,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -261,6 +263,15 @@ private fun ScratchPasswordCard(password: String) {
                 Text("已拷贝", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.weight(1f))
+            FilledTonalButton(onClick = {
+                copyPasswordToClipboard(context, password)
+                copyCount += 1
+            }) {
+                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("拷贝密码")
+            }
+            Spacer(Modifier.width(8.dp))
             TextButton(onClick = { strokes.clear() }, enabled = strokes.isNotEmpty()) {
                 Text("重新遮盖")
             }

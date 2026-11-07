@@ -102,6 +102,12 @@ struct MailInitialPasswordView: View {
                         .foregroundStyle(.green)
                 }
                 Spacer()
+                Button {
+                    copyPassword(info.password)
+                } label: {
+                    Label("拷贝密码", systemImage: "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
                 Button("重新遮盖") { resetCover() }
                     .disabled(strokes.isEmpty)
             }
