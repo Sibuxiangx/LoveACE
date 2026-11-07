@@ -9,6 +9,8 @@ final class YKTViewModel {
     private(set) var consumptionPage = 0
     var isConsumptionLoading = false
     var consumptionError: String?
+    /// 本月消费第一页已成功加载（区分"尚未加载"与"本月确实没有记录"）
+    private(set) var consumptionLoaded = false
     var error: String?
     var isPaymentUnlocked = false
     var studentInfo: StudentInfo?
@@ -57,6 +59,7 @@ final class YKTViewModel {
         consumptionTotal = 0
         consumptionPage = 0
         consumptionError = nil
+        consumptionLoaded = false
         Task {
             isConsumptionLoading = true
             defer { if current == consumptionGeneration { isConsumptionLoading = false } }
@@ -66,6 +69,7 @@ final class YKTViewModel {
                 consumption = page.records
                 consumptionTotal = page.total
                 consumptionPage = 1
+                consumptionLoaded = true
             } catch {
                 guard current == consumptionGeneration, !Task.isCancelled else { return }
                 consumptionError = PortalErrorMessage.text(for: error)

@@ -21,7 +21,19 @@ struct YKTView: View {
                             .frame(maxWidth: .infinity)
                             .glassCard(cornerRadius: 16)
                     } else if let error = vm.consumptionError {
-                        Text(error)
+                        VStack(spacing: 10) {
+                            Label(error, systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            Button("重试") { vm.reloadConsumption() }
+                                .buttonStyle(.bordered)
+                        }
+                        .padding(20)
+                        .frame(maxWidth: .infinity)
+                        .glassCard(cornerRadius: 16)
+                    } else if vm.consumptionLoaded {
+                        Text("本月暂无消费记录")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .padding(20)
@@ -76,6 +88,14 @@ struct YKTView: View {
                     .foregroundStyle(.white)
             } else if vm.isLoading {
                 ProgressView().tint(.white).scaleEffect(1.2)
+            } else if let error = vm.error {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .multilineTextAlignment(.center)
+                Button("重试") { vm.loadBalance() }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
             }
         }
         .frame(maxWidth: .infinity)
@@ -155,5 +175,12 @@ struct YKTView: View {
         Text("已显示 \(vm.consumption.count) 条，共 \(vm.consumptionTotal) 条")
             .font(.caption2)
             .foregroundStyle(.secondary)
+        if let error = vm.consumptionError {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button("重试") { vm.loadMoreConsumption() }
+                .buttonStyle(.bordered)
+        }
     }
 }

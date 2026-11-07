@@ -7,6 +7,16 @@ struct BorrowingView: View {
     var body: some View {
         List {
             if vm.loaded {
+                if let error = vm.error {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button("重试") {
+                            Task { await vm.load(service: authVM.portalService) }
+                        }
+                    }
+                }
                 loadedSections
             } else {
                 Section {
