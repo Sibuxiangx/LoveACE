@@ -39,6 +39,7 @@ struct MoreView: View {
                         }
                     }
                 }
+                .readableWidth(680)
                 .padding()
             }
             .searchable(text: $query, prompt: "搜索功能")

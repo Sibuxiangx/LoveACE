@@ -3,6 +3,7 @@ import UIKit
 
 struct LoginView: View {
     @Environment(AuthViewModel.self) private var authVM
+    @Environment(\.wideLayout) private var wideLayout
     @State private var userId = ""
     @State private var password = ""
     @State private var showPassword = false
@@ -13,94 +14,18 @@ struct LoginView: View {
     @State private var showWeakPasswordAlert = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                Spacer(minLength: 80)
-
-                VStack(spacing: 14) {
-                    Image("LoginAppIcon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 88, height: 88)
-                        .clipShape(.rect(cornerRadius: 20))
-
-                    Text("彩带小工具")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-
-                    Text("智能学业分析 · 安财专属")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 24)
-
-                if let notice = preloginNotice {
-                    preloginBanner(notice)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 20)
-                }
-
-                VStack(spacing: 16) {
-                    inputField(icon: "person.fill", placeholder: "学号", text: $userId, isSecure: false, warning: fullWidthWarning(userId))
-                        .keyboardType(.numberPad)
-
-                    passwordField(placeholder: "教务系统密码", text: $password, warning: fullWidthWarning(password))
-                    if let captchaImage = authVM.captchaImage {
-                        captchaField(image: captchaImage)
-                    }
-                }
-                .padding(.horizontal, 32)
-
-                Text("登录即表示同意上传匿名使用统计（本地随机 ID、学号前四位与加盐哈希、版本和基础设备信息），不会上传密码、完整学号或业务内容。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .padding(.top, 18)
-
-                Text("彩带小工具由开源工作者维护，可能与学校系统存在不同步风险，重要信息可能无法及时更新展示，请以学校官方信息为准。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .padding(.top, 8)
-
-                if let error = authVM.errorMessage {
-                    HStack(spacing: 6) {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                        Text(error).foregroundStyle(.red)
-                    }
-                    .font(.subheadline)
-                    .padding(.top, 12)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    loginButton(cooldownRemaining: cooldownRemaining(at: context.date))
-                }
-                .padding(.horizontal, 32)
-                .padding(.top, 28)
-                if let qqGroupManifest {
-                    QqGroupEntryCard(manifest: qqGroupManifest)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 14)
-                }
-
-                Button {
-                    showPasswordHelp = true
-                } label: {
-                    Label("不知道密码是什么？", systemImage: "questionmark.circle")
-                        .font(.subheadline)
-                }
-                .padding(.top, 16)
-
-                Spacer(minLength: 40)
+        Group {
+            if wideLayout {
+                wideBody
+            } else {
+                compactBody
             }
-            .alert("教务密码可能需要修改", isPresented: $showWeakPasswordAlert) {
-                Button("取消", role: .cancel) {}
-                Button("继续登录") { submitLogin() }
-            } message: {
-                Text("你的教务密码是 6 位数字，或 5 位数字加 1 个字母，这类密码较弱，学校系统可能会要求修改。\n\n请先登录学校教务处（智慧校园/教务处），按页面指引修改密码，再用新密码登录本 App。\n\n注意：这里指的是智慧校园/教务处的密码，不是校园网（网关）密码。")
-            }
+        }
+        .alert("教务密码可能需要修改", isPresented: $showWeakPasswordAlert) {
+            Button("取消", role: .cancel) {}
+            Button("继续登录") { submitLogin() }
+        } message: {
+            Text("你的教务密码是 6 位数字，或 5 位数字加 1 个字母，这类密码较弱，学校系统可能会要求修改。\n\n请先登录学校教务处（智慧校园/教务处），按页面指引修改密码，再用新密码登录本 App。\n\n注意：这里指的是智慧校园/教务处的密码，不是校园网（网关）密码。")
         }
         .sheet(isPresented: $showPasswordHelp) {
             PasswordHelpView()
@@ -138,6 +63,147 @@ struct LoginView: View {
         .onChange(of: authVM.captchaImage) { _, _ in
             captchaInput = ""
         }
+    }
+
+    // MARK: - Layout
+
+    /// iPhone 与 iPad 竖屏：单列，表单容器限制为 520 宽
+    private var compactBody: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Spacer(minLength: 80)
+                appBrand
+                preloginSection
+                inputSection
+                disclaimerNotice
+                maintenanceNotice
+                errorSection
+                loginSection
+                Spacer(minLength: 40)
+            }
+            .readableWidth(520)
+        }
+    }
+
+    /// iPad 横屏：左侧品牌区，右侧表单区（同一组视图，仅调整位置）
+    private var wideBody: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                appBrand
+                maintenanceNotice
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        preloginSection
+                        inputSection
+                        disclaimerNotice
+                        errorSection
+                        loginSection
+                        Spacer(minLength: 0)
+                    }
+                    .readableWidth(440)
+                    .frame(minHeight: geometry.size.height)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var appBrand: some View {
+        VStack(spacing: 14) {
+            Image("LoginAppIcon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 88, height: 88)
+                .clipShape(.rect(cornerRadius: 20))
+
+            Text("彩带小工具")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+
+            Text("智能学业分析 · 安财专属")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.bottom, 24)
+    }
+
+    @ViewBuilder
+    private var preloginSection: some View {
+        if let notice = preloginNotice {
+            preloginBanner(notice)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 20)
+        }
+    }
+
+    private var inputSection: some View {
+        VStack(spacing: 16) {
+            inputField(icon: "person.fill", placeholder: "学号", text: $userId, isSecure: false, warning: fullWidthWarning(userId))
+                .keyboardType(.numberPad)
+
+            passwordField(placeholder: "教务系统密码", text: $password, warning: fullWidthWarning(password))
+            if let captchaImage = authVM.captchaImage {
+                captchaField(image: captchaImage)
+            }
+        }
+        .padding(.horizontal, 32)
+    }
+
+    private var disclaimerNotice: some View {
+        Text("登录即表示同意上传匿名使用统计（本地随机 ID、学号前四位与加盐哈希、版本和基础设备信息），不会上传密码、完整学号或业务内容。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+            .padding(.top, 18)
+    }
+
+    private var maintenanceNotice: some View {
+        Text("彩带小工具由开源工作者维护，可能与学校系统存在不同步风险，重要信息可能无法及时更新展示，请以学校官方信息为准。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+            .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private var errorSection: some View {
+        if let error = authVM.errorMessage {
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                Text(error).foregroundStyle(.red)
+            }
+            .font(.subheadline)
+            .padding(.top, 12)
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    @ViewBuilder
+    private var loginSection: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            loginButton(cooldownRemaining: cooldownRemaining(at: context.date))
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 28)
+        if let qqGroupManifest {
+            QqGroupEntryCard(manifest: qqGroupManifest)
+                .padding(.horizontal, 32)
+                .padding(.top, 14)
+        }
+
+        Button {
+            showPasswordHelp = true
+        } label: {
+            Label("不知道密码是什么？", systemImage: "questionmark.circle")
+                .font(.subheadline)
+        }
+        .padding(.top, 16)
     }
 
     private var canLogin: Bool {

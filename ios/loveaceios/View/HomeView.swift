@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AuthViewModel.self) private var authVM
+    @Environment(\.wideLayout) private var wideLayout
     @State private var academicVM = AcademicViewModel()
     @State private var yktVM = YKTViewModel()
     @State private var semesterVM = SemesterViewModel()
@@ -10,11 +11,28 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    semesterHero
-                    academicGrid
-                    balanceSection
+                Group {
+                    if wideLayout {
+                        HStack(alignment: .top, spacing: 20) {
+                            VStack(spacing: 20) {
+                                semesterHero
+                                balanceSection
+                            }
+                            .frame(maxWidth: .infinity)
+                            VStack(spacing: 20) {
+                                academicGrid
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    } else {
+                        VStack(spacing: 20) {
+                            semesterHero
+                            academicGrid
+                            balanceSection
+                        }
+                    }
                 }
+                .readableWidth(wideLayout ? 1000 : 680)
                 .padding(.horizontal)
                 .padding(.bottom, 20)
             }

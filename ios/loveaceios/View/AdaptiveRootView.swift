@@ -17,6 +17,7 @@ struct AdaptiveRootView: View {
         GeometryReader { geo in
             if geo.size.width > geo.size.height {
                 sidebarLayout
+                    .environment(\.wideLayout, true)
             } else {
                 tabLayout
             }

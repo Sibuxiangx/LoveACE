@@ -160,6 +160,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            .readableWidth(680)
             .navigationTitle("我的")
             .alert("确认退出", isPresented: $showLogoutAlert) {
                 Button("取消", role: .cancel) {}

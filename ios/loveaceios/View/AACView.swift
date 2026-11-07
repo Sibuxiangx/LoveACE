@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AACView: View {
     @Environment(AuthViewModel.self) private var authVM
+    @Environment(\.wideLayout) private var wideLayout
     @State private var vm = AACViewModel()
     @State private var expandedCategoryId: String?
 
@@ -20,6 +21,7 @@ struct AACView: View {
                             if let info = vm.creditInfo { creditHeader(info) }
                             categoryGrid
                         }
+                        .readableWidth(wideLayout ? 1000 : 680)
                         .padding()
                     }
                 }
@@ -82,7 +84,7 @@ struct AACView: View {
     @ViewBuilder
     private var categoryGrid: some View {
         CompatGlassContainer {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            LazyVGrid(columns: wideLayout ? [GridItem(.adaptive(minimum: 260), spacing: 12)] : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(vm.categories) { category in
                     let color = colorFor(category)
                     Button { expandedCategoryId = category.id } label: {
