@@ -29,7 +29,7 @@ struct AACView: View {
             .navigationTitle("爱安财")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { vm.loadAll() }
-            .sheet(item: Binding(
+            .detailPanel(item: Binding(
                 get: { expandedCategoryId.flatMap { id in vm.categories.first { $0.id == id } } },
                 set: { _ in expandedCategoryId = nil }
             )) { category in
@@ -146,7 +146,7 @@ struct AACView: View {
 struct CategoryDetailSheet: View {
     let category: AACCreditCategory
     let color: Color
-    @Environment(\.dismiss) private var dismiss
+    @DetailDismiss private var dismiss
 
     var body: some View {
         NavigationStack {

@@ -40,7 +40,7 @@ struct ScoresView: View {
             }
             .navigationTitle("成绩查询")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(item: $selectedScore, onDismiss: vm.dismissScoreDetail) { record in
+            .detailPanel(item: $selectedScore, onDismiss: vm.dismissScoreDetail) { record in
                 ScoreDetailSheet(
                     record: record,
                     detail: vm.scoreDetail,
@@ -180,6 +180,7 @@ private struct ScoreDetailSheet: View {
     let detail: ScoreDetail?
     let isLoading: Bool
     let error: String?
+    @DetailDismiss private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -208,6 +209,9 @@ private struct ScoreDetailSheet: View {
             }
             .navigationTitle(record.courseNameCn)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+            }
         }
         .presentationDetents([.medium, .large])
     }

@@ -59,29 +59,51 @@ struct AdaptiveRootView: View {
     // MARK: - 横屏：侧栏
 
     private var sidebarLayout: some View {
-        NavigationSplitView {
-            List(selection: sidebarSelection) {
-                Section {
-                    Label("首页", systemImage: "house.fill").tag(AppDestination.home)
-                    Label("爱安财", systemImage: "star.fill").tag(AppDestination.aac)
-                }
-                ForEach(AppCatalog.sections) { section in
-                    Section(section.title) {
-                        ForEach(section.items) { item in
-                            Label(item.title, systemImage: item.icon)
-                                .tag(AppDestination.feature(item.tag))
+        HStack(spacing: 0) {
+            NavigationStack {
+                List(selection: sidebarSelection) {
+                    Section {
+                        sidebarRow("首页", systemImage: "house.fill", destination: .home)
+                        sidebarRow("爱安财", systemImage: "star.fill", destination: .aac)
+                    }
+                    ForEach(AppCatalog.sections) { section in
+                        Section(section.title) {
+                            ForEach(section.items) { item in
+                                sidebarRow(item.title, systemImage: item.icon, destination: .feature(item.tag))
+                            }
                         }
                     }
+                    Section {
+                        sidebarRow("我的", systemImage: "person.fill", destination: .settings)
+                    }
                 }
-                Section {
-                    Label("我的", systemImage: "person.fill").tag(AppDestination.settings)
-                }
+                .listStyle(.sidebar)
+                .navigationTitle("彩带小工具")
+                .navigationBarTitleDisplayMode(.inline)
             }
-            .navigationTitle("彩带小工具")
-        } detail: {
+            .frame(width: 180)
+            Divider()
             detail(for: selection)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationSplitViewStyle(.balanced)
+    }
+
+    /// 侧栏行。选中底色固定为青色，不依赖系统焦点状态（失焦时系统会变灰）。
+    private func sidebarRow(_ title: String, systemImage: String, destination: AppDestination) -> some View {
+        Label(title, systemImage: systemImage)
+            .tag(destination)
+            .listRowBackground(sidebarRowBackground(destination))
+    }
+
+    @ViewBuilder
+    private func sidebarRowBackground(_ destination: AppDestination) -> some View {
+        if selection == destination {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.teal.opacity(0.3))
+                .padding(.horizontal, 8)
+        } else {
+            Color.clear
+        }
     }
 
     private var sidebarSelection: Binding<AppDestination?> {

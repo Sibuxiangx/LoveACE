@@ -42,7 +42,7 @@ struct CompetitionView: View {
             .navigationTitle("竞赛信息")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { vm.loadCompetitionInfo() }
-            .sheet(item: $selectedAward) { award in
+            .detailPanel(item: $selectedAward) { award in
                 AwardDetailSheet(award: award)
             }
             .onAppear {
@@ -120,7 +120,7 @@ struct CompetitionView: View {
 
 struct AwardDetailSheet: View {
     let award: AwardProject
-    @Environment(\.dismiss) private var dismiss
+    @DetailDismiss private var dismiss
 
     var body: some View {
         NavigationStack {

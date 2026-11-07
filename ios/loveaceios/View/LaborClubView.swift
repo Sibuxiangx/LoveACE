@@ -32,7 +32,7 @@ struct LaborClubView: View {
                 }
             }
             .refreshable { vm.loadAll() }
-            .sheet(item: $selectedActivity) { activity in
+            .detailPanel(item: $selectedActivity) { activity in
                 LaborActivityDetailSheet(activity: activity, vm: vm)
             }
             .sheet(isPresented: $showScanner) {
@@ -230,7 +230,7 @@ struct LaborClubView: View {
 struct LaborActivityDetailSheet: View {
     let activity: LaborClubActivity
     @Bindable var vm: LaborClubViewModel
-    @Environment(\.dismiss) private var dismiss
+    @DetailDismiss private var dismiss
     @State private var detail: ActivityDetail?
     @State private var isLoadingDetail = false
 

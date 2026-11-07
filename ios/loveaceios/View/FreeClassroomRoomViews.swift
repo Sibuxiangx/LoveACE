@@ -56,6 +56,7 @@ struct FreeClassroomRoomRow: View {
 struct FreeClassroomRoomSheet: View {
     let room: FcRoom
     let vm: FreeClassroomViewModel
+    @DetailDismiss private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -76,6 +77,9 @@ struct FreeClassroomRoomSheet: View {
             }
             .navigationTitle(room.title)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+            }
             .task { await vm.loadOccupancy(for: room) }
         }
         .presentationDetents([.medium, .large])

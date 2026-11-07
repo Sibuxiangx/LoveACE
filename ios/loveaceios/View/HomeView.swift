@@ -13,17 +13,7 @@ struct HomeView: View {
             ScrollView {
                 Group {
                     if wideLayout {
-                        HStack(alignment: .top, spacing: 20) {
-                            VStack(spacing: 20) {
-                                semesterHero
-                                balanceSection
-                            }
-                            .frame(maxWidth: .infinity)
-                            VStack(spacing: 20) {
-                                academicGrid
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
+                        wideDashboard
                     } else {
                         VStack(spacing: 20) {
                             semesterHero
@@ -32,7 +22,7 @@ struct HomeView: View {
                         }
                     }
                 }
-                .readableWidth(wideLayout ? 1000 : 680)
+                .readableWidth(wideLayout ? 1200 : 680)
                 .padding(.horizontal)
                 .padding(.bottom, 20)
             }
@@ -108,37 +98,76 @@ struct HomeView: View {
             GlassSectionHeader(title: "学业概况", icon: "chart.bar.fill")
             VStack(spacing: 12) {
                 gpaRankingCard(info)
-                HStack(spacing: 10) {
-                    compactAcademicStat("已修", value: "\(info.completedCourses)", icon: "checkmark.circle.fill", tint: .blue)
-                    compactAcademicStat("不及格", value: "\(info.failedCourses)", icon: "xmark.circle.fill", tint: .red)
-                    compactAcademicStat("待修", value: "\(info.pendingCourses)", icon: "clock.fill", tint: .orange)
-                }
+                academicStatRow(info)
             }
-
-            NavigationLink { InsightsView() } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.title3)
-                        .foregroundStyle(.blue.gradient)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("学业分析")
-                            .font(.subheadline).fontWeight(.semibold)
-                        Text("查看绩点趋势、成绩分布与学业洞察")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption).foregroundStyle(.tertiary)
-                }
-                .padding(14)
-                .glassInteractiveCard(cornerRadius: 14)
-            }
-            .buttonStyle(.plain)
+            insightsLink
         } else if academicVM.isLoading {
-            HStack { Spacer(); ProgressView("加载学业信息..."); Spacer() }
-                .padding(.vertical, 30)
-                .glassCard(cornerRadius: 16)
+            loadingCard
         }
+    }
+
+    /// 宽屏：学期横幅通栏；下面左边是绩点卡（撑满剩余高度），右边是校园卡、三项状态和学业分析入口
+    private var wideDashboard: some View {
+        VStack(spacing: 20) {
+            semesterHero
+            HStack(alignment: .top, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let info = academicVM.academicInfo {
+                        GlassSectionHeader(title: "学业概况", icon: "chart.bar.fill")
+                        gpaRankingCard(info)
+                            .frame(maxHeight: .infinity, alignment: .top)
+                    } else if academicVM.isLoading {
+                        loadingCard
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                VStack(spacing: 20) {
+                    balanceSection
+                    if let info = academicVM.academicInfo {
+                        academicStatRow(info)
+                        insightsLink
+                    }
+                }
+                .frame(width: 340)
+            }
+        }
+    }
+
+    private func academicStatRow(_ info: AcademicInfo) -> some View {
+        HStack(spacing: 10) {
+            compactAcademicStat("已修", value: "\(info.completedCourses)", icon: "checkmark.circle.fill", tint: .blue)
+            compactAcademicStat("不及格", value: "\(info.failedCourses)", icon: "xmark.circle.fill", tint: .red)
+            compactAcademicStat("待修", value: "\(info.pendingCourses)", icon: "clock.fill", tint: .orange)
+        }
+    }
+
+    private var insightsLink: some View {
+        NavigationLink { InsightsView() } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.title3)
+                    .foregroundStyle(.blue.gradient)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("学业分析")
+                        .font(.subheadline).fontWeight(.semibold)
+                    Text("查看绩点趋势、成绩分布与学业洞察")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption).foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .glassInteractiveCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var loadingCard: some View {
+        HStack { Spacer(); ProgressView("加载学业信息..."); Spacer() }
+            .padding(.vertical, 30)
+            .glassCard(cornerRadius: 16)
     }
 
     private func gpaRankingCard(_ info: AcademicInfo) -> some View {
@@ -166,6 +195,7 @@ struct HomeView: View {
                 Spacer()
             }
 
+            Spacer(minLength: 0)
             HStack(spacing: 10) {
                 academicMetric("均分", value: averageScoreText(info), icon: "chart.bar.fill", tint: .blue)
                 academicMetric("排名", value: rankText(info), icon: "medal.fill", tint: .purple)

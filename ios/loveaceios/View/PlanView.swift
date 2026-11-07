@@ -3,6 +3,8 @@ import SwiftUI
 struct PlanView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var vm = PlanViewModel()
+    @Environment(\.wideLayout) private var wideLayout
+    @State private var selectedCategory: PlanCategory?
 
     var body: some View {
         NavigationStack {
@@ -14,13 +16,14 @@ struct PlanView: View {
                         summarySection(plan)
                         Section("分类") {
                             ForEach(plan.categories) { cat in
-                                NavigationLink { PlanCategoryDetailView(category: cat) } label: {
-                                    categoryRow(cat)
-                                }
+                                categoryLink(cat)
                             }
                         }
                     }
                     .listStyle(.insetGrouped)
+                    .detailPanel(item: $selectedCategory) { category in
+                        PlanCategoryPanel(category: category)
+                    }
                 }
             }
             .navigationTitle("培养方案")
@@ -91,6 +94,26 @@ struct PlanView: View {
         .padding(.vertical, 2)
     }
 
+    /// 分类行：竖屏推入详情；横屏改为选中后由 inspector 显示（推入会挤掉列表）
+    @ViewBuilder
+    private func categoryLink(_ cat: PlanCategory) -> some View {
+        if wideLayout {
+            Button { selectedCategory = cat } label: {
+                HStack {
+                    categoryRow(cat).frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+        } else {
+            NavigationLink { PlanCategoryDetailView(category: cat) } label: {
+                categoryRow(cat)
+            }
+        }
+    }
+
     private func infoPill(_ label: String, _ value: String) -> some View {
         HStack(spacing: 4) {
             Text("\(label):").font(.caption).foregroundStyle(.secondary)
@@ -104,6 +127,21 @@ struct PlanView: View {
         Text(text).font(.caption).foregroundStyle(color)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(color.opacity(0.1), in: .capsule)
+    }
+}
+
+/// 横屏 inspector 里的分类详情：自带导航栏和"关闭"按钮（推入模式下由导航栏提供返回）
+private struct PlanCategoryPanel: View {
+    let category: PlanCategory
+    @DetailDismiss private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            PlanCategoryDetailView(category: category)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+                }
+        }
     }
 }
 

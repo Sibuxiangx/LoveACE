@@ -33,7 +33,7 @@ struct FreeClassroomView: View {
         .sheet(isPresented: $showSettings) {
             FreeClassroomSettingsSheet(vm: vm)
         }
-        .sheet(item: $selectedRoom) { room in
+        .detailPanel(item: $selectedRoom) { room in
             FreeClassroomRoomSheet(room: room, vm: vm)
         }
         .task {

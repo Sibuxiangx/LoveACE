@@ -50,7 +50,7 @@ struct RepairView: View {
             .sheet(isPresented: $showSubmitSheet) {
                 RepairSubmitSheet(vm: vm, isPresented: $showSubmitSheet)
             }
-            .sheet(item: Binding(get: { vm.detail.map { IdentifiableWrapper(value: $0) } }, set: { _ in vm.clearDetail() })) { wrapper in
+            .detailPanel(item: Binding(get: { vm.detail.map { IdentifiableWrapper(value: $0) } }, set: { _ in vm.clearDetail() })) { wrapper in
                 RepairDetailSheet(detail: wrapper.value)
             }
             .refreshable { vm.loadOrders() }
@@ -101,6 +101,7 @@ struct RepairOrderCard: View {
 
 struct RepairDetailSheet: View {
     let detail: RepairOrderDetail
+    @DetailDismiss private var dismiss
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -127,6 +128,9 @@ struct RepairDetailSheet: View {
             }
             .navigationTitle("工单详情")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+            }
         }
     }
 

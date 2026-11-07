@@ -21,7 +21,7 @@ struct CourseScheduleQueryView: View {
             .sheet(isPresented: $showFilters) {
                 CourseScheduleFilterSheet(vm: vm)
             }
-            .sheet(item: $selected) { record in
+            .detailPanel(item: $selected) { record in
                 CourseScheduleDetailSheet(record: record)
             }
             .task {
@@ -164,6 +164,7 @@ extension CourseScheduleRecord {
 /// 开课记录详情：课程信息与时间地点。
 struct CourseScheduleDetailSheet: View {
     let record: CourseScheduleRecord
+    @DetailDismiss private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -188,6 +189,9 @@ struct CourseScheduleDetailSheet: View {
             }
             .navigationTitle(record.kcm ?? "课程详情")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+            }
         }
         .presentationDetents([.medium, .large])
     }
