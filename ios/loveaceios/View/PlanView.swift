@@ -4,7 +4,9 @@ struct PlanView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var vm = PlanViewModel()
     @Environment(\.wideLayout) private var wideLayout
-    @State private var selectedCategory: PlanCategory?
+    @State private var selectedCategoryId: String?
+    /// 宽屏右栏内点击子分类后的显示对象；与分类选择分开，切换分类时清除
+    @State private var wideSubCategory: PlanCategory?
 
     var body: some View {
         NavigationStack {
@@ -12,25 +14,87 @@ struct PlanView: View {
                 if vm.isLoading { LoadingView(message: "加载培养方案...") }
                 else if let error = vm.error { ErrorView(message: error) { vm.loadPlan() } }
                 else if let plan = vm.planInfo {
-                    List {
-                        summarySection(plan)
-                        Section("分类") {
-                            ForEach(plan.categories) { cat in
-                                categoryLink(cat)
+                    if wideLayout {
+                        wideContent(plan)
+                    } else {
+                        List {
+                            summarySection(plan)
+                            Section("分类") {
+                                ForEach(plan.categories) { cat in
+                                    NavigationLink { PlanCategoryDetailView(category: cat) } label: {
+                                        categoryRow(cat)
+                                    }
+                                }
                             }
                         }
-                    }
-                    .listStyle(.insetGrouped)
-                    .detailPanel(item: $selectedCategory) { category in
-                        PlanCategoryPanel(category: category)
+                        .listStyle(.insetGrouped)
                     }
                 }
+                else { LoadingView(message: "加载培养方案...") }
+            }
+            .onChange(of: vm.planInfo?.categories.first?.id) { _, newValue in
+                selectedCategoryId = newValue
             }
             .navigationTitle("培养方案")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if let svc = authVM.planService { vm.initialize(service: svc); vm.loadPlan() }
             }
+        }
+    }
+
+    /// 宽屏两栏：摘要与分类列表 | 所选分类详情
+    private func wideContent(_ plan: PlanCompletionInfo) -> some View {
+        HStack(spacing: 0) {
+            List {
+                summarySection(plan)
+                Section("分类") {
+                    ForEach(plan.categories) { cat in
+                        Button { selectedCategoryId = cat.id } label: {
+                            categoryRow(cat).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .wideRowSelection(selectedCategoryId == cat.id)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .frame(width: 340)
+            .onChange(of: selectedCategoryId) { _, _ in
+                wideSubCategory = nil
+            }
+
+            Divider()
+
+            wideDetail(plan)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// 宽屏右栏：所选分类（或其子分类）的详情；无选择时显示占位
+    @ViewBuilder
+    private func wideDetail(_ plan: PlanCompletionInfo) -> some View {
+        if let top = plan.categories.first(where: { $0.id == selectedCategoryId }) {
+            if let sub = wideSubCategory {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button { wideSubCategory = nil } label: {
+                            Label(top.categoryName, systemImage: "chevron.left")
+                                .font(.subheadline)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    Divider()
+                    PlanCategoryDetailView(category: sub, onSelectSub: { wideSubCategory = $0 }, showsTitle: false)
+                        .id(sub.id)
+                }
+            } else {
+                PlanCategoryDetailView(category: top, onSelectSub: { wideSubCategory = $0 }, showsTitle: false)
+                    .id(top.id)
+            }
+        } else {
+            EmptyStateView(title: "选择一个分类查看课程", systemImage: "square.grid.2x2")
         }
     }
 
@@ -94,26 +158,6 @@ struct PlanView: View {
         .padding(.vertical, 2)
     }
 
-    /// 分类行：竖屏推入详情；横屏改为选中后由 inspector 显示（推入会挤掉列表）
-    @ViewBuilder
-    private func categoryLink(_ cat: PlanCategory) -> some View {
-        if wideLayout {
-            Button { selectedCategory = cat } label: {
-                HStack {
-                    categoryRow(cat).frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .buttonStyle(.plain)
-        } else {
-            NavigationLink { PlanCategoryDetailView(category: cat) } label: {
-                categoryRow(cat)
-            }
-        }
-    }
-
     private func infoPill(_ label: String, _ value: String) -> some View {
         HStack(spacing: 4) {
             Text("\(label):").font(.caption).foregroundStyle(.secondary)
@@ -130,28 +174,18 @@ struct PlanView: View {
     }
 }
 
-/// 横屏 inspector 里的分类详情：自带导航栏和"关闭"按钮（推入模式下由导航栏提供返回）
-private struct PlanCategoryPanel: View {
-    let category: PlanCategory
-    @DetailDismiss private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            PlanCategoryDetailView(category: category)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
-                }
-        }
-    }
-}
 
 // MARK: - Category Detail (push destination)
 
 struct PlanCategoryDetailView: View {
     let category: PlanCategory
+    /// 宽屏右栏传入：点击子分类时回调（替代推入）；nil 时子分类用 NavigationLink 推入
+    var onSelectSub: ((PlanCategory) -> Void)? = nil
+    /// 推入时以分类名作标题；宽屏右栏传 false，保留页面标题"培养方案"
+    var showsTitle: Bool = true
 
     var body: some View {
-        List {
+        let list = List {
             if category.minCredits > 0 {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -182,9 +216,7 @@ struct PlanCategoryDetailView: View {
             if !category.subcategories.isEmpty {
                 Section("子分类") {
                     ForEach(category.subcategories) { sub in
-                        NavigationLink { PlanCategoryDetailView(category: sub) } label: {
-                            subcategoryRow(sub)
-                        }
+                        subcategoryLink(sub)
                     }
                 }
             }
@@ -198,8 +230,34 @@ struct PlanCategoryDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(category.categoryName)
-        .navigationBarTitleDisplayMode(.inline)
+
+        if showsTitle {
+            list
+                .navigationTitle(category.categoryName)
+                .navigationBarTitleDisplayMode(.inline)
+        } else {
+            list
+        }
+    }
+
+    @ViewBuilder
+    private func subcategoryLink(_ sub: PlanCategory) -> some View {
+        if let onSelectSub {
+            Button { onSelectSub(sub) } label: {
+                HStack {
+                    subcategoryRow(sub).frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            NavigationLink { PlanCategoryDetailView(category: sub) } label: {
+                subcategoryRow(sub)
+            }
+        }
     }
 
     private func subcategoryRow(_ sub: PlanCategory) -> some View {

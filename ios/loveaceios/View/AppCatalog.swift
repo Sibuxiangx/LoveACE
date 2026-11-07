@@ -40,7 +40,7 @@ enum AppCatalog {
         ]),
         FeatureSection(title: "素质拓展", systemImage: "star.circle.fill", items: [
             FeatureItem(title: "竞赛信息", icon: "trophy.fill", tint: .orange, tag: "competition"),
-            FeatureItem(title: "劳动俱乐部", icon: "figure.walk", tint: .pink, tag: "labor"),
+            FeatureItem(title: "劳动课", icon: "figure.walk", tint: .pink, tag: "labor"),
         ]),
     ]
 

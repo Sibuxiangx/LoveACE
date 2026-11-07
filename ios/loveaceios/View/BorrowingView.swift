@@ -3,40 +3,45 @@ import SwiftUI
 struct BorrowingView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var vm = BorrowingViewModel()
+    @Environment(\.wideLayout) private var wideLayout
 
     var body: some View {
-        List {
-            if vm.loaded {
-                if let error = vm.error {
-                    Section {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Button("重试") {
-                            Task { await vm.load(service: authVM.portalService) }
+        NavigationStack { page }
+    }
+
+    private var page: some View {
+        Group {
+            if wideLayout {
+                HStack(spacing: 0) {
+                    List {
+                        if vm.loaded {
+                            if let error = vm.error {
+                                errorSection(error)
+                            }
+                            currentSection
+                        } else {
+                            pendingSection
                         }
                     }
+                    .frame(width: 340)
+                    Divider()
+                    List {
+                        if vm.loaded {
+                            historySection
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                loadedSections
             } else {
-                Section {
-                    if let error = vm.error {
-                        ContentUnavailableView {
-                            Label("无法加载借阅记录", systemImage: "exclamationmark.triangle")
-                        } description: {
-                            Text(error)
-                        } actions: {
-                            Button("重试") {
-                                Task { await vm.load(service: authVM.portalService) }
-                            }
+                List {
+                    if vm.loaded {
+                        if let error = vm.error {
+                            errorSection(error)
                         }
+                        currentSection
+                        historySection
                     } else {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        }
-                        .padding(.vertical, 16)
+                        pendingSection
                     }
                 }
             }
@@ -50,8 +55,42 @@ struct BorrowingView: View {
         }
     }
 
+    private func errorSection(_ error: String) -> some View {
+        Section {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button("重试") {
+                Task { await vm.load(service: authVM.portalService) }
+            }
+        }
+    }
+
     @ViewBuilder
-    private var loadedSections: some View {
+    private var pendingSection: some View {
+        Section {
+            if let error = vm.error {
+                ContentUnavailableView {
+                    Label("无法加载借阅记录", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("重试") {
+                        Task { await vm.load(service: authVM.portalService) }
+                    }
+                }
+            } else {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(.vertical, 16)
+            }
+        }
+    }
+
+    private var currentSection: some View {
         Section {
             if vm.current.isEmpty {
                 Text("暂无在借图书")
@@ -68,7 +107,9 @@ struct BorrowingView: View {
                 Text("共 \(vm.current.count) 本")
             }
         }
+    }
 
+    private var historySection: some View {
         Section {
             if vm.history.isEmpty {
                 Text("暂无借阅历史")

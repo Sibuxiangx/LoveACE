@@ -3,48 +3,39 @@ import SwiftUI
 struct AccessRecordsView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var vm = AccessRecordsViewModel()
+    @Environment(\.wideLayout) private var wideLayout
 
     var body: some View {
-        List {
-            Section {
-                Picker("门禁", selection: Binding(get: { vm.kind }, set: { vm.select(kind: $0) })) {
-                    ForEach(AccessKind.allCases) { kind in
-                        Text(kind.title).tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
+        NavigationStack { page }
+    }
 
-                Picker("查询时间", selection: Binding(get: { vm.range }, set: { vm.select(range: $0) })) {
-                    ForEach(AccessRange.allCases) { range in
-                        Text(range.title).tag(range)
+    private var page: some View {
+        Group {
+            if wideLayout {
+                HStack(spacing: 0) {
+                    List {
+                        querySection
+                        if vm.kind == .dormitory {
+                            dormitoryNotice
+                        }
                     }
-                }
-                .pickerStyle(.menu)
-            } footer: {
-                Text("默认只查本周。需要更早的记录，可以在这里调整查询时间。")
-            }
+                    .frame(width: 340)
 
-            if vm.kind == .dormitory {
-                Section {
-                    Label {
-                        Text("宿舍门禁数据有延迟同步，刚刷的记录可能过一段时间才会出现，结果以学校系统为准。")
-                            .font(.footnote)
-                    } icon: {
-                        Image(systemName: "clock.badge.exclamationmark")
-                            .foregroundStyle(.orange)
+                    Divider()
+
+                    List {
+                        recordsSection
                     }
+                    .frame(maxWidth: .infinity)
                 }
-            }
-
-            Section {
-                recordRows
-                if vm.hasMore {
-                    loadMoreRow
+            } else {
+                List {
+                    querySection
+                    if vm.kind == .dormitory {
+                        dormitoryNotice
+                    }
+                    recordsSection
                 }
-            } header: {
-                Text(vm.kind.sectionTitle)
-            } footer: {
-                Text(footerText)
             }
         }
         .navigationTitle("门禁查询")
@@ -53,6 +44,51 @@ struct AccessRecordsView: View {
         }
         .refreshable {
             await vm.reload(service: authVM.portalService)
+        }
+    }
+
+    private var querySection: some View {
+        Section {
+            Picker("门禁", selection: Binding(get: { vm.kind }, set: { vm.select(kind: $0) })) {
+                ForEach(AccessKind.allCases) { kind in
+                    Text(kind.title).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker("查询时间", selection: Binding(get: { vm.range }, set: { vm.select(range: $0) })) {
+                ForEach(AccessRange.allCases) { range in
+                    Text(range.title).tag(range)
+                }
+            }
+            .pickerStyle(.menu)
+        } footer: {
+            Text("默认只查本周。需要更早的记录，可以在这里调整查询时间。")
+        }
+    }
+
+    private var dormitoryNotice: some View {
+        Section {
+            Label {
+                Text("宿舍门禁数据有延迟同步，刚刷的记录可能过一段时间才会出现，结果以学校系统为准。")
+                    .font(.footnote)
+            } icon: {
+                Image(systemName: "clock.badge.exclamationmark")
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private var recordsSection: some View {
+        Section {
+            recordRows
+            if vm.hasMore {
+                loadMoreRow
+            }
+        } header: {
+            Text(vm.kind.sectionTitle)
+        } footer: {
+            Text(footerText)
         }
     }
 

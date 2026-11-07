@@ -8,6 +8,10 @@ struct CourseScheduleQueryView: View {
     @State private var selected: CourseScheduleRecord?
 
     var body: some View {
+        NavigationStack { page }
+    }
+
+    private var page: some View {
         content
             .navigationTitle("开课查询")
             .navigationBarTitleDisplayMode(.inline)

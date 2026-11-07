@@ -6,23 +6,22 @@ struct LaborClubView: View {
     @State private var selectedTab = 0
     @State private var selectedActivity: LaborClubActivity?
     @State private var showScanner = false
+    @Environment(\.wideLayout) private var wideLayout
+    @State private var wideSelectedActivity: LaborClubActivity?
 
     var body: some View {
         NavigationStack {
             Group {
                 if vm.isLoading && vm.progress == nil { LoadingView() }
+                else if wideLayout { wideBody }
                 else {
-                    List {
-                        if let progress = vm.progress { progressSection(progress) }
-                        if !vm.clubs.isEmpty { clubsSection }
-                        tabPickerSection
-                        if selectedTab == 0 { myActivitiesSection }
-                        else { addActivitiesSection }
-                    }
-                    .listStyle(.insetGrouped)
+                    activityList
+                        .detailPanel(item: $selectedActivity) { activity in
+                            LaborActivityDetailSheet(activity: activity, vm: vm)
+                        }
                 }
             }
-            .navigationTitle("劳动俱乐部")
+            .navigationTitle("劳动课")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -32,9 +31,6 @@ struct LaborClubView: View {
                 }
             }
             .refreshable { vm.loadAll() }
-            .detailPanel(item: $selectedActivity) { activity in
-                LaborActivityDetailSheet(activity: activity, vm: vm)
-            }
             .sheet(isPresented: $showScanner) {
                 LaborScanSheet(vm: vm, isPresented: $showScanner)
             }
@@ -50,6 +46,54 @@ struct LaborClubView: View {
                 if let svc = authVM.laborClubService { vm.initialize(service: svc); vm.loadAll() }
             }
         }
+    }
+
+    // MARK: - Wide Layout
+
+    private var wideBody: some View {
+        HStack(spacing: 0) {
+            activityList.frame(width: 340)
+            Divider()
+            wideDetail.frame(maxWidth: .infinity)
+        }
+        .onAppear { ensureWideSelection() }
+        .onChange(of: selectedTab) { _, _ in wideSelectedActivity = wideActiveActivities.first }
+        .onChange(of: wideActiveActivities.map(\.activityId)) { _, _ in ensureWideSelection() }
+    }
+
+    @ViewBuilder
+    private var wideDetail: some View {
+        if let activity = wideSelectedActivity {
+            LaborActivityDetailContent(activity: activity, vm: vm, onDone: { wideSelectedActivity = nil })
+                .id(activity.activityId)
+        } else {
+            EmptyStateView(title: "选择一个活动查看详情", systemImage: "figure.walk")
+        }
+    }
+
+    /// 当前标签页下可见的活动，顺序与列表分区一致
+    private var wideActiveActivities: [LaborClubActivity] {
+        if selectedTab == 0 {
+            return vm.ongoingActivities + vm.finishedActivities
+        }
+        return vm.availableActivities + vm.fullActivities + vm.notStartedActivities + Array(vm.expiredActivities.prefix(20))
+    }
+
+    /// 保留仍存在的选中项（刷新为最新数据），否则默认选中第一项
+    private func ensureWideSelection() {
+        let list = wideActiveActivities
+        wideSelectedActivity = wideSelectedActivity.flatMap { sel in list.first { $0.activityId == sel.activityId } } ?? list.first
+    }
+
+    private var activityList: some View {
+        List {
+            if let progress = vm.progress { progressSection(progress) }
+            if !vm.clubs.isEmpty { clubsSection }
+            tabPickerSection
+            if selectedTab == 0 { myActivitiesSection }
+            else { addActivitiesSection }
+        }
+        .listStyle(.insetGrouped)
     }
 
     // MARK: - Progress
@@ -189,39 +233,54 @@ struct LaborClubView: View {
     // MARK: - Activity Row
 
     private func activityRow(_ activity: LaborClubActivity, showApply: Bool = false) -> some View {
-        Button { selectedActivity = activity } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(activity.title).font(.body).fontWeight(.medium).lineLimit(2)
-                HStack(spacing: 8) {
-                    Label(activity.clubName, systemImage: "person.3.fill")
-                    Label("\(activity.memberNum)/\(activity.peopleNum)", systemImage: "person.fill")
+        Group {
+            if wideLayout {
+                Button { wideSelectedActivity = activity } label: {
+                    activityRowContent(activity, showApply: showApply).contentShape(Rectangle())
                 }
-                .font(.caption).foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    Label(activity.startTime, systemImage: "clock")
-                        .font(.caption2).foregroundStyle(.tertiary)
-                    Spacer()
-                    Text(activity.signInStatus)
-                        .font(.caption2).fontWeight(.medium)
-                        .foregroundStyle(.blue)
+                .buttonStyle(.plain)
+                .wideRowSelection(wideSelectedActivity?.activityId == activity.activityId)
+                .tint(.primary)
+            } else {
+                Button { selectedActivity = activity } label: {
+                    activityRowContent(activity, showApply: showApply)
                 }
-
-                if showApply {
-                    Button {
-                        vm.applyActivity(activityId: activity.activityId)
-                    } label: {
-                        Text("报名参加")
-                            .font(.caption).fontWeight(.semibold)
-                            .frame(maxWidth: .infinity).padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-                }
+                .tint(.primary)
             }
-            .padding(.vertical, 4)
         }
-        .tint(.primary)
+    }
+
+    private func activityRowContent(_ activity: LaborClubActivity, showApply: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(activity.title).font(.body).fontWeight(.medium).lineLimit(2)
+            HStack(spacing: 8) {
+                Label(activity.clubName, systemImage: "person.3.fill")
+                Label("\(activity.memberNum)/\(activity.peopleNum)", systemImage: "person.fill")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Label(activity.startTime, systemImage: "clock")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                Spacer()
+                Text(activity.signInStatus)
+                    .font(.caption2).fontWeight(.medium)
+                    .foregroundStyle(.blue)
+            }
+
+            if showApply {
+                Button {
+                    vm.applyActivity(activityId: activity.activityId)
+                } label: {
+                    Text("报名参加")
+                        .font(.caption).fontWeight(.semibold)
+                        .frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -231,90 +290,102 @@ struct LaborActivityDetailSheet: View {
     let activity: LaborClubActivity
     @Bindable var vm: LaborClubViewModel
     @DetailDismiss private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            LaborActivityDetailContent(activity: activity, vm: vm, onDone: { dismiss() })
+                .navigationTitle("活动详情")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+                }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+// MARK: - Activity Detail Content
+
+struct LaborActivityDetailContent: View {
+    let activity: LaborClubActivity
+    @Bindable var vm: LaborClubViewModel
+    let onDone: () -> Void
     @State private var detail: ActivityDetail?
     @State private var isLoadingDetail = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(activity.title).font(.title3).fontWeight(.bold)
-                        HStack(spacing: 8) {
-                            Text(activity.typeName)
-                                .font(.caption).fontWeight(.medium)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(.orange.opacity(0.12), in: .capsule)
-                                .foregroundStyle(.orange)
-                            Text(activity.stateName)
-                                .font(.caption).fontWeight(.medium)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(.blue.opacity(0.12), in: .capsule)
-                                .foregroundStyle(.blue)
-                        }
-                    }
-                    .listRowBackground(Color.clear)
-                }
-
-                Section("活动信息") {
-                    LabeledContent("俱乐部", value: activity.clubName)
-                    LabeledContent("负责人", value: activity.chargeUserName)
-                    LabeledContent("人数", value: "\(activity.memberNum)/\(activity.peopleNum)")
-                    LabeledContent("活动开始", value: formatTime(activity.startTime))
-                    LabeledContent("活动结束", value: formatTime(activity.endTime))
-                    LabeledContent("报名开始", value: formatTime(activity.signUpStartTime))
-                    LabeledContent("报名结束", value: formatTime(activity.signUpEndTime))
-                    if let d = detail, !d.location.isEmpty {
-                        LabeledContent("活动地点", value: d.location)
-                    }
-                    if let d = detail, !d.teacherNames.isEmpty {
-                        LabeledContent("指导老师", value: d.teacherNames)
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(activity.title).font(.title3).fontWeight(.bold)
+                    HStack(spacing: 8) {
+                        Text(activity.typeName)
+                            .font(.caption).fontWeight(.medium)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(.orange.opacity(0.12), in: .capsule)
+                            .foregroundStyle(.orange)
+                        Text(activity.stateName)
+                            .font(.caption).fontWeight(.medium)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(.blue.opacity(0.12), in: .capsule)
+                            .foregroundStyle(.blue)
                     }
                 }
+                .listRowBackground(Color.clear)
+            }
 
-                if let signList = activity.signList, !signList.isEmpty {
-                    Section("签到记录 (\(signList.filter { $0.isSign }.count)/\(signList.count))") {
-                        ForEach(signList) { sign in
-                            HStack {
-                                Image(systemName: sign.isSign ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(sign.isSign ? .green : .gray)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(sign.typeName).font(.subheadline)
-                                    Text("\(formatTime(sign.startTime)) ~ \(formatTime(sign.endTime))")
-                                        .font(.caption2).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if sign.isSign, let st = sign.signTime, !st.isEmpty {
-                                    Text(formatTime(st)).font(.caption2).foregroundStyle(.green)
-                                } else {
-                                    Text(sign.statusText).font(.caption).foregroundStyle(sign.isSign ? .green : .red)
-                                }
+            Section("活动信息") {
+                LabeledContent("俱乐部", value: activity.clubName)
+                LabeledContent("负责人", value: activity.chargeUserName)
+                LabeledContent("人数", value: "\(activity.memberNum)/\(activity.peopleNum)")
+                LabeledContent("活动开始", value: formatTime(activity.startTime))
+                LabeledContent("活动结束", value: formatTime(activity.endTime))
+                LabeledContent("报名开始", value: formatTime(activity.signUpStartTime))
+                LabeledContent("报名结束", value: formatTime(activity.signUpEndTime))
+                if let d = detail, !d.location.isEmpty {
+                    LabeledContent("活动地点", value: d.location)
+                }
+                if let d = detail, !d.teacherNames.isEmpty {
+                    LabeledContent("指导老师", value: d.teacherNames)
+                }
+            }
+
+            if let signList = activity.signList, !signList.isEmpty {
+                Section("签到记录 (\(signList.filter { $0.isSign }.count)/\(signList.count))") {
+                    ForEach(signList) { sign in
+                        HStack {
+                            Image(systemName: sign.isSign ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(sign.isSign ? .green : .gray)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(sign.typeName).font(.subheadline)
+                                Text("\(formatTime(sign.startTime)) ~ \(formatTime(sign.endTime))")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if sign.isSign, let st = sign.signTime, !st.isEmpty {
+                                Text(formatTime(st)).font(.caption2).foregroundStyle(.green)
+                            } else {
+                                Text(sign.statusText).font(.caption).foregroundStyle(sign.isSign ? .green : .red)
                             }
                         }
                     }
                 }
+            }
 
-                if !vm.joinedActivities.contains(where: { $0.activityId == activity.activityId }) {
-                    Section {
-                        Button {
-                            vm.applyActivity(activityId: activity.activityId)
-                            dismiss()
-                        } label: {
-                            HStack { Spacer(); Text("报名参加").fontWeight(.semibold); Spacer() }
-                        }
-                        .tint(.orange)
+            if !vm.joinedActivities.contains(where: { $0.activityId == activity.activityId }) {
+                Section {
+                    Button {
+                        vm.applyActivity(activityId: activity.activityId)
+                        onDone()
+                    } label: {
+                        HStack { Spacer(); Text("报名参加").fontWeight(.semibold); Spacer() }
                     }
+                    .tint(.orange)
                 }
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle("活动详情")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
-            }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .listStyle(.insetGrouped)
         .task {
             guard let svc = vm.service else { return }
             let result = await svc.getActivityDetail(activityId: activity.activityId)

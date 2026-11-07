@@ -6,13 +6,42 @@ struct FreeClassroomView: View {
     @State private var vm = FreeClassroomViewModel()
     @State private var showSettings = false
     @State private var selectedRoom: FcRoom?
+    @Environment(\.wideLayout) private var wideLayout
 
     var body: some View {
-        List {
-            FreeClassroomTimeSection(vm: vm)
-            resultSections
+        NavigationStack { page }
+    }
+
+    private var page: some View {
+        Group {
+            if wideLayout {
+                HStack(spacing: 0) {
+                    List {
+                        FreeClassroomTimeSection(vm: vm)
+                    }
+                    .listStyle(.insetGrouped)
+                    .safeAreaInset(edge: .bottom) {
+                        searchButton
+                    }
+                    .frame(width: 420)
+                    Divider()
+                    List {
+                        resultSections
+                    }
+                    .listStyle(.insetGrouped)
+                    .frame(maxWidth: .infinity)
+                }
+            } else {
+                List {
+                    FreeClassroomTimeSection(vm: vm)
+                    resultSections
+                }
+                .listStyle(.insetGrouped)
+                .safeAreaInset(edge: .bottom) {
+                    searchButton
+                }
+            }
         }
-        .listStyle(.insetGrouped)
         .navigationTitle("空教室")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -26,9 +55,6 @@ struct FreeClassroomView: View {
                     Label("设置", systemImage: "gearshape")
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            searchButton
         }
         .sheet(isPresented: $showSettings) {
             FreeClassroomSettingsSheet(vm: vm)

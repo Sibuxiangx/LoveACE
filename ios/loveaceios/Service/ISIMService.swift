@@ -142,7 +142,9 @@ actor ISIMService {
               let obj = arr.first,
               let codes = obj[codeKey] as? [Any],
               let names = obj[nameKey] as? [Any] else { return result }
-        for i in 1..<min(codes.count, names.count) {
+        let count = min(codes.count, names.count)
+        guard count > 1 else { return result }
+        for i in 1..<count {
             let code = "\(codes[i])"
             let name = "\(names[i])"
             guard !code.isEmpty, name != "请选择" else { continue }

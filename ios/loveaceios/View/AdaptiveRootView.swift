@@ -121,7 +121,7 @@ struct AdaptiveRootView: View {
         case .more: MoreView()
         case .settings: SettingsView()
         case .feature(let tag):
-            NavigationStack { AppCatalog.destinationView(for: tag) }
+            AppCatalog.destinationView(for: tag)
         }
     }
 

@@ -19,3 +19,14 @@ extension View {
         frame(maxWidth: maxWidth).frame(maxWidth: .infinity)
     }
 }
+
+extension View {
+    /// 宽屏列表的选中底：圆角、左右内缩，不贴边
+    func wideRowSelection(_ isSelected: Bool, tint: Color = .teal) -> some View {
+        listRowBackground(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isSelected ? tint.opacity(0.25) : Color.clear)
+                .padding(.horizontal, 8)
+        )
+    }
+}

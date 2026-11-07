@@ -29,6 +29,7 @@ final class ElectricityViewModel {
 
     func loadBuildings() {
         guard let svc = service else { return }
+        guard !isLoadingOptions else { return }
         Task {
             isLoadingOptions = true; error = nil
             let result = await svc.getBuildings()

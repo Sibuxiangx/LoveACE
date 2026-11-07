@@ -2,6 +2,7 @@ import SwiftUI
 
 struct YKTView: View {
     @Environment(AuthViewModel.self) private var authVM
+    @Environment(\.wideLayout) private var wideLayout
     @State private var vm = YKTViewModel()
     @State private var showTransferSheet = false
     @State private var showPasswordDialog = false
@@ -10,38 +11,36 @@ struct YKTView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    balanceHero
-                    transferButton
-                    if !vm.consumption.isEmpty { transactionSection }
-                    else if vm.isConsumptionLoading {
-                        ProgressView("加载消费记录...")
-                            .padding(20)
-                            .frame(maxWidth: .infinity)
-                            .glassCard(cornerRadius: 16)
-                    } else if let error = vm.consumptionError {
-                        VStack(spacing: 10) {
-                            Label(error, systemImage: "exclamationmark.triangle")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                            Button("重试") { vm.reloadConsumption() }
-                                .buttonStyle(.bordered)
+            Group {
+                if wideLayout {
+                    HStack(spacing: 0) {
+                        ScrollView {
+                            VStack(spacing: 16) {
+                                balanceHero
+                                transferButton
+                            }
+                            .padding()
                         }
-                        .padding(20)
+                        .frame(width: 380)
+                        Divider()
+                        ScrollView {
+                            VStack(spacing: 16) {
+                                recordsContent
+                            }
+                            .padding()
+                        }
                         .frame(maxWidth: .infinity)
-                        .glassCard(cornerRadius: 16)
-                    } else if vm.consumptionLoaded {
-                        Text("本月暂无消费记录")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(20)
-                            .frame(maxWidth: .infinity)
-                            .glassCard(cornerRadius: 16)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            balanceHero
+                            transferButton
+                            recordsContent
+                        }
+                        .padding()
                     }
                 }
-                .padding()
             }
             .navigationTitle("一卡通")
             .navigationBarTitleDisplayMode(.inline)
@@ -75,6 +74,36 @@ struct YKTView: View {
                     vm.loadAll()
                 })
             }
+        }
+    }
+
+    @ViewBuilder
+    private var recordsContent: some View {
+        if !vm.consumption.isEmpty { transactionSection }
+        else if vm.isConsumptionLoading {
+            ProgressView("加载消费记录...")
+                .padding(20)
+                .frame(maxWidth: .infinity)
+                .glassCard(cornerRadius: 16)
+        } else if let error = vm.consumptionError {
+            VStack(spacing: 10) {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("重试") { vm.reloadConsumption() }
+                    .buttonStyle(.bordered)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .glassCard(cornerRadius: 16)
+        } else if vm.consumptionLoaded {
+            Text("本月暂无消费记录")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(20)
+                .frame(maxWidth: .infinity)
+                .glassCard(cornerRadius: 16)
         }
     }
 

@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// 电费页推入路由。用值路由推入，`navPath` 才能整体清空（闭包式 NavigationLink 不受 navPath 控制）。
+enum ElectricityRoute: Hashable {
+    case floors(buildingCode: String, buildingName: String)
+    case rooms(floorCode: String, floorName: String, buildingName: String)
+}
+
 struct ElectricityView: View {
     @Environment(AuthViewModel.self) private var authVM
     @State private var vm = ElectricityViewModel()
@@ -16,8 +22,31 @@ struct ElectricityView: View {
             }
             .navigationTitle("宿舍电费")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: ElectricityRoute.self) { route in
+                routeView(route)
+            }
             .onAppear {
                 if let isim = authVM.isimService { vm.initialize(service: isim); vm.autoLoad() }
+            }
+        }
+    }
+
+    /// 绑定房间：写入偏好、开始查询电费，并清空推入路径，回到电费首页
+    private func confirmRoom(code: String, display: String) {
+        vm.bindRoom(code: code, display: display)
+        navPath = NavigationPath()
+    }
+
+    @ViewBuilder
+    private func routeView(_ route: ElectricityRoute) -> some View {
+        if let service = vm.getService() {
+            switch route {
+            case let .floors(code, name):
+                FloorPickerView(service: service, buildingCode: code, buildingName: name)
+            case let .rooms(floorCode, floorName, buildingName):
+                RoomPickerView(service: service, floorCode: floorCode, floorName: floorName, buildingName: buildingName) { code, display in
+                    confirmRoom(code: code, display: display)
+                }
             }
         }
     }
@@ -50,12 +79,7 @@ struct ElectricityView: View {
             } else {
                 Section {
                     ForEach(vm.buildings, id: \.["code"]) { b in
-                        NavigationLink {
-                            FloorPickerView(service: vm.getService()!, buildingCode: b["code"] ?? "", buildingName: b["name"] ?? "", onConfirm: { code, display in
-                                vm.bindRoom(code: code, display: display)
-                                navPath = NavigationPath()
-                            })
-                        } label: {
+                        NavigationLink(value: ElectricityRoute.floors(buildingCode: b["code"] ?? "", buildingName: b["name"] ?? "")) {
                             Text(b["name"] ?? "")
                         }
                     }
@@ -304,7 +328,6 @@ struct FloorPickerView: View {
     let service: ISIMService
     let buildingCode: String
     let buildingName: String
-    let onConfirm: (String, String) -> Void
     @State private var floors: [[String: String]] = []
     @State private var isLoading = true
 
@@ -317,9 +340,7 @@ struct FloorPickerView: View {
             } else {
                 Section("选择楼层 — \(buildingName)") {
                     ForEach(floors, id: \.["code"]) { f in
-                        NavigationLink {
-                            RoomPickerView(service: service, floorCode: f["code"] ?? "", floorName: f["name"] ?? "", buildingName: buildingName, onConfirm: onConfirm)
-                        } label: {
+                        NavigationLink(value: ElectricityRoute.rooms(floorCode: f["code"] ?? "", floorName: f["name"] ?? "", buildingName: buildingName)) {
                             Text(f["name"] ?? "")
                         }
                     }
