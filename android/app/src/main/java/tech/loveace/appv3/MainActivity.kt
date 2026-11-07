@@ -29,7 +29,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
-import androidx.navigation.hasRoute
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
@@ -145,7 +144,7 @@ fun RibbonApp(
             }
             AuthState.Unauthenticated, AuthState.Error -> {
                 // 已经在登录页时不重建路由：重建会销毁登录表单，输入的学号和密码会被清空
-                if (navController.currentDestination?.hasRoute<LoginRoute>() != true) {
+                if (navController.currentDestination?.route != LoginRoute::class.java.name) {
                     navController.navigate(LoginRoute) {
                         popUpTo(0) { inclusive = true }
                     }
