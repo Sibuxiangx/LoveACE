@@ -61,6 +61,14 @@ enum NetworkLogRedactor {
         "lt", "execution", "username", "session", "svpn_name", "svpn_password"
     ]
 
+    /// 响应正文含明文凭据的接口：不写入网络日志正文，只记录字节数
+    nonisolated static let bodyOmittedPathSuffixes = ["/api/ec/dev/table/datas"]
+
+    nonisolated static func omitsBody(_ url: URL?) -> Bool {
+        guard let path = url?.path else { return false }
+        return bodyOmittedPathSuffixes.contains { path.hasSuffix($0) }
+    }
+
     nonisolated static func url(_ url: URL?) -> String {
         guard let url else { return "unknown" }
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
@@ -190,7 +198,10 @@ actor NetworkLogStore {
             "storage": "inline"
         ]
 
-        if body.count > Self.largeResponseThreshold {
+        if NetworkLogRedactor.omitsBody(requestURL) {
+            bodyInfo["storage"] = "omitted"
+            bodyInfo["reason"] = "sensitive_endpoint"
+        } else if body.count > Self.largeResponseThreshold {
             let fileName = String(format: "%06d-response.bin", sequenceNumber)
             let fileURL = responseDirectory.appendingPathComponent(fileName)
             if (try? body.write(to: fileURL, options: .atomic)) != nil {

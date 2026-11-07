@@ -93,7 +93,7 @@ fun QqGroupEntryCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val variant = RibbonCardVariant.PRIMARY_CONTAINER
+    val variant = RibbonCardVariant.SURFACE_CONTAINER
     val content = ribbonContentColor(variant)
 
     RibbonCard(
@@ -108,9 +108,9 @@ fun QqGroupEntryCard(
             ShapeBadge(
                 shape = RibbonShape.COOKIE_8,
                 size = 40.dp,
-                color = content.copy(alpha = 0.15f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                 icon = Icons.Default.Groups,
-                iconTint = content,
+                iconTint = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -123,11 +123,11 @@ fun QqGroupEntryCard(
                 Text(
                     "${manifest.title} · 点击查看群号与二维码",
                     style = MaterialTheme.typography.bodySmall,
-                    color = content,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.width(8.dp))
-            Icon(Icons.Default.ChevronRight, null, tint = content)
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

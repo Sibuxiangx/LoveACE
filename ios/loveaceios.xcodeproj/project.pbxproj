@@ -55,8 +55,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7B30BBEE2F6A7F9F00CC81E3 /* loveaceios */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = loveaceios;
 			sourceTree = "<group>";
 		};
@@ -95,7 +93,6 @@
 			children = (
 				B82711622A5FBE6529B4BE3A /* WidgetModels.swift */,
 			);
-			name = Shared;
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -106,7 +103,6 @@
 				611180EE65E37CB08D67510D /* loveaceiosWidget.entitlements */,
 				AE1F2802F4D8E5672AF41043 /* Info.plist */,
 			);
-			name = loveaceiosWidget;
 			path = loveaceiosWidget;
 			sourceTree = "<group>";
 		};
@@ -126,6 +122,7 @@
 				5FDDFBF2F83B61E66BCF6486 /* Frameworks */,
 				568992CF7CCAA1C5AB79DBE1 /* loveaceiosWidget */,
 				355804482C1B320FE08398C4 /* Shared */,
+				7B6E1BC3309E494200DAC4EB /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -137,6 +134,14 @@
 				F994F44DDEFB9E02BA214F0D /* loveaceiosWidget.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		7B6E1BC3309E494200DAC4EB /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				FBBA25264E7E2D4AD5FB5610 /* WidgetModels.swift */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

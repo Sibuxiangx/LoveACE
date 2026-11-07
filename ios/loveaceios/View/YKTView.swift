@@ -14,9 +14,16 @@ struct YKTView: View {
                 VStack(spacing: 16) {
                     balanceHero
                     transferButton
-                    if !vm.transactions.isEmpty { transactionSection }
-                    else if vm.isTransactionsLoading {
+                    if !vm.consumption.isEmpty { transactionSection }
+                    else if vm.isConsumptionLoading {
                         ProgressView("加载消费记录...")
+                            .padding(20)
+                            .frame(maxWidth: .infinity)
+                            .glassCard(cornerRadius: 16)
+                    } else if let error = vm.consumptionError {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                             .padding(20)
                             .frame(maxWidth: .infinity)
                             .glassCard(cornerRadius: 16)
@@ -28,7 +35,7 @@ struct YKTView: View {
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { vm.loadAll() }
             .onAppear {
-                if let ykt = authVM.yktService { vm.initialize(service: ykt); vm.loadAll() }
+                if let ykt = authVM.yktService { vm.initialize(service: ykt, portal: authVM.portalService); vm.loadAll() }
             }
             .alert("身份验证", isPresented: $showPasswordDialog) {
                 SecureField("校园网关或教务处密码", text: $passwordInput)
@@ -107,25 +114,46 @@ struct YKTView: View {
 
     @ViewBuilder
     private var transactionSection: some View {
-        GlassSectionHeader(title: "近期消费", icon: "clock.arrow.circlepath")
+        GlassSectionHeader(title: "本月消费", icon: "clock.arrow.circlepath")
         VStack(spacing: 0) {
-            ForEach(Array(vm.transactions.enumerated()), id: \.element.id) { index, tx in
-                HStack {
-                    Text(tx.operationType).font(.subheadline).lineLimit(1)
+            ForEach(Array(vm.consumption.enumerated()), id: \.element.id) { index, tx in
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(tx.area).font(.subheadline).lineLimit(1)
+                        Text("\(tx.date) \(tx.time)").font(.caption2).foregroundStyle(.tertiary)
+                    }
                     Spacer(minLength: 4)
-                    Text(tx.area).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
-                    Text(tx.amountText)
+                    Text("¥\(tx.amount)")
                         .font(.subheadline).monospacedDigit()
-                        .foregroundStyle(tx.isIncome ? .green : .primary)
-                        .frame(width: 72, alignment: .trailing)
+                        .frame(width: 84, alignment: .trailing)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                if index < vm.transactions.count - 1 {
+                if index < vm.consumption.count - 1 {
                     Divider().padding(.leading, 12)
                 }
             }
+            if vm.consumption.count < vm.consumptionTotal {
+                Button {
+                    vm.loadMoreConsumption()
+                } label: {
+                    Group {
+                        if vm.isConsumptionLoading {
+                            ProgressView()
+                        } else {
+                            Text("加载更多")
+                        }
+                    }
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                }
+                .disabled(vm.isConsumptionLoading)
+            }
         }
         .glassCard(cornerRadius: 12)
+        Text("已显示 \(vm.consumption.count) 条，共 \(vm.consumptionTotal) 条")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
     }
 }

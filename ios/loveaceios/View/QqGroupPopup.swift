@@ -29,7 +29,7 @@ struct QqGroupEntryCard: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity)
-            .glassInteractiveCard(tint: .accentColor, cornerRadius: 18)
+            .glassInteractiveCard(cornerRadius: 18)
         }
         .buttonStyle(.plain)
         .fullScreenCover(isPresented: $showPopup) {

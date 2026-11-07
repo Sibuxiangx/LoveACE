@@ -50,47 +50,6 @@ actor YKTService {
         }
     }
 
-    func getTransactions(startDate: String, endDate: String) async -> UniResponse<[TransactionRecord]> {
-        do {
-            let client = await connection.client!
-            let (data, _) = try await client.post("\(Self.baseURL)/queryUserCostList.action",
-                                                   formData: ["startDate": startDate, "endDate": endDate])
-            let html = String(data: data, encoding: .utf8) ?? ""
-            let records = parseTransactionHTML(html)
-            return .success(records)
-        } catch {
-            logger.error("getTransactions failed: \(error.localizedDescription)")
-            return .failure(error.localizedDescription, retryable: true)
-        }
-    }
-
-    private func parseTransactionHTML(_ html: String) -> [TransactionRecord] {
-        var records: [TransactionRecord] = []
-        let pattern = "<tr>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*<td[^>]*>(.*?)</td>\\s*</tr>"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
-        let matches = regex.matches(in: html, range: NSRange(html.startIndex..., in: html))
-        for match in matches {
-            var groups: [String] = []
-            for i in 1...8 {
-                guard let range = Range(match.range(at: i), in: html) else { groups.append(""); continue }
-                var val = String(html[range])
-                val = val.replacingOccurrences(of: "<[^>]*>", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "&nbsp;", with: " ").trimmingCharacters(in: .whitespaces)
-                groups.append(val)
-            }
-            let numericOnly = { (s: String) -> Double? in
-                Double(s.replacingOccurrences(of: "[^\\d.\\-]", with: "", options: .regularExpression))
-            }
-            records.append(TransactionRecord(
-                accountingTime: groups[0], transactionTime: groups[1],
-                expense: numericOnly(groups[2]), income: numericOnly(groups[3]),
-                operationType: groups[4], balance: numericOnly(groups[5]) ?? 0.0,
-                area: groups[6], terminalId: groups[7]
-            ))
-        }
-        return records
-    }
-
     // MARK: - Electricity Payment
 
     func getPageInfo() async -> UniResponse<StudentInfo> {

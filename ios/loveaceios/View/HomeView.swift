@@ -22,9 +22,9 @@ struct HomeView: View {
             .refreshable { refresh() }
             .onAppear {
                 if let jwc = authVM.jwcService { academicVM.initialize(service: jwc) }
-                if let ykt = authVM.yktService { yktVM.initialize(service: ykt) }
+                if let ykt = authVM.yktService { yktVM.initialize(service: ykt, portal: authVM.portalService) }
                 academicVM.loadAcademicInfo()
-                yktVM.loadAll()
+                yktVM.loadBalance()
                 semesterVM.loadSemesterInfo()
             }
         }
@@ -249,7 +249,7 @@ struct HomeView: View {
 
     private func refresh() {
         academicVM.loadAcademicInfo()
-        yktVM.loadAll()
+        yktVM.loadBalance()
         semesterVM.loadSemesterInfo()
     }
 }

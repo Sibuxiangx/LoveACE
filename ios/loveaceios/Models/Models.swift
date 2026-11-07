@@ -182,40 +182,6 @@ struct CardBalance: Codable {
     }
 }
 
-struct TransactionRecord: Codable, Identifiable {
-    var id: String { "\(accountingTime)_\(transactionTime)_\(operationType)" }
-    let accountingTime: String
-    let transactionTime: String
-    let expense: Double?
-    let income: Double?
-    let operationType: String
-    let balance: Double
-    let area: String
-    let terminalId: String
-
-    var isExpense: Bool { expense != nil && (expense ?? 0) > 0 }
-    var isIncome: Bool { income != nil && (income ?? 0) > 0 }
-    var amount: Double { isIncome ? (income ?? 0) : -(expense ?? 0) }
-    var amountText: String {
-        if isIncome { return "+\(String(format: "%.2f", income ?? 0))元" }
-        if isExpense { return "-\(String(format: "%.2f", expense ?? 0))元" }
-        return "0.00元"
-    }
-
-    init(accountingTime: String = "", transactionTime: String = "",
-         expense: Double? = nil, income: Double? = nil, operationType: String = "",
-         balance: Double = 0.0, area: String = "", terminalId: String = "") {
-        self.accountingTime = accountingTime
-        self.transactionTime = transactionTime
-        self.expense = expense
-        self.income = income
-        self.operationType = operationType
-        self.balance = balance
-        self.area = area
-        self.terminalId = terminalId
-    }
-}
-
 // MARK: - ISIM Models
 
 struct ElectricityBalance: Codable {

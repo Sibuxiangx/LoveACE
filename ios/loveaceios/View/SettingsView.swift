@@ -53,6 +53,14 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("账号") {
+                    NavigationLink {
+                        MailInitialPasswordView()
+                    } label: {
+                        Label("企业邮箱初始密码", systemImage: "envelope.badge.shield.half.filled")
+                    }
+                }
+
                 Section {
                     Toggle(isOn: classReminderBinding) {
                         Label("上课提醒", systemImage: "bell.badge")

@@ -46,3 +46,6 @@ __pycache__/
 
 # Node.js
 node_modules/
+
+# Local research notes: kept on disk, never pushed
+docs/research/

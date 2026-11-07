@@ -97,6 +97,7 @@ final class AuthViewModel {
     private(set) var planService: PlanService?
     private(set) var repairService: RepairService?
     private(set) var teacherEvaluationService: TeacherEvaluationService?
+    private(set) var portalService: PortalService?
 
     private(set) var sessionGeneration = 0
 
@@ -445,13 +446,14 @@ final class AuthViewModel {
         planService = PlanService(connection: conn)
         repairService = RepairService(connection: conn)
         teacherEvaluationService = TeacherEvaluationService(connection: conn)
+        portalService = PortalService(connection: conn)
     }
 
     private func clearServices() {
         connection = nil; jwcService = nil; yktService = nil; isimService = nil
         aacService = nil; laborClubService = nil; competitionService = nil
         studentScheduleService = nil; courseScheduleService = nil; planService = nil; repairService = nil
-        teacherEvaluationService = nil
+        teacherEvaluationService = nil; portalService = nil
         freeClassroomService = nil
     }
 }
