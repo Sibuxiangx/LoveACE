@@ -175,9 +175,10 @@ const SENSITIVE_KV_RULES: readonly RegExp[] = [
   /cookie[ \t]*(?::[ \t]*|=)/gi,
   /(?:jsessionid|twfid|ticket|token|captcha|rand_code)[ \t]*=/gi,
 ];
-// XML 标签形式，如 <TwfID>728cd31bc89a7a1c</TwfID>：标签内文本只允许为空或占位符（只看同一行）
-const SENSITIVE_XML_RE = /<(?:twfid|jsessionid|token|password|passwd|pwd|cookie|ticket)\b[^>]*>([^<\r\n]*)/gi;
-const LONG_TOKEN_RE = /[A-Za-z0-9+/=_-]{40,}/;
+// XML 标签形式（必须有成对的结束标签）：<TwfID>728cd31bc89a7a1c</TwfID> 命中；占位符 <Cookie> 后面没有结束标签，不算
+const SENSITIVE_XML_RE = /<(twfid|jsessionid|token|password|passwd|pwd|cookie|ticket)\b[^>]*>[^<\r\n]+<\/\1>/i;
+// 40 个以上的 token 字符且含数字：Content-Type=application/x-www-form-urlencoded 这类纯字母的请求头不算
+const LONG_TOKEN_RE = /[A-Za-z0-9+/=_-]{40,}/g;
 
 function hasSensitiveText(value: string): boolean {
   for (const rule of SENSITIVE_KV_RULES) {
@@ -188,10 +189,11 @@ function hasSensitiveText(value: string): boolean {
       if (token !== "" && !PLACEHOLDER_START_RE.test(token)) return true;
     }
   }
-  for (const match of value.matchAll(SENSITIVE_XML_RE)) {
-    if ((match[1] ?? "").trim() !== "") return true;
+  if (SENSITIVE_XML_RE.test(value)) return true;
+  for (const run of value.replace(PLACEHOLDER_RE, " ").matchAll(LONG_TOKEN_RE)) {
+    if (/\d/.test(run[0])) return true;
   }
-  return LONG_TOKEN_RE.test(value.replace(PLACEHOLDER_RE, " "));
+  return false;
 }
 
 function attemptHasSensitiveContent(attempt: DiagnosticAttempt): boolean {
