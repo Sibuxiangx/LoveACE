@@ -360,15 +360,6 @@ private fun ManualLoginView(
                 }
             }
         }
-        if (diagnosticsAvailable) {
-            LoginDiagnosticsUploadSection(
-                state = diagnosticsUpload,
-                attemptCount = diagnosticsAttemptCount,
-                onUpload = onUploadDiagnostics,
-                onDismiss = onDismissDiagnosticsUpload,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
         Spacer(Modifier.height(12.dp))
         QqGroupLoginEntry()
         Spacer(Modifier.height(16.dp))
@@ -376,6 +367,14 @@ private fun ManualLoginView(
             Icon(Icons.Default.HelpOutline, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text("不知道密码是什么？")
+        }
+        if (diagnosticsAvailable) {
+            LoginDiagnosticsUploadSection(
+                state = diagnosticsUpload,
+                attemptCount = diagnosticsAttemptCount,
+                onUpload = onUploadDiagnostics,
+                onDismiss = onDismissDiagnosticsUpload,
+            )
         }
 
         Spacer(Modifier.weight(1f))

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -17,7 +16,6 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -63,30 +61,24 @@ internal fun LoginDiagnosticsUploadSection(
     val uploading = state is DiagnosticsUploadState.Uploading
 
     Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Button(
+        TextButton(
             onClick = {
                 consentCount = attemptCount()
                 showConsent = true
             },
             enabled = !uploading,
-            modifier = Modifier.fillMaxWidth(0.8f).height(48.dp),
-            shape = RoundedCornerShape(percent = 50),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
         ) {
             if (uploading) {
                 AppCircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(14.dp),
+                    color = MaterialTheme.colorScheme.primary,
                 )
-                Spacer(Modifier.width(10.dp))
-                Text("上传中…", style = MaterialTheme.typography.titleSmall)
-            } else {
-                Icon(Icons.Default.Share, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("分享登录诊断", style = MaterialTheme.typography.titleSmall)
+                Text("上传中…")
+            } else {
+                Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("分享登录诊断")
             }
         }
         if (state is DiagnosticsUploadState.Failed) {

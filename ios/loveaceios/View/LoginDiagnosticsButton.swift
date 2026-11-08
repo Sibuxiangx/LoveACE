@@ -16,22 +16,19 @@ struct LoginDiagnosticsButton: View {
         VStack(spacing: 8) {
             if authVM.diagnosticsAvailable {
                 Button(action: requestUpload) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         if uploading {
                             ProgressView()
-                                .tint(.white)
+                                .controlSize(.small)
                         } else {
-                            Image(systemName: "square.and.arrow.up.circle.fill")
+                            Image(systemName: "square.and.arrow.up")
                         }
                         Text("分享登录诊断")
-                            .fontWeight(.semibold)
                     }
-                    .frame(minWidth: 180)
+                    .font(.subheadline)
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
                 .disabled(uploading)
+                .padding(.top, 8)
 
                 if let errorText {
                     Text(errorText)

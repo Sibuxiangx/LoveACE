@@ -78,7 +78,6 @@ struct LoginView: View {
                 disclaimerNotice
                 maintenanceNotice
                 errorSection
-                LoginDiagnosticsButton()
                 loginSection
                 Spacer(minLength: 40)
             }
@@ -103,7 +102,6 @@ struct LoginView: View {
                         inputSection
                         disclaimerNotice
                         errorSection
-                        LoginDiagnosticsButton()
                         loginSection
                         Spacer(minLength: 0)
                     }
@@ -206,6 +204,7 @@ struct LoginView: View {
                 .font(.subheadline)
         }
         .padding(.top, 16)
+        LoginDiagnosticsButton()
     }
 
     private var canLogin: Bool {
