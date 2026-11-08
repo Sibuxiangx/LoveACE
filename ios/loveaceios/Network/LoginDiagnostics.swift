@@ -455,10 +455,15 @@ enum LoginLogCompressor {
             let middle = substring(match, 3, source) ?? ""
             return prefix + name + middle + maskToken(name)
         }
-        return replaceMatches(in: inputsMasked, pattern: #"([A-Za-z0-9_\-]+)(["']?\s*[=:]\s*["']?)([^&\s,;<>"'{}\[\]]+)"#) { match, source in
+        let keyValueMasked = replaceMatches(in: inputsMasked, pattern: #"([A-Za-z0-9_\-]+)(["']?\s*[=:]\s*["']?)([^&\s,;<>"'{}\[\]]+)"#) { match, source in
             guard let key = substring(match, 1, source), isSensitiveKey(key) else { return nil }
             let separator = substring(match, 2, source) ?? ""
             return key + separator + maskToken(key)
+        }
+        // XML 标签形式：<TwfID>值</TwfID> 的值替换为占位符，如 <TwfID><Twfid></TwfID>
+        return replaceMatches(in: keyValueMasked, pattern: #"(?i)(<(twfid|jsessionid|token|password|passwd|pwd|cookie|ticket)\b[^>]*>)([^<]+)"#) { match, source in
+            guard let open = substring(match, 1, source), let name = substring(match, 2, source) else { return nil }
+            return open + maskToken(name)
         }
     }
 

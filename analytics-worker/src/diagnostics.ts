@@ -174,14 +174,21 @@ const SENSITIVE_KV_RULES: readonly RegExp[] = [
   /cookie\s*[:=]\s*/gi,
   /(?:jsessionid|twfid|ticket|token|captcha|rand_code)\s*=\s*/gi,
 ];
+// XML 标签形式，如 <TwfID>728cd31bc89a7a1c</TwfID>：标签内文本只允许为空或占位符
+const SENSITIVE_XML_RE = /<(?:twfid|jsessionid|token|password|passwd|pwd|cookie|ticket)\b[^>]*>([^<]*)/gi;
 const LONG_TOKEN_RE = /[A-Za-z0-9+/=_-]{40,}/;
 
 function hasSensitiveText(value: string): boolean {
   for (const rule of SENSITIVE_KV_RULES) {
     for (const match of value.matchAll(rule)) {
+      // 只看 = 之后紧跟的值（到空白或 & 为止）：空值不算敏感，占位符合规
       const rest = value.slice((match.index ?? 0) + match[0].length).replace(/^["']/, "");
-      if (!PLACEHOLDER_START_RE.test(rest)) return true;
+      const token = rest.match(/^[^\s&"']*/)?.[0] ?? "";
+      if (token !== "" && !PLACEHOLDER_START_RE.test(token)) return true;
     }
+  }
+  for (const match of value.matchAll(SENSITIVE_XML_RE)) {
+    if ((match[1] ?? "").trim() !== "") return true;
   }
   return LONG_TOKEN_RE.test(value.replace(PLACEHOLDER_RE, " "));
 }

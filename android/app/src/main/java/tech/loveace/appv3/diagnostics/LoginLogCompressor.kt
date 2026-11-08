@@ -53,6 +53,7 @@ object LoginLogCompressor {
     private val inputValuePattern = Regex("""(?i)(value=["'])([^"']*)""")
     private val inputNameValuePattern = Regex("""(?i)(name=["']?)([A-Za-z0-9_\-]+)(["']?[^>]*?value=["'])([^"']*)""")
     private val keyValuePattern = Regex("""([A-Za-z0-9_\-]+)(["']?\s*[=:]\s*["']?)([^&\s,;<>"'{}\[\]]+)""")
+    private val xmlSecretPattern = Regex("""(?i)(<((?:twfid|jsessionid|token|password|passwd|pwd|cookie|ticket))\b[^>]*>)[^<]+""")
 
     private class ParsedUrl(val host: String, val path: String, val queryCount: Int)
 
@@ -134,10 +135,14 @@ object LoginLogCompressor {
             if (!isSensitiveKey(name)) return@replaceMatches null
             match.groupValues[1] + name + match.groupValues[3] + maskToken(name)
         }
-        return replaceMatches(inputsMasked, keyValuePattern) { match ->
+        val keyValueMasked = replaceMatches(inputsMasked, keyValuePattern) { match ->
             val key = match.groupValues[1]
             if (!isSensitiveKey(key)) return@replaceMatches null
             key + match.groupValues[2] + maskToken(key)
+        }
+        // XML 标签形式：<TwfID>值</TwfID> 的值替换为占位符，如 <TwfID><Twfid></TwfID>
+        return replaceMatches(keyValueMasked, xmlSecretPattern) { match ->
+            match.groupValues[1] + maskToken(match.groupValues[2])
         }
     }
 
