@@ -13,7 +13,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tech.loveace.appv3.analytics.Analytics
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import tech.loveace.appv3.diagnostics.DiagnosticsExport
+import tech.loveace.appv3.diagnostics.DiagnosticsUploadException
+import tech.loveace.appv3.diagnostics.DiagnosticsUploadState
+import tech.loveace.appv3.diagnostics.DiagnosticsUploader
+import tech.loveace.appv3.data.model.UAAPLoginStatus
+import tech.loveace.appv3.diagnostics.LoginDiagnostics
+import tech.loveace.appv3.diagnostics.LoginDiagnostics.LogLevel
+import tech.loveace.appv3.diagnostics.LoginDiagnostics.LogModule
+import tech.loveace.appv3.diagnostics.LoginDiagnostics.Outcome
 import tech.loveace.appv3.data.local.CredentialStore
 import tech.loveace.appv3.data.local.ScheduleStore
 import tech.loveace.appv3.data.model.ECLoginStatus
@@ -78,6 +90,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
+    private val _diagnosticsAvailable = MutableStateFlow(LoginDiagnostics.hasFailureRecords())
+    /** 登录页是否显示分享诊断按钮（存在失败记录） */
+    val diagnosticsAvailable: StateFlow<Boolean> = _diagnosticsAvailable.asStateFlow()
+
+    private val _diagnosticsUpload = MutableStateFlow<DiagnosticsUploadState>(DiagnosticsUploadState.Idle)
+    /** 分享诊断的上传状态（同意弹窗之后的上传、结果与错误） */
+    val diagnosticsUpload: StateFlow<DiagnosticsUploadState> = _diagnosticsUpload.asStateFlow()
+
     private var heartbeatJob: Job? = null
     private var isReconnecting = false
 
@@ -134,6 +154,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            val attempt = UUID.randomUUID().toString()
+            LoginDiagnostics.beginAttempt(attempt, userId, "EC+UAAP")
             val session = captchaSession
             captchaSession = null
             // 仅当验证码非空且凭据未变时复用连接，否则视为新登录（验证码上下文不存在则会重新取图）
@@ -145,25 +167,32 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             )
             try {
                 val conn = reusable?.connection ?: AUFEConnection(userId, ecPassword, password).also { it.startClient() }
+                LoginDiagnostics.note(attempt, "EC 登录开始")
 
                 // EC (VPN) login
                 val ecResult = conn.ecLogin(code)
+                logEcResult(attempt, ecResult)
                 if (!ecResult.success) {
                     val image = ecResult.captchaImage
                     if (ecResult.failCaptchaRequired && image != null) {
+                        finishDiagnostics(attempt, Outcome.CAPTCHA_REQUIRED, CAPTCHA_REQUIRED_MESSAGE)
                         publishCaptchaRequired(conn, userId, ecPassword, password, image, CAPTCHA_REQUIRED_MESSAGE)
                         return@launch
                     }
                     if (ecResult.failCaptchaInvalid) {
                         // 验证码错误：计失败，并在同一连接上立即获取新图片（不提交密码）
                         recordLoginFailure(userId)
+                        LoginDiagnostics.note(attempt, "验证码错误，已重新取图")
                         Analytics.trackLoginFailed(userId, "验证码错误")
                         val retry = conn.ecLogin(null)
+                        logEcResult(attempt, retry)
                         val retryImage = retry.captchaImage
                         if (retry.failCaptchaRequired && retryImage != null) {
+                            finishDiagnostics(attempt, Outcome.CAPTCHA_REQUIRED, CAPTCHA_REQUIRED_MESSAGE)
                             publishCaptchaRequired(conn, userId, ecPassword, password, retryImage, "验证码错误，请重新输入")
                         } else {
                             val msg = ecFailureMessage(retry)
+                            finishDiagnostics(attempt, ecOutcome(retry), msg)
                             Analytics.trackLoginFailed(userId, msg)
                             publishLoginState(userId, AuthState.Error, errorMessage = msg, passwordInvalid = retry.failInvalidCredentials)
                         }
@@ -171,6 +200,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     if (ecResult.failInvalidCredentials) recordLoginFailure(userId)
                     val msg = ecFailureMessage(ecResult)
+                    finishDiagnostics(attempt, ecOutcome(ecResult), msg)
                     Analytics.trackLoginFailed(userId, msg)
                     publishLoginState(userId, AuthState.Error, errorMessage = msg, passwordInvalid = ecResult.failInvalidCredentials)
                     return@launch
@@ -178,12 +208,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
                 // UAAP (CAS) login
                 val uaapResult = conn.uaapLogin()
+                logUaapResult(attempt, uaapResult)
                 if (!uaapResult.success) {
                     if (uaapResult.failPasswordChangeRequired) {
                         // 学校强制改密：TGT 已铸出（密码正确），CAS 拒绝签发票据。
                         // 不是密码错误：不清凭据、不计密码失败、不自动重试，本次会话作废
                         Log.w(TAG, "🏫 Password change required for $userId")
                         Analytics.trackLoginFailed(userId, "password_change_required")
+                        finishDiagnostics(attempt, Outcome.PASSWORD_CHANGE_REQUIRED, "学校要求修改密码")
                         publishLoginState(userId, AuthState.Error, passwordChangeRequired = true)
                         return@launch
                     }
@@ -193,6 +225,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         else -> "UAAP 登录失败"
                     }
                     if (uaapResult.failInvalidCredentials) recordLoginFailure(userId)
+                    finishDiagnostics(attempt, uaapOutcome(uaapResult), msg)
                     Analytics.trackLoginFailed(userId, msg)
                     publishLoginState(userId, AuthState.Error, errorMessage = msg, passwordInvalid = uaapResult.failInvalidCredentials)
                     return@launch
@@ -209,10 +242,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 credentialStore.saveRemembered(UserCredentials(userId, ecPassword, password))
 
                 _uiState.value = AuthUiState(state = AuthState.Authenticated, userId = userId)
+                finishDiagnostics(attempt, Outcome.SUCCESS, null)
                 Analytics.trackLoginSuccess(userId)
                 Log.i(TAG, "✅ Login successful: $userId")
             } catch (e: Exception) {
                 Log.e(TAG, "Login error", e)
+                LoginDiagnostics.note(attempt, "登录异常 ${e.javaClass.simpleName}", LogLevel.ERROR)
+                finishDiagnostics(attempt, Outcome.OTHER, "登录异常")
                 Analytics.trackLoginFailed(userId, "登录异常")
                 _uiState.value = AuthUiState(state = AuthState.Error, errorMessage = "登录异常: ${e.message}")
             }
@@ -288,6 +324,79 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private fun failuresKey(userId: String) = "failures_$userId"
 
     private fun cooldownKey(userId: String) = "cooldown_until_$userId"
+
+    /** 记录 EC 阶段结果：只记录是否存在，不记录任何值 */
+    private fun logEcResult(attempt: String, status: ECLoginStatus) {
+        LoginDiagnostics.note(
+            attempt,
+            LoginDiagnostics.ecSummary(status),
+            if (status.success) LogLevel.INFO else LogLevel.WARN,
+            LogModule.EC,
+        )
+    }
+
+    /** 记录 UAAP 阶段结果：只记录是否存在，不记录任何值 */
+    private fun logUaapResult(attempt: String, status: UAAPLoginStatus) {
+        LoginDiagnostics.note(
+            attempt,
+            LoginDiagnostics.uaapSummary(status),
+            if (status.success) LogLevel.INFO else LogLevel.WARN,
+            LogModule.UAAP,
+        )
+    }
+
+    /** 结束诊断记录，并刷新登录页复制按钮的状态 */
+    private fun finishDiagnostics(attempt: String, outcome: Outcome, message: String?) {
+        LoginDiagnostics.finish(attempt, outcome, message)
+        _diagnosticsAvailable.value = LoginDiagnostics.hasFailureRecords()
+    }
+
+    private fun ecOutcome(status: ECLoginStatus): Outcome = when {
+        status.failInvalidCredentials -> Outcome.INVALID_CREDENTIALS
+        status.failNetworkError -> Outcome.NETWORK
+        else -> Outcome.OTHER
+    }
+
+    private fun uaapOutcome(status: UAAPLoginStatus): Outcome = when {
+        status.failInvalidCredentials -> Outcome.INVALID_CREDENTIALS
+        status.failNetworkError -> Outcome.NETWORK
+        else -> Outcome.OTHER
+    }
+
+    /** 登录页分享诊断：当前保存的登录次数（用于同意弹窗中的 N） */
+    fun diagnosticsAttemptCount(): Int = LoginDiagnostics.attemptCount()
+
+    /**
+     * 按契约第 2 节组装 diagnostic.json 并上传（用户已在弹窗中确认）。
+     * 状态：Uploading → Done(结果) 或 Failed(错误码)；失败由页面显示，不静默。
+     */
+    fun uploadLoginDiagnostics() {
+        if (_diagnosticsUpload.value == DiagnosticsUploadState.Uploading) return
+        _diagnosticsUpload.value = DiagnosticsUploadState.Uploading
+        viewModelScope.launch {
+            _diagnosticsUpload.value = try {
+                val attempts = LoginDiagnostics.savedAttempts()
+                if (attempts.isEmpty()) throw DiagnosticsUploadException("no_attempts")
+                val body = withContext(Dispatchers.Default) {
+                    DiagnosticsExport.build(attempts, System.currentTimeMillis())
+                }
+                DiagnosticsUploadState.Done(DiagnosticsUploader.upload(body))
+            } catch (e: DiagnosticsUploadException) {
+                DiagnosticsUploadState.Failed(e.code)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                DiagnosticsUploadState.Failed("unknown")
+            }
+        }
+    }
+
+    /** 关闭结果页，或清除上传错误提示（上传中不允许清除） */
+    fun dismissDiagnosticsUpload() {
+        if (_diagnosticsUpload.value != DiagnosticsUploadState.Uploading) {
+            _diagnosticsUpload.value = DiagnosticsUploadState.Idle
+        }
+    }
 
     // ==================== Session Restore ====================
 

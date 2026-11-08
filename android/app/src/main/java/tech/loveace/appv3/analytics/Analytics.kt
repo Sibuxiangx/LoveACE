@@ -158,14 +158,14 @@ object Analytics {
 
     private fun md5(value: String) = digest("MD5", value)
 
-    private fun sha256(value: String) = digest("SHA-256", value)
+    internal fun sha256(value: String) = digest("SHA-256", value)
 
     private fun digest(algorithm: String, value: String): String {
         val digest = MessageDigest.getInstance(algorithm).digest(value.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    private fun hmacSha256(secret: String, message: String): String {
+    internal fun hmacSha256(secret: String, message: String): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         return mac.doFinal(message.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }

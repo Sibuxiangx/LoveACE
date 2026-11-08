@@ -39,3 +39,7 @@ database_id = "6a58a4ca-21af-4cc4-8c2a-6101865c7985"
 [[r2_buckets]]
 binding = "ANALYTICS_ARCHIVE"
 bucket_name = "loveace-analytics-archive"
+
+[[r2_buckets]]
+binding = "DIAGNOSTICS"
+bucket_name = "loveace-diagnostics"

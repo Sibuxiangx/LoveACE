@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import tech.loveace.appv3.diagnostics.DiagnosticsUploadState
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -54,6 +55,11 @@ fun LoginScreen(
     onUserIdChanged: (userId: String) -> Unit,
     onQuickLogin: () -> Unit,
     onSwitchUser: () -> Unit,
+    diagnosticsAvailable: Boolean,
+    diagnosticsUpload: DiagnosticsUploadState,
+    diagnosticsAttemptCount: () -> Int,
+    onUploadDiagnostics: () -> Unit,
+    onDismissDiagnosticsUpload: () -> Unit,
     onDismissPasswordChange: () -> Unit = {},
 ) {
     // 是否有已保存的凭证（可快速登录）
@@ -88,6 +94,11 @@ fun LoginScreen(
         } else {
             // ── 手动登录表单 ──
             ManualLoginView(
+                diagnosticsAvailable = diagnosticsAvailable,
+                diagnosticsUpload = diagnosticsUpload,
+                diagnosticsAttemptCount = diagnosticsAttemptCount,
+                onUploadDiagnostics = onUploadDiagnostics,
+                onDismissDiagnosticsUpload = onDismissDiagnosticsUpload,
                 uiState = uiState,
                 initialUserId = rememberedCredentials?.userId ?: "",
                 initialPassword = rememberedCredentials?.password ?: "",
@@ -190,6 +201,11 @@ private fun ManualLoginView(
     enterScale: Float,
     onLogin: (userId: String, ecPassword: String, password: String, captchaCode: String?) -> Unit,
     onUserIdChanged: (userId: String) -> Unit,
+    diagnosticsAvailable: Boolean,
+    diagnosticsUpload: DiagnosticsUploadState,
+    diagnosticsAttemptCount: () -> Int,
+    onUploadDiagnostics: () -> Unit,
+    onDismissDiagnosticsUpload: () -> Unit,
 ) {
     var userId by remember { mutableStateOf(initialUserId) }
     var password by remember { mutableStateOf(initialPassword) }
@@ -343,6 +359,15 @@ private fun ManualLoginView(
                     Text(uiState.errorMessage ?: "", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
                 }
             }
+        }
+        if (diagnosticsAvailable) {
+            LoginDiagnosticsUploadSection(
+                state = diagnosticsUpload,
+                attemptCount = diagnosticsAttemptCount,
+                onUpload = onUploadDiagnostics,
+                onDismiss = onDismissDiagnosticsUpload,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
         Spacer(Modifier.height(12.dp))
         QqGroupLoginEntry()

@@ -33,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import tech.loveace.appv3.analytics.Analytics
+import tech.loveace.appv3.diagnostics.LoginDiagnostics
 import tech.loveace.appv3.ui.navigation.*
 import tech.loveace.appv3.ui.screen.*
 import tech.loveace.appv3.ui.screen.landscape.LandscapeLoginScreen
@@ -54,6 +55,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         AppLogger.init(this)
         Analytics.init(this)
+        LoginDiagnostics.init(this)
         Analytics.trackAppStart(if (intent?.getStringExtra("navigate_to") != null) "widget" else "launcher")
         handleWidgetIntent(intent)
 
@@ -100,6 +102,8 @@ fun RibbonApp(
     otaViewModel: OtaViewModel = viewModel(),
 ) {
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
+    val diagnosticsAvailable by authViewModel.diagnosticsAvailable.collectAsStateWithLifecycle()
+    val diagnosticsUpload by authViewModel.diagnosticsUpload.collectAsStateWithLifecycle()
     val otaState by otaViewModel.state.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -237,6 +241,11 @@ fun RibbonApp(
                     onUserIdChanged = { authViewModel.onUserIdChanged(it) },
                     onQuickLogin = { authViewModel.restoreSession() },
                     onSwitchUser = { authViewModel.clearSavedCredentials() },
+                    diagnosticsAvailable = diagnosticsAvailable,
+                    diagnosticsUpload = diagnosticsUpload,
+                    diagnosticsAttemptCount = { authViewModel.diagnosticsAttemptCount() },
+                    onUploadDiagnostics = { authViewModel.uploadLoginDiagnostics() },
+                    onDismissDiagnosticsUpload = { authViewModel.dismissDiagnosticsUpload() },
                     onDismissPasswordChange = { authViewModel.dismissPasswordChange() },
                 )
             } else {
@@ -247,6 +256,11 @@ fun RibbonApp(
                     onUserIdChanged = { authViewModel.onUserIdChanged(it) },
                     onQuickLogin = { authViewModel.restoreSession() },
                     onSwitchUser = { authViewModel.clearSavedCredentials() },
+                    diagnosticsAvailable = diagnosticsAvailable,
+                    diagnosticsUpload = diagnosticsUpload,
+                    diagnosticsAttemptCount = { authViewModel.diagnosticsAttemptCount() },
+                    onUploadDiagnostics = { authViewModel.uploadLoginDiagnostics() },
+                    onDismissDiagnosticsUpload = { authViewModel.dismissDiagnosticsUpload() },
                     onDismissPasswordChange = { authViewModel.dismissPasswordChange() },
                 )
             }

@@ -1,7 +1,10 @@
+import { cleanupExpiredDiagnostics, DIAGNOSTIC_MAX_BYTES, parseDiagnostic, storeDiagnostic } from "./diagnostics";
+
 interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   ANALYTICS_ARCHIVE: R2Bucket;
+  DIAGNOSTICS: R2Bucket;
   ANALYTICS_API_KEY: string;
   ANALYTICS_SIGNING_SECRET: string;
   ANALYTICS_IP_HASH_SALT: string;
@@ -219,6 +222,10 @@ export default {
       return ingestEvents(request, env);
     }
 
+    if (request.method === "POST" && url.pathname === "/v1/diagnostics") {
+      return uploadDiagnostics(request, env);
+    }
+
     return json({ ok: false, error: "not_found" }, 404);
   },
 
@@ -228,6 +235,11 @@ export default {
 };
 
 async function runScheduledMaintenance(env: Env): Promise<void> {
+  try {
+    await cleanupExpiredDiagnostics(env.DIAGNOSTICS, Date.now());
+  } catch (error) {
+    console.error("diagnostics cleanup failed", error);
+  }
   if (await getState(env.DB, "maintenance:local_backfill") === "1") return;
   await runMaintenance(env);
 }
@@ -576,6 +588,31 @@ async function ingestEvents(request: Request, env: Env): Promise<Response> {
 
   await env.DB.batch(statements);
   return json({ ok: true, accepted: payload.events.length });
+}
+
+async function uploadDiagnostics(request: Request, env: Env): Promise<Response> {
+  const body = await request.text();
+  if (new TextEncoder().encode(body).byteLength > DIAGNOSTIC_MAX_BYTES) {
+    return json({ ok: false, error: "payload_too_large" }, 413);
+  }
+
+  const authError = await authenticateRequest(request, body, env);
+  if (authError) return authError;
+
+  const parsed = parseDiagnostic(body);
+  if (!parsed.ok) return json({ ok: false, error: parsed.error }, 400);
+  if (!env.ANALYTICS_IP_HASH_SALT) return json({ ok: false, error: "server_misconfigured" }, 503);
+
+  const ip = request.headers.get("CF-Connecting-IP") ?? "";
+  const ipHash = ip ? await sha256Hex(`${env.ANALYTICS_IP_HASH_SALT}:${ip}`) : null;
+  const rateError = await checkRateLimits(env.DB, intEnv(env.RATE_LIMIT_PER_MINUTE, 60), [`ip:${ipHash ?? "unknown"}`]);
+  if (rateError) return rateError;
+
+  const replayError = await recordNonce(env.DB, header(request, "X-LoveACE-Nonce"), intEnv(env.NONCE_TTL_SECONDS, 600));
+  if (replayError) return replayError;
+
+  const stored = await storeDiagnostic(env.DIAGNOSTICS, body, parsed.value, Date.now());
+  return json({ ok: true, id: stored.id, url: stored.url, llmUrl: stored.llmUrl, expiresAt: stored.expiresAt }, 201);
 }
 
 async function serveDashboard(request: Request, env: Env): Promise<Response> {

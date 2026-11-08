@@ -67,6 +67,8 @@ private struct PendingCaptcha {
 final class AuthViewModel {
     var state: AuthState = .initial
     var errorMessage: String?
+    /// 登录页诊断分享按钮是否显示（存在失败记录）
+    var diagnosticsAvailable = false
     var userId: String = ""
     /// 学校 UAAP/CAS 强制改密拦截（不是密码错误：不清凭据、不计密码失败、不自动重试）
     var passwordChangeRequired = false
@@ -124,6 +126,10 @@ final class AuthViewModel {
         }
     }
 
+    func refreshDiagnosticsState() {
+        Task { diagnosticsAvailable = await LoginDiagnostics.shared.hasFailureRecords }
+    }
+
     private func startAuthentication(on conn: AUFEConnection, credentials: UserCredentials,
                                      captchaCode: String?, reusesConnection: Bool) {
         authenticationTask?.cancel()
@@ -133,6 +139,7 @@ final class AuthViewModel {
         currentAuthenticationAttempt = attempt
         authenticationTask = Task {
             state = .loading; errorMessage = nil
+            await LoginDiagnostics.shared.beginAttempt(attempt, userId: credentials.userId, mode: "EC+UAAP")
             if !reusesConnection { await conn.startClient() }
             await authenticate(on: conn, credentials: credentials, captchaCode: captchaCode, attempt: attempt)
         }
@@ -141,19 +148,24 @@ final class AuthViewModel {
     private func authenticate(on conn: AUFEConnection, credentials: UserCredentials,
                               captchaCode: String?, attempt: UUID) async {
         let userId = credentials.userId
+        await LoginDiagnostics.shared.note(attempt, "EC 登录开始")
         var ecResult = await conn.ecLogin(captchaCode: captchaCode)
+        await LoginDiagnostics.shared.note(attempt, LoginDiagnostics.ecSummary(ecResult), level: ecResult.success ? "INFO" : "WARN", module: "EC")
         guard !Task.isCancelled, attempt == currentAuthenticationAttempt else { return }
 
         var captchaMessage: String?
         if ecResult.captchaInvalid {
             // 验证码错误计入失败次数，并立即重新取图（不计失败）
             recordLoginFailure(for: userId)
+            await LoginDiagnostics.shared.note(attempt, "验证码错误，已重新取图")
             Analytics.shared.trackLoginFailed(userId: userId, reason: "captcha_invalid")
             ecResult = await conn.ecLogin(captchaCode: nil)
+            await LoginDiagnostics.shared.note(attempt, LoginDiagnostics.ecSummary(ecResult), level: ecResult.success ? "INFO" : "WARN", module: "EC")
             guard !Task.isCancelled, attempt == currentAuthenticationAttempt else { return }
             captchaMessage = "验证码错误，请重新输入"
         }
         if ecResult.captchaRequired, let image = ecResult.captchaImage {
+            await LoginDiagnostics.shared.finish(attempt, outcome: .captchaRequired, message: "学校要求输入验证码")
             presentCaptcha(image, on: conn, credentials: credentials)
             state = .error; errorMessage = captchaMessage ?? "学校要求输入验证码"
             return
@@ -168,18 +180,22 @@ final class AuthViewModel {
                 msg = "学号或密码错误"
             } else if ecResult.failNetworkError { msg = "网络连接失败" }
             else { msg = "登录失败，请稍后重试" }
+            let outcome: LoginDiagnostics.Outcome = ecResult.failInvalidCredentials ? .invalidCredentials : (ecResult.failNetworkError ? .network : .other)
+            await LoginDiagnostics.shared.finish(attempt, outcome: outcome, message: msg)
             Analytics.shared.trackLoginFailed(userId: userId, reason: msg)
             state = .error; errorMessage = msg; return
         }
 
         clearCaptcha()
         let uaapResult = await conn.uaapLogin()
+        await LoginDiagnostics.shared.note(attempt, LoginDiagnostics.uaapSummary(uaapResult), level: uaapResult.success ? "INFO" : "WARN", module: "UAAP")
         guard !Task.isCancelled, attempt == currentAuthenticationAttempt else { return }
         guard uaapResult.success else {
             if uaapResult.failPasswordChangeRequired {
                 // 学校强制改密：TGT 已铸出（密码正确），CAS 拒绝签发票据。
                 // 不是密码错误：不清凭据、不计密码失败、不自动重试，本次会话作废
                 logger.warning("Password change required for \(userId)")
+                await LoginDiagnostics.shared.finish(attempt, outcome: .passwordChangeRequired, message: "学校要求修改密码")
                 Analytics.shared.trackLoginFailed(userId: userId, reason: "password_change_required")
                 state = .error; errorMessage = nil; passwordChangeRequired = true; return
             }
@@ -189,12 +205,15 @@ final class AuthViewModel {
                 msg = "学号或密码错误"
             } else if uaapResult.failNetworkError { msg = "网络连接失败" }
             else { msg = "教务系统登录失败" }
+            let outcome: LoginDiagnostics.Outcome = uaapResult.failInvalidCredentials ? .invalidCredentials : (uaapResult.failNetworkError ? .network : .other)
+            await LoginDiagnostics.shared.finish(attempt, outcome: outcome, message: msg)
             Analytics.shared.trackLoginFailed(userId: userId, reason: msg)
             state = .error; errorMessage = msg; return
         }
 
         LoginThrottle.reset(for: userId)
         cooldownUntil = nil
+        await LoginDiagnostics.shared.finish(attempt, outcome: .success, message: nil)
         connection = conn
         initServices(conn)
         await wireSessionExpiredHandler(conn)

@@ -5,6 +5,9 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import okio.Buffer
+import tech.loveace.appv3.diagnostics.HttpRecord
+import tech.loveace.appv3.diagnostics.LoginDiagnostics
 
 /**
  * HTTP 客户端封装
@@ -70,7 +73,47 @@ class HttpClient(
     }
 
     private fun execute(request: Request): Response {
-        val response = client.newCall(request).execute()
+        // 登录诊断只在登录进行中才组装记录（请求头与请求体、响应头与响应体的大小和关键词）
+        val recording = LoginDiagnostics.isRecording()
+        val requestHeaders = if (recording) request.headers.names().associateWith { request.header(it).orEmpty() } else emptyMap()
+        val requestBody = if (recording) requestBodyBytes(request.body) else null
+        val startedAt = System.nanoTime()
+        val response = try {
+            client.newCall(request).execute()
+        } catch (e: Exception) {
+            if (recording) {
+                LoginDiagnostics.recordHttp(
+                    HttpRecord(
+                        method = request.method,
+                        url = request.url.toString(),
+                        status = null,
+                        durationMs = elapsedMs(startedAt),
+                        requestHeaders = requestHeaders,
+                        requestBody = requestBody,
+                        responseHeaders = emptyMap(),
+                        responseBody = null,
+                        error = describe(e),
+                    )
+                )
+            }
+            throw e
+        }
+        val durationMs = elapsedMs(startedAt)
+        if (recording) {
+            LoginDiagnostics.recordHttp(
+                HttpRecord(
+                    method = request.method,
+                    url = request.url.toString(),
+                    status = response.code,
+                    durationMs = durationMs,
+                    requestHeaders = requestHeaders,
+                    requestBody = requestBody,
+                    responseHeaders = response.headers.names().associateWith { response.header(it).orEmpty() },
+                    responseBody = try { response.peekBody(Long.MAX_VALUE).bytes() } catch (_: Exception) { null },
+                    error = null,
+                )
+            )
+        }
         Log.d(TAG, "✅ ${response.code} ${request.url}")
 
         // 嗅探：用 peekBody 检查是否被重定向到 VPN 登录页
@@ -85,6 +128,23 @@ class HttpClient(
 
         return response
     }
+
+    /** 请求体字节（只在登录诊断进行中读取；非表单正文同样交给遮挡流程，不会原样记录） */
+    private fun requestBodyBytes(body: RequestBody?): ByteArray? {
+        if (body == null) return null
+        return try {
+            Buffer().also { body.writeTo(it) }.readByteArray()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun describe(e: Exception): String {
+        val name = e.javaClass.simpleName
+        return e.message?.let { "$name: $it" } ?: name
+    }
+
+    private fun elapsedMs(startedAt: Long): Long = (System.nanoTime() - startedAt) / 1_000_000L
 
     /** 检测响应是否是 VPN 登录页 */
     private fun isVpnLoginPage(body: String, url: String): Boolean {

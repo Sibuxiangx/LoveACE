@@ -78,6 +78,7 @@ struct LoginView: View {
                 disclaimerNotice
                 maintenanceNotice
                 errorSection
+                LoginDiagnosticsButton()
                 loginSection
                 Spacer(minLength: 40)
             }
@@ -102,6 +103,7 @@ struct LoginView: View {
                         inputSection
                         disclaimerNotice
                         errorSection
+                        LoginDiagnosticsButton()
                         loginSection
                         Spacer(minLength: 0)
                     }

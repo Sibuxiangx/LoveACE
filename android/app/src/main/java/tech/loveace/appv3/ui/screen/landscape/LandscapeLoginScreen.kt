@@ -44,6 +44,8 @@ import tech.loveace.appv3.ui.viewmodel.AuthState
 import tech.loveace.appv3.ui.viewmodel.AuthUiState
 import tech.loveace.appv3.ui.screen.CaptchaField
 import tech.loveace.appv3.ui.screen.rememberLoginCooldownSeconds
+import tech.loveace.appv3.diagnostics.DiagnosticsUploadState
+import tech.loveace.appv3.ui.screen.LoginDiagnosticsUploadSection
 
 /**
  * 横屏登录页：左侧品牌区 + 右侧表单/快速登录区
@@ -57,6 +59,11 @@ fun LandscapeLoginScreen(
     onUserIdChanged: (userId: String) -> Unit,
     onQuickLogin: () -> Unit,
     onSwitchUser: () -> Unit,
+    diagnosticsAvailable: Boolean,
+    diagnosticsUpload: DiagnosticsUploadState,
+    diagnosticsAttemptCount: () -> Int,
+    onUploadDiagnostics: () -> Unit,
+    onDismissDiagnosticsUpload: () -> Unit,
     onDismissPasswordChange: () -> Unit = {},
 ) {
     var showManualLogin by remember { mutableStateOf(rememberedCredentials == null || uiState.errorMessage != null) }
@@ -149,6 +156,11 @@ fun LandscapeLoginScreen(
                 } else {
                     // 手动登录表单
                     LandscapeManualLoginForm(
+                        diagnosticsAvailable = diagnosticsAvailable,
+                        diagnosticsUpload = diagnosticsUpload,
+                        diagnosticsAttemptCount = diagnosticsAttemptCount,
+                        onUploadDiagnostics = onUploadDiagnostics,
+                        onDismissDiagnosticsUpload = onDismissDiagnosticsUpload,
                         uiState = uiState,
                         initialUserId = rememberedCredentials?.userId ?: "",
                         initialPassword = rememberedCredentials?.password ?: "",
@@ -176,6 +188,11 @@ private fun LandscapeManualLoginForm(
     isLoading: Boolean,
     onLogin: (userId: String, ecPassword: String, password: String, captchaCode: String?) -> Unit,
     onUserIdChanged: (userId: String) -> Unit,
+    diagnosticsAvailable: Boolean,
+    diagnosticsUpload: DiagnosticsUploadState,
+    diagnosticsAttemptCount: () -> Int,
+    onUploadDiagnostics: () -> Unit,
+    onDismissDiagnosticsUpload: () -> Unit,
 ) {
     var userId by remember { mutableStateOf(initialUserId) }
     var password by remember { mutableStateOf(initialPassword) }
@@ -313,6 +330,15 @@ private fun LandscapeManualLoginForm(
                     Text(uiState.errorMessage ?: "", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
                 }
             }
+        }
+        if (diagnosticsAvailable) {
+            LoginDiagnosticsUploadSection(
+                state = diagnosticsUpload,
+                attemptCount = diagnosticsAttemptCount,
+                onUpload = onUploadDiagnostics,
+                onDismiss = onDismissDiagnosticsUpload,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
         Spacer(Modifier.height(12.dp))
         QqGroupLoginEntry()

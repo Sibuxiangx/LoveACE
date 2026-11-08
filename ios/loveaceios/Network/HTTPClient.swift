@@ -93,6 +93,16 @@ actor HTTPClient {
                 throw HTTPError.invalidResponse
             }
             let location = httpResponse.value(forHTTPHeaderField: "Location")
+            var responseHeaders: [String: String] = [:]
+            for (key, value) in httpResponse.allHeaderFields {
+                responseHeaders[String(describing: key)] = String(describing: value)
+            }
+            await LoginDiagnostics.shared.recordHTTP(.init(
+                method: request.httpMethod ?? "GET", url: request.url, status: httpResponse.statusCode,
+                durationMs: Int(Date().timeIntervalSince(startedAt) * 1000),
+                requestHeaders: request.allHTTPHeaderFields ?? [:],
+                requestBody: request.httpBody, responseHeaders: responseHeaders,
+                responseBody: data, error: nil))
             let detection = SessionPageDetector.inspect(responseURL: httpResponse.url, body: data, location: location)
             await NetworkLogStore.shared.recordResponse(
                 id: requestID,
@@ -127,6 +137,13 @@ actor HTTPClient {
             }
             return (data, httpResponse)
         } catch {
+            let nsError = error as NSError
+            await LoginDiagnostics.shared.recordHTTP(.init(
+                method: request.httpMethod ?? "GET", url: request.url, status: nil,
+                durationMs: Int(Date().timeIntervalSince(startedAt) * 1000),
+                requestHeaders: request.allHTTPHeaderFields ?? [:],
+                requestBody: request.httpBody, responseHeaders: [:],
+                responseBody: nil, error: "\(nsError.domain) \(nsError.code): \(nsError.localizedDescription)"))
             await NetworkLogStore.shared.recordFailure(
                 id: requestID,
                 request: request,
