@@ -170,12 +170,13 @@ function validateDiagnostic(raw: unknown): DiagnosticV1 | null {
 const PLACEHOLDER_START_RE = /^<[^<>]+>/;
 const PLACEHOLDER_RE = /<[^<>]*>/g;
 const SENSITIVE_KV_RULES: readonly RegExp[] = [
-  /(?:password|passwd|pwd)\s*=\s*/gi,
-  /cookie\s*[:=]\s*/gi,
-  /(?:jsessionid|twfid|ticket|token|captcha|rand_code)\s*=\s*/gi,
+  // = 后不跨空白取值：form 行 "svpn_rand_code= mitm=" 中 svpn_rand_code 的值为空；cookie: 允许空格
+  /(?:password|passwd|pwd)[ \t]*=/gi,
+  /cookie[ \t]*(?::[ \t]*|=)/gi,
+  /(?:jsessionid|twfid|ticket|token|captcha|rand_code)[ \t]*=/gi,
 ];
-// XML 标签形式，如 <TwfID>728cd31bc89a7a1c</TwfID>：标签内文本只允许为空或占位符
-const SENSITIVE_XML_RE = /<(?:twfid|jsessionid|token|password|passwd|pwd|cookie|ticket)\b[^>]*>([^<]*)/gi;
+// XML 标签形式，如 <TwfID>728cd31bc89a7a1c</TwfID>：标签内文本只允许为空或占位符（只看同一行）
+const SENSITIVE_XML_RE = /<(?:twfid|jsessionid|token|password|passwd|pwd|cookie|ticket)\b[^>]*>([^<\r\n]*)/gi;
 const LONG_TOKEN_RE = /[A-Za-z0-9+/=_-]{40,}/;
 
 function hasSensitiveText(value: string): boolean {
