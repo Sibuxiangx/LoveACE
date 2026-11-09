@@ -4,5 +4,6 @@ enum SemesterStatus {
                   nextStartDate: String? = nil, daysUntilStart: Int? = nil)
     case inSession(semesterName: String, currentWeek: Int, totalWeeks: Int,
                    remainingWeeks: Int, isEnding: Bool)
+    case examWeek(exam: WidgetExamEntry, daysUntil: Int)
     case error(message: String)
 }

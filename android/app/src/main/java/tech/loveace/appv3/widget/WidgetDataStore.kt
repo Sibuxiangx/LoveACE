@@ -20,6 +20,7 @@ object WidgetDataStore {
     private const val DIR_NAME = "widget_cache"
     private const val FILE_SEMESTER = "semester.json"
     private const val FILE_COURSES = "courses.json"
+    private const val FILE_EXAMS = "exams.json"
 
     private fun getDir(context: Context): File {
         val dir = File(context.filesDir, DIR_NAME)
@@ -35,6 +36,10 @@ object WidgetDataStore {
         writeAtomically(File(getDir(context), FILE_COURSES), json)
     }
 
+    fun saveExamsJson(context: Context, json: String) {
+        writeAtomically(File(getDir(context), FILE_EXAMS), json)
+    }
+
     fun loadSemesterJson(context: Context): String? {
         val file = File(getDir(context), FILE_SEMESTER)
         return if (file.exists()) file.readText() else null
@@ -42,6 +47,11 @@ object WidgetDataStore {
 
     fun loadCoursesJson(context: Context): String? {
         val file = File(getDir(context), FILE_COURSES)
+        return if (file.exists()) file.readText() else null
+    }
+
+    fun loadExamsJson(context: Context): String? {
+        val file = File(getDir(context), FILE_EXAMS)
         return if (file.exists()) file.readText() else null
     }
 

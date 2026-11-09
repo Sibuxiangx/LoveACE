@@ -57,6 +57,7 @@ private fun Content(state: WidgetState, isDark: Boolean) {
             .clickable(clickAction),
     ) {
         when (state) {
+            is WidgetState.ExamWeek -> ExamWeekContent(state)
             is WidgetState.Vacation -> VacationContent(state)
             is WidgetState.InSession -> WeekGridContent(
                 semesterName = state.semesterName, currentWeek = state.currentWeek,
@@ -105,6 +106,12 @@ private fun VacationContent(state: WidgetState.Vacation) {
             Spacer(GlanceModifier.height(2.dp))
             Text(state.nextSemesterName, style = TextStyle(color = OnSurfaceVariant, fontSize = 11.sp))
         }
+        state.nextExam?.let { exam ->
+            Spacer(GlanceModifier.height(10.dp))
+            Text("下一场考试", style = TextStyle(color = OnSurfaceVariant, fontSize = 10.sp))
+            Spacer(GlanceModifier.height(4.dp))
+            ExamCardBlock(exam)
+        }
     }
 }
 
@@ -138,14 +145,13 @@ private fun WeekGridContent(
     hasCourseData: Boolean,
     isDark: Boolean,
 ) {
-    if (!hasCourseData) {
+    val grid = buildWidgetGrid(weekCourses)
+    if (!hasCourseData && grid.isEmpty()) {
         PlaceholderContent("📚", "点击进入课程表", "尚未加载课程数据")
         return
     }
 
-    val grid = buildWidgetGrid(weekCourses)
     val maxSession = widgetGridMaxSession(grid)
-    val colors = if (isDark) WIDGET_COURSE_COLORS_DARK else WIDGET_COURSE_COLORS
 
     Column(modifier = GlanceModifier.fillMaxSize()) {
         // Header bar
@@ -232,7 +238,7 @@ private fun WeekGridContent(
                                 val cell = grid["$day-$session"]
                                 if (cell != null && cell.entry.sessionStart == session) {
                                     val cellHeight = ROW_HEIGHT * cell.rowSpan
-                                    CourseCell(cell, colors, GlanceModifier.fillMaxWidth().height(cellHeight).padding(1.dp))
+                                    CourseCell(cell, isDark, GlanceModifier.fillMaxWidth().height(cellHeight).padding(1.dp))
                                     session += cell.rowSpan
                                 } else if (cell != null) {
                                     session++
@@ -283,10 +289,10 @@ private fun truncateName(name: String, maxLen: Int = 6): String {
 @Composable
 private fun CourseCell(
     cell: WidgetGridCell,
-    colors: List<WidgetCourseColor>,
+    isDark: Boolean,
     modifier: GlanceModifier,
 ) {
-    val c = colors[cell.entry.colorIndex % colors.size]
+    val c = cell.entry.paletteColor(isDark)
     val bgColor = ColorProvider(c.bg, c.bg)
     val borderColor = ColorProvider(c.border, c.border)
     val textColor = ColorProvider(c.text, c.text)

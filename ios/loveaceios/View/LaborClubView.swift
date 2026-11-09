@@ -8,6 +8,10 @@ struct LaborClubView: View {
     @State private var showScanner = false
     @Environment(\.wideLayout) private var wideLayout
     @State private var wideSelectedActivity: LaborClubActivity?
+    @State private var expandedAvailable = false
+    @State private var expandedFull = false
+    @State private var expandedNotStarted = false
+    @State private var expandedExpired = false
 
     var body: some View {
         NavigationStack {
@@ -135,6 +139,8 @@ struct LaborClubView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.blue.opacity(0.08), in: .rect(cornerRadius: 8))
                 }
+                Text("点击活动可以查看详情（包含报名时间和教室）")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             .padding(.vertical, 4)
         }
@@ -206,23 +212,39 @@ struct LaborClubView: View {
     @ViewBuilder
     private var addActivitiesSection: some View {
         if !vm.availableActivities.isEmpty {
-            Section("可报名 (\(vm.availableActivities.count))") {
-                ForEach(vm.availableActivities) { a in activityRow(a, showApply: true) }
+            Section {
+                DisclosureGroup(isExpanded: $expandedAvailable) {
+                    ForEach(vm.availableActivities) { a in activityRow(a, showApply: true) }
+                } label: {
+                    Text("可报名 (\(vm.availableActivities.count))").fontWeight(.medium)
+                }
             }
         }
         if !vm.fullActivities.isEmpty {
-            Section("已满员 (\(vm.fullActivities.count))") {
-                ForEach(vm.fullActivities) { a in activityRow(a) }
+            Section {
+                DisclosureGroup(isExpanded: $expandedFull) {
+                    ForEach(vm.fullActivities) { a in activityRow(a) }
+                } label: {
+                    Text("已满员 (\(vm.fullActivities.count))").fontWeight(.medium)
+                }
             }
         }
         if !vm.notStartedActivities.isEmpty {
-            Section("未开始报名 (\(vm.notStartedActivities.count))") {
-                ForEach(vm.notStartedActivities) { a in activityRow(a) }
+            Section {
+                DisclosureGroup(isExpanded: $expandedNotStarted) {
+                    ForEach(vm.notStartedActivities) { a in activityRow(a) }
+                } label: {
+                    Text("未开始报名 (\(vm.notStartedActivities.count))").fontWeight(.medium)
+                }
             }
         }
         if !vm.expiredActivities.isEmpty {
-            Section("已过期 (\(vm.expiredActivities.count))") {
-                ForEach(vm.expiredActivities.prefix(20)) { a in activityRow(a) }
+            Section {
+                DisclosureGroup(isExpanded: $expandedExpired) {
+                    ForEach(vm.expiredActivities.prefix(20)) { a in activityRow(a) }
+                } label: {
+                    Text("已过期 (\(vm.expiredActivities.count))").fontWeight(.medium)
+                }
             }
         }
         if vm.availableActivities.isEmpty && vm.fullActivities.isEmpty && vm.notStartedActivities.isEmpty && vm.expiredActivities.isEmpty {

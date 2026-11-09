@@ -57,6 +57,7 @@ private fun Content(state: WidgetState, isDark: Boolean) {
             is WidgetState.Vacation -> VacationContent(state)
             is WidgetState.InSession -> DayScheduleContent(state, isDark)
             is WidgetState.NoCourseToday -> NoCourseContent(state, isDark)
+            is WidgetState.ExamWeek -> ExamWeekContent(state)
             is WidgetState.NoCache, is WidgetState.NotLoggedIn -> PlaceholderContent(
                 "📚", "等待数据同步", "点击打开 App 加载课表",
             )
@@ -84,6 +85,12 @@ private fun VacationContent(state: WidgetState.Vacation) {
                 style = TextStyle(color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium),
             )
         }
+        state.nextExam?.let { exam ->
+            Spacer(GlanceModifier.height(10.dp))
+            Text("下一场考试", style = TextStyle(color = OnSurfaceVariant, fontSize = 10.sp))
+            Spacer(GlanceModifier.height(4.dp))
+            ExamCardBlock(exam)
+        }
     }
 }
 
@@ -108,8 +115,6 @@ private fun PlaceholderContent(icon: String, title: String, subtitle: String) {
 
 @Composable
 private fun DayScheduleContent(state: WidgetState.InSession, isDark: Boolean) {
-    val colors = if (isDark) WIDGET_COURSE_COLORS_DARK else WIDGET_COURSE_COLORS
-
     Column(modifier = GlanceModifier.fillMaxSize()) {
         // Header
         HeaderBar(
@@ -124,7 +129,7 @@ private fun DayScheduleContent(state: WidgetState.InSession, isDark: Boolean) {
 
         Box(GlanceModifier.fillMaxWidth().height(1.dp).padding(horizontal = 8.dp).background(Outline)) {}
 
-        if (!state.hasCourseData) {
+        if (state.todayCourses.isEmpty()) {
             PlaceholderContent("📚", "点击进入课程表", "尚未加载课程数据")
         } else {
             val clickAction = actionStartActivity<MainActivity>(
@@ -138,7 +143,7 @@ private fun DayScheduleContent(state: WidgetState.InSession, isDark: Boolean) {
             ) {
                 state.todayCourses.forEach { course ->
                     Box(modifier = GlanceModifier.clickable(clickAction)) {
-                        CourseCard(course, colors)
+                        CourseCard(course, isDark)
                     }
                 }
             }
@@ -159,8 +164,6 @@ private fun DayScheduleContent(state: WidgetState.InSession, isDark: Boolean) {
 
 @Composable
 private fun NoCourseContent(state: WidgetState.NoCourseToday, isDark: Boolean) {
-    val colors = if (isDark) WIDGET_COURSE_COLORS_DARK else WIDGET_COURSE_COLORS
-
     Column(modifier = GlanceModifier.fillMaxSize()) {
         HeaderBar(
             weekText = "第${state.currentWeek}周",
@@ -178,15 +181,18 @@ private fun NoCourseContent(state: WidgetState.NoCourseToday, isDark: Boolean) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("😴", style = TextStyle(fontSize = 32.sp))
+            Text(if (state.todayFinished) "✅" else "😴", style = TextStyle(fontSize = 32.sp))
             Spacer(GlanceModifier.height(6.dp))
-            Text("今日无课", style = TextStyle(color = OnSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold))
+            Text(
+                if (state.todayFinished) "今日课程已结束" else "今日无课",
+                style = TextStyle(color = OnSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold),
+            )
 
             if (state.nextCourse != null && state.nextCourseDay != null) {
                 Spacer(GlanceModifier.height(10.dp))
                 Text("下一节课", style = TextStyle(color = OnSurfaceVariant, fontSize = 10.sp))
                 Spacer(GlanceModifier.height(4.dp))
-                NextCourseCard(state.nextCourseDay, state.nextCourse, colors)
+                NextCourseCard(state.nextCourseDay, state.nextCourse, isDark)
             }
         }
 
@@ -198,6 +204,60 @@ private fun NoCourseContent(state: WidgetState.NoCourseToday, isDark: Boolean) {
                 )
             }
         }
+    }
+}
+
+// ── 考试 ──
+
+@Composable
+internal fun ExamWeekContent(state: WidgetState.ExamWeek) {
+    Column(
+        modifier = GlanceModifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("📝", style = TextStyle(fontSize = 28.sp))
+        Spacer(GlanceModifier.height(6.dp))
+        Text("考试周", style = TextStyle(color = OnSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold))
+        Spacer(GlanceModifier.height(10.dp))
+        Text("下一场考试", style = TextStyle(color = OnSurfaceVariant, fontSize = 10.sp))
+        Spacer(GlanceModifier.height(4.dp))
+        ExamCardBlock(state.nextExam)
+    }
+}
+
+@Composable
+internal fun ExamCardBlock(exam: WidgetExamCard) {
+    Column(
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .cornerRadius(10.dp)
+            .background(PrimaryContainer)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            exam.courseName,
+            style = TextStyle(color = OnPrimaryContainer, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+            maxLines = 1,
+        )
+        Spacer(GlanceModifier.height(2.dp))
+        Text(
+            listOf(exam.dateText(), exam.timeText).filter { it.isNotEmpty() }.joinToString(" "),
+            style = TextStyle(color = OnPrimaryContainer, fontSize = 10.sp),
+        )
+        if (exam.location.isNotEmpty()) {
+            Text(
+                exam.location,
+                style = TextStyle(color = OnPrimaryContainer, fontSize = 10.sp),
+                maxLines = 2,
+            )
+        }
+        Spacer(GlanceModifier.height(2.dp))
+        Text(
+            exam.daysText(),
+            style = TextStyle(color = OnPrimaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+        )
     }
 }
 
@@ -270,8 +330,8 @@ private fun WeekdayIndicatorRow(weekDays: List<WeekDayInfo>) {
 }
 
 @Composable
-private fun CourseCard(course: WidgetCourseEntry, colors: List<WidgetCourseColor>) {
-    val c = colors[course.colorIndex % colors.size]
+private fun CourseCard(course: WidgetCourseEntry, isDark: Boolean) {
+    val c = course.paletteColor(isDark)
     val bgColor = ColorProvider(c.bg, c.bg)
     val borderColor = ColorProvider(c.border, c.border)
     val textColor = ColorProvider(c.text, c.text)
@@ -338,9 +398,9 @@ private fun CourseCard(course: WidgetCourseEntry, colors: List<WidgetCourseColor
 private fun NextCourseCard(
     dayLabel: String,
     course: WidgetCourseEntry,
-    colors: List<WidgetCourseColor>,
+    isDark: Boolean,
 ) {
-    val c = colors[course.colorIndex % colors.size]
+    val c = course.paletteColor(isDark)
     val bgColor = ColorProvider(c.bg, c.bg)
     val borderColor = ColorProvider(c.border, c.border)
     val textColor = ColorProvider(c.text, c.text)
@@ -372,7 +432,9 @@ private fun NextCourseCard(
                 maxLines = 1,
             )
             Text(
-                "${course.sessionText} · ${course.location}",
+                (if (course.isExam) listOf("考试", course.timeText, course.location)
+                else listOf(course.sessionText, course.location))
+                    .filter { it.isNotEmpty() }.joinToString(" · "),
                 style = TextStyle(color = OnSurfaceVariant, fontSize = 10.sp),
                 maxLines = 1,
             )

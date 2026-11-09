@@ -32,7 +32,7 @@ enum SchoolCalendar {
         return "\(clock(span.start))–\(clock(span.end))"
     }
 
-    private static func clock(_ minute: Int) -> String {
+    static func clock(_ minute: Int) -> String {
         String(format: "%02d:%02d", minute / 60, minute % 60)
     }
 }
@@ -65,13 +65,6 @@ struct SemesterItem: Codable, Identifiable, Equatable {
         }
         return name.isEmpty ? code : name
     }
-
-    /// 学期第一天（当天 0 点），startDate 格式 yyyy-MM-dd
-    var firstDay: Date? {
-        let parts = startDate.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
-    }
 }
 
 struct SemesterData: Codable {
@@ -90,25 +83,59 @@ struct SemesterData: Codable {
     }
 }
 
-/// 某一天所处的学期阶段。周次与假期都由学期开始日期现算，不依赖 App 何时打开。
+/// yyyy-MM-dd 与当天 0 点的换算（学期开始日与考试日期共用）
+enum SchoolDay {
+    static func date(_ text: String, calendar: Calendar = .current) -> Date? {
+        let parts = text.prefix(10).split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+}
+
+/// 某一天所处的学期阶段。周次、假期与考试周都由学期开始日期与快照现算，不依赖 App 何时打开。
 enum TermPhase: Equatable {
     case vacation(nextName: String?, nextStartDate: String?, daysUntilStart: Int?)
     case inSession(name: String, week: Int, totalWeeks: Int, isEnding: Bool)
+    /// 教学结束后仍有今天或以后的考试：考试周，携带最近一场考试与距今天数
+    case examWeek(exam: WidgetExamEntry, daysUntil: Int)
 }
 
 enum SchoolTerm {
-    /// 某天的学期阶段；学期列表为空时返回 nil（未知，需要同步）
-    static func phase(on date: Date, semesters: [SemesterItem], calendar: Calendar = .current) -> TermPhase? {
+    /// 某天的学期阶段；学期列表为空时返回 nil（未知，需要同步）。
+    /// 教学结束 = 开始日 + 周数 × 7 天（第 weeks+1 周的周一）。教学期内（含第 weeks 周末）为 inSession；
+    /// 教学结束后若有今天或以后的考试为 examWeek；其余为 vacation。
+    static func phase(
+        on date: Date, semesters: [SemesterItem], exams: [WidgetExamEntry], calendar: Calendar = .current
+    ) -> TermPhase? {
         guard !semesters.isEmpty else { return nil }
         let today = calendar.startOfDay(for: date)
+        let base = basePhase(on: today, semesters: semesters, calendar: calendar)
+        let teachingEnded = semesters.contains { semester in
+            guard let end = teachingEnd(of: semester, calendar: calendar) else { return false }
+            return end <= today
+        }
+        guard case .vacation = base, teachingEnded,
+              let exam = nextExam(from: today, exams: exams, calendar: calendar),
+              let examDay = SchoolDay.date(exam.date, calendar: calendar) else { return base }
+        let days = calendar.dateComponents([.day], from: today, to: examDay).day ?? 0
+        return .examWeek(exam: exam, daysUntil: days)
+    }
+
+    /// 教学结束日（第 weeks+1 周的周一）；开始日无法解析时为 nil
+    static func teachingEnd(of semester: SemesterItem, calendar: Calendar = .current) -> Date? {
+        guard let start = SchoolDay.date(semester.startDate, calendar: calendar) else { return nil }
+        return calendar.date(byAdding: .day, value: semester.weeks * 7, to: start)
+    }
+
+    private static func basePhase(on today: Date, semesters: [SemesterItem], calendar: Calendar) -> TermPhase {
         for semester in semesters.sorted(by: { $0.startDate < $1.startDate }) {
-            guard let start = semester.firstDay else { continue }
+            guard let start = SchoolDay.date(semester.startDate, calendar: calendar),
+                  let end = teachingEnd(of: semester, calendar: calendar) else { continue }
             if today < start {
                 let days = calendar.dateComponents([.day], from: today, to: start).day ?? 0
                 return .vacation(nextName: semester.displayName(), nextStartDate: semester.startDate, daysUntilStart: days)
             }
-            guard let end = calendar.date(byAdding: .day, value: semester.weeks * 7 - 1, to: start) else { continue }
-            if today <= end {
+            if today < end {
                 let daysSinceStart = calendar.dateComponents([.day], from: start, to: today).day ?? 0
                 let week = max(1, daysSinceStart / 7 + 1)
                 return .inSession(
@@ -120,6 +147,19 @@ enum SchoolTerm {
             }
         }
         return .vacation(nextName: nil, nextStartDate: nil, daysUntilStart: nil)
+    }
+
+    /// 今天及以后最近的一场考试（先按日期，再按开始时间）；日期无法解析的忽略
+    private static func nextExam(from today: Date, exams: [WidgetExamEntry], calendar: Calendar) -> WidgetExamEntry? {
+        exams
+            .compactMap { exam -> (exam: WidgetExamEntry, day: Date)? in
+                guard let day = SchoolDay.date(exam.date, calendar: calendar), day >= today else { return nil }
+                return (exam, day)
+            }
+            .min { lhs, rhs in
+                if lhs.day != rhs.day { return lhs.day < rhs.day }
+                return (lhs.exam.minuteSpan?.start ?? Int.max) < (rhs.exam.minuteSpan?.start ?? Int.max)
+            }?.exam
     }
 }
 
@@ -150,6 +190,97 @@ extension WidgetCourseEntry: Equatable {
     }
 }
 
+/// 一场考试（教务考试查询）。date 为 yyyy-MM-dd；timeText 为学校原文（如 "14:00-16:00"），不一定能解析
+struct WidgetExamEntry: Codable, Identifiable, Equatable {
+    var id: String { "\(date)_\(courseName)_\(timeText)" }
+    let courseName: String
+    let date: String
+    let timeText: String
+    let location: String
+
+    /// 学校原文中的开始、结束分钟（自当天 0:00 起）；无法解析出两个时刻时为 nil
+    var minuteSpan: (start: Int, end: Int)? {
+        let minutes = timeText.matches(of: #/(\d{1,2}):(\d{2})/#).compactMap { match -> Int? in
+            guard let hour = Int(match.output.1), let minute = Int(match.output.2) else { return nil }
+            return hour * 60 + minute
+        }
+        guard minutes.count >= 2, minutes[1] > minutes[0] else { return nil }
+        return (minutes[0], minutes[1])
+    }
+
+    /// 界面上的时间：能解析时为 HH:mm–HH:mm，否则保留学校原文
+    var rangeText: String {
+        guard let span = minuteSpan else { return timeText.isEmpty ? "时间待定" : timeText }
+        return "\(SchoolCalendar.clock(span.start))–\(SchoolCalendar.clock(span.end))"
+    }
+}
+
+/// 课表中的一项：课程（按节次）或考试（按时刻）。今日列表、下一项、灵动岛与时间线共用同一套切换规则。
+enum ScheduleItem: Identifiable, Equatable {
+    case course(WidgetCourseEntry)
+    case exam(WidgetExamEntry)
+
+    var id: String {
+        switch self {
+        case .course(let course): return "course-\(course.id)"
+        case .exam(let exam): return "exam-\(exam.id)"
+        }
+    }
+
+    var isExam: Bool {
+        if case .exam = self { return true }
+        return false
+    }
+
+    var courseName: String {
+        switch self {
+        case .course(let course): return course.courseName
+        case .exam(let exam): return exam.courseName
+        }
+    }
+
+    var location: String {
+        switch self {
+        case .course(let course): return course.location
+        case .exam(let exam): return exam.location
+        }
+    }
+
+    /// 开始、结束分钟（自当天 0:00 起）；考试时间无法解析时为 nil
+    var minuteSpan: (start: Int, end: Int)? {
+        switch self {
+        case .course(let course): return SchoolCalendar.span(of: course)
+        case .exam(let exam): return exam.minuteSpan
+        }
+    }
+
+    /// 列表中的时间范围
+    var rangeText: String {
+        switch self {
+        case .course(let course): return SchoolCalendar.rangeText(course)
+        case .exam(let exam): return exam.rangeText
+        }
+    }
+
+    /// 开始时间文字
+    var startText: String {
+        switch self {
+        case .course(let course): return SchoolCalendar.startText(course)
+        case .exam(let exam):
+            guard let span = exam.minuteSpan else { return exam.rangeText }
+            return SchoolCalendar.clock(span.start)
+        }
+    }
+
+    /// 灵动岛与锁屏的副文字
+    var sessionText: String {
+        switch self {
+        case .course(let course): return "\(course.startSession)–\(course.endSession) 节 · \(rangeText)"
+        case .exam: return "考试 · \(rangeText)"
+        }
+    }
+}
+
 /// App 写入、小组件只读的快照。拉取成功才整体覆盖。
 struct WidgetSnapshot: Codable {
     static let currentSchemaVersion = 2
@@ -161,14 +292,22 @@ struct WidgetSnapshot: Codable {
     let semesters: [SemesterItem]
     let termCode: String
     let courses: [WidgetCourseEntry]
+    /// 考试；旧快照没有此字段时为 nil，含义与空数组相同（没有考试）
+    let exams: [WidgetExamEntry]?
 
-    init(userId: String, updatedAt: Date, semesters: [SemesterItem], termCode: String, courses: [WidgetCourseEntry]) {
+    var examList: [WidgetExamEntry] { exams ?? [] }
+
+    init(
+        userId: String, updatedAt: Date, semesters: [SemesterItem], termCode: String,
+        courses: [WidgetCourseEntry], exams: [WidgetExamEntry]? = nil
+    ) {
         self.schemaVersion = Self.currentSchemaVersion
         self.userId = userId
         self.updatedAt = updatedAt
         self.semesters = semesters
         self.termCode = termCode
         self.courses = courses
+        self.exams = exams
     }
 }
 
@@ -203,17 +342,19 @@ enum WidgetSnapshotStore {
 
 // MARK: - 单个时刻的展示状态（纯数据，小组件与提醒共用）
 
-struct NextDayCourse {
-    let course: WidgetCourseEntry
+/// 今日无项目时，之后最近的一项（课程或考试）
+struct NextDayItem {
+    let item: ScheduleItem
     /// "明天" 或 "周X"
     let label: String
 }
 
-struct LiveCourse {
-    let course: WidgetCourseEntry
+/// 处于灵动岛时段（提前量内或进行中）的项目
+struct LiveItem {
+    let item: ScheduleItem
     let start: Date
     let end: Date
-    /// 同一天同一节课的稳定标识，用于避免重复创建灵动岛
+    /// 同一天同一项的稳定标识，用于避免重复创建灵动岛
     let key: String
 }
 
@@ -221,17 +362,17 @@ struct WidgetScheduleState {
     let date: Date
     /// nil 表示未同步（快照缺失或学期列表为空）
     let phase: TermPhase?
-    /// 今日全部课程，按节次排序
-    let today: [WidgetCourseEntry]
-    /// 今日尚未结束的课程（含进行中）
-    let upcoming: [WidgetCourseEntry]
-    let inProgress: WidgetCourseEntry?
-    /// 进行中或即将开始的课程
-    let next: WidgetCourseEntry?
-    /// 今日无课时，之后最近的一节课
-    let nextDay: NextDayCourse?
-    /// 处于灵动岛时段（提前量内或上课中）的课程
-    let liveCourse: LiveCourse?
+    /// 今日全部课程与考试，按开始时间排序
+    let today: [ScheduleItem]
+    /// 今日尚未结束的项目（含进行中）
+    let upcoming: [ScheduleItem]
+    let inProgress: ScheduleItem?
+    /// 下一项：进行中的项目，否则结束时间未到的最早项目。上一项结束后即切换到下一项（考试同样）
+    let next: ScheduleItem?
+    /// 今日无项目时，之后最近的一项
+    let nextDay: NextDayItem?
+    /// 处于灵动岛时段（提前量内或进行中）的项目
+    let liveItem: LiveItem?
     let lastSyncedAt: Date?
 
     var isSynced: Bool { phase != nil }
@@ -250,16 +391,17 @@ enum WidgetScheduleBuilder {
         guard let snapshot else {
             return WidgetScheduleState(
                 date: date, phase: nil, today: [], upcoming: [], inProgress: nil, next: nil,
-                nextDay: nil, liveCourse: nil, lastSyncedAt: nil
+                nextDay: nil, liveItem: nil, lastSyncedAt: nil
             )
         }
-        let phase = SchoolTerm.phase(on: date, semesters: snapshot.semesters, calendar: calendar)
+        let phase = SchoolTerm.phase(on: date, semesters: snapshot.semesters, exams: snapshot.examList, calendar: calendar)
         let dayStart = calendar.startOfDay(for: date)
-        let today = coursesForDay(dayStart, phase: phase, snapshot: snapshot, calendar: calendar)
+        let today = itemsForDay(dayStart, phase: phase, snapshot: snapshot, calendar: calendar)
         let minute = minuteOfDay(date, calendar)
-        let upcoming = today.filter { (SchoolCalendar.span(of: $0)?.end ?? Int.max) > minute }
-        let inProgress = today.first { course in
-            guard let span = SchoolCalendar.span(of: course) else { return false }
+        // 结束时刻未到的项目；无法解析时间的考试没有结束时刻，一直保留到当天结束
+        let upcoming = today.filter { ($0.minuteSpan?.end ?? Int.max) > minute }
+        let inProgress = today.first { item in
+            guard let span = item.minuteSpan else { return false }
             return minute >= span.start && minute < span.end
         }
         return WidgetScheduleState(
@@ -269,34 +411,40 @@ enum WidgetScheduleBuilder {
             upcoming: upcoming,
             inProgress: inProgress,
             next: inProgress ?? upcoming.first,
-            nextDay: today.isEmpty ? nextCourse(after: dayStart, snapshot: snapshot, calendar: calendar) : nil,
-            liveCourse: liveCourse(at: date, snapshot: snapshot, calendar: calendar),
+            nextDay: today.isEmpty ? nextItem(after: dayStart, snapshot: snapshot, calendar: calendar) : nil,
+            liveItem: liveItem(at: date, snapshot: snapshot, calendar: calendar),
             lastSyncedAt: snapshot.updatedAt
         )
     }
 
-    /// 某天（0 点）的课程：仅学期内生效，按周次过滤，按节次排序
-    static func coursesForDay(
+    /// 某天（0 点）的课程与考试：仅学期内生效；课程按周次过滤；按开始时间排序，无时间的考试排最后
+    static func itemsForDay(
         _ dayStart: Date, phase: TermPhase?, snapshot: WidgetSnapshot, calendar: Calendar = .current
-    ) -> [WidgetCourseEntry] {
+    ) -> [ScheduleItem] {
         guard case .inSession(_, let week, _, _)? = phase else { return [] }
         let weekday = calendar.component(.weekday, from: dayStart)
         let isoWeekday = weekday == 1 ? 7 : weekday - 1
-        return snapshot.courses
+        let courses = snapshot.courses
             .filter { $0.dayOfWeek == isoWeekday && ($0.classWeek.isEmpty || $0.isActiveInWeek(week)) }
-            .sorted { $0.startSession < $1.startSession }
+            .map(ScheduleItem.course)
+        let exams = snapshot.examList
+            .filter { SchoolDay.date($0.date, calendar: calendar) == dayStart }
+            .map(ScheduleItem.exam)
+        return (courses + exams).sorted { lhs, rhs in
+            ((lhs.minuteSpan?.start ?? Int.max), lhs.id) < ((rhs.minuteSpan?.start ?? Int.max), rhs.id)
+        }
     }
 
-    /// 时间线需要切换的时刻：now，以及今天、明天每节课的开始与结束，以及明天 0 点
+    /// 时间线需要切换的时刻：now，以及今天、明天每项的开始与结束，以及明天 0 点
     static func transitionDates(from now: Date, snapshot: WidgetSnapshot?, calendar: Calendar = .current) -> [Date] {
         guard let snapshot,
               let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
         else { return [now] }
         var dates: Set<Date> = [now, startOfTomorrow]
         for dayStart in [calendar.startOfDay(for: now), startOfTomorrow] {
-            let phase = SchoolTerm.phase(on: dayStart, semesters: snapshot.semesters, calendar: calendar)
-            for course in coursesForDay(dayStart, phase: phase, snapshot: snapshot, calendar: calendar) {
-                guard let span = SchoolCalendar.span(of: course) else { continue }
+            let phase = SchoolTerm.phase(on: dayStart, semesters: snapshot.semesters, exams: snapshot.examList, calendar: calendar)
+            for item in itemsForDay(dayStart, phase: phase, snapshot: snapshot, calendar: calendar) {
+                guard let span = item.minuteSpan else { continue }
                 for minute in [span.start, span.end] {
                     if let time = calendar.date(byAdding: .minute, value: minute, to: dayStart), time > now {
                         dates.insert(time)
@@ -307,30 +455,30 @@ enum WidgetScheduleBuilder {
         return dates.sorted()
     }
 
-    /// 当前时刻是否处于灵动岛时段：课前 reminderLeadMinutes 分钟起，到下课为止
-    static func liveCourse(at now: Date, snapshot: WidgetSnapshot?, calendar: Calendar = .current) -> LiveCourse? {
+    /// 当前时刻是否处于灵动岛时段：开始前 reminderLeadMinutes 分钟起，到结束为止。课程与考试共用此规则
+    static func liveItem(at now: Date, snapshot: WidgetSnapshot?, calendar: Calendar = .current) -> LiveItem? {
         guard let snapshot else { return nil }
         let dayStart = calendar.startOfDay(for: now)
-        let phase = SchoolTerm.phase(on: dayStart, semesters: snapshot.semesters, calendar: calendar)
+        let phase = SchoolTerm.phase(on: dayStart, semesters: snapshot.semesters, exams: snapshot.examList, calendar: calendar)
         let lead = TimeInterval(reminderLeadMinutes * 60)
         let parts = calendar.dateComponents([.year, .month, .day], from: dayStart)
-        for course in coursesForDay(dayStart, phase: phase, snapshot: snapshot, calendar: calendar) {
-            guard let span = SchoolCalendar.span(of: course),
+        for item in itemsForDay(dayStart, phase: phase, snapshot: snapshot, calendar: calendar) {
+            guard let span = item.minuteSpan,
                   let start = calendar.date(byAdding: .minute, value: span.start, to: dayStart),
                   let end = calendar.date(byAdding: .minute, value: span.end, to: dayStart),
                   now >= start.addingTimeInterval(-lead), now < end else { continue }
-            let key = "\(parts.year ?? 0)\(parts.month ?? 0)\(parts.day ?? 0)-\(course.startSession)-\(course.courseName)"
-            return LiveCourse(course: course, start: start, end: end, key: key)
+            let key = "\(parts.year ?? 0)\(parts.month ?? 0)\(parts.day ?? 0)-\(item.id)"
+            return LiveItem(item: item, start: start, end: end, key: key)
         }
         return nil
     }
 
-    private static func nextCourse(after dayStart: Date, snapshot: WidgetSnapshot, calendar: Calendar) -> NextDayCourse? {
+    private static func nextItem(after dayStart: Date, snapshot: WidgetSnapshot, calendar: Calendar) -> NextDayItem? {
         for offset in 1...14 {
             guard let day = calendar.date(byAdding: .day, value: offset, to: dayStart) else { continue }
-            let phase = SchoolTerm.phase(on: day, semesters: snapshot.semesters, calendar: calendar)
-            if let course = coursesForDay(day, phase: phase, snapshot: snapshot, calendar: calendar).first {
-                return NextDayCourse(course: course, label: offset == 1 ? "明天" : weekdayText(day, calendar: calendar))
+            let phase = SchoolTerm.phase(on: day, semesters: snapshot.semesters, exams: snapshot.examList, calendar: calendar)
+            if let item = itemsForDay(day, phase: phase, snapshot: snapshot, calendar: calendar).first {
+                return NextDayItem(item: item, label: offset == 1 ? "明天" : weekdayText(day, calendar: calendar))
             }
         }
         return nil
@@ -367,7 +515,7 @@ enum CourseLiveActivityController {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
         guard ActivityAuthorizationInfo().areActivitiesEnabled,
-              let live = WidgetScheduleBuilder.liveCourse(at: now, snapshot: WidgetSnapshotStore.load()) else { return }
+              let live = WidgetScheduleBuilder.liveItem(at: now, snapshot: WidgetSnapshotStore.load()) else { return }
         let showing = Activity<CourseActivityAttributes>.activities
         guard !showing.contains(where: { $0.attributes.key == live.key }) else { return }
         for activity in showing {
@@ -375,9 +523,9 @@ enum CourseLiveActivityController {
         }
         let attributes = CourseActivityAttributes(
             key: live.key,
-            courseName: live.course.courseName,
-            location: live.course.location,
-            sessionText: "\(live.course.startSession)–\(live.course.endSession) 节 · \(SchoolCalendar.rangeText(live.course))"
+            courseName: live.item.courseName,
+            location: live.item.location,
+            sessionText: live.item.sessionText
         )
         let state = CourseActivityAttributes.ContentState(startDate: live.start, endDate: live.end)
         // 系统拒绝（权限、数量上限、后台限制）时静默忽略，下次同步再试

@@ -12,9 +12,9 @@ struct ContentView: View {
         )
     }
 
-    /// 回到前台或会话建立后刷新：课表快照（节流）、提醒窗口、灵动岛
-    private func refreshWidgetAndReminders() async {
-        await WidgetSyncCoordinator.sync(authVM: authVM)
+    /// 回到前台（节流）或会话建立（强制预取，进入首页时不受 30 分钟节流）后刷新：课表与考试快照、提醒、灵动岛
+    private func refreshWidgetAndReminders(force: Bool = false) async {
+        await WidgetSyncCoordinator.sync(authVM: authVM, force: force)
         await ClassReminderScheduler.reschedule(snapshot: WidgetSnapshotStore.load())
         await CourseLiveActivityController.sync()
     }
@@ -38,7 +38,7 @@ struct ContentView: View {
         }
         .animation(.default, value: authVM.state == .authenticated)
         .task { announcementVM.loadAnnouncements() }
-        .task(id: authVM.sessionGeneration) { await refreshWidgetAndReminders() }
+        .task(id: authVM.sessionGeneration) { await refreshWidgetAndReminders(force: true) }
         .task(id: authVM.state == .authenticated) {
             // 前台期间每分钟检查一次灵动岛时段（提前量内或上课中）
             guard authVM.state == .authenticated else { return }

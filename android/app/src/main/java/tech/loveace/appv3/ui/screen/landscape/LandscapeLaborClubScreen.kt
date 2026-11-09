@@ -58,6 +58,10 @@ fun LandscapeLaborClubScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDetailActivity by remember { mutableStateOf<LaborClubActivity?>(null) }
+    var expandedAvailable by remember { mutableStateOf(false) }
+    var expandedFull by remember { mutableStateOf(false) }
+    var expandedNotStarted by remember { mutableStateOf(false) }
+    var expandedExpired by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     var pendingCropUri by remember { mutableStateOf<Uri?>(null) }
@@ -147,6 +151,8 @@ fun LandscapeLaborClubScreen(
                                     AppLinearProgressIndicator(progress = { (progress.progress / 100.0).coerceIn(0.0, 1.0).toFloat() }, modifier = Modifier.fillMaxWidth().height(8.dp))
                                     Spacer(Modifier.height(4.dp))
                                     Text("${"%.0f".format(progress.progress)}%", style = RibbonNumeric.Caption, color = onVariant.copy(alpha = 0.7f))
+                                    Spacer(Modifier.height(8.dp))
+                                    Text("点击活动可以查看详情（包含报名时间和教室）", style = MaterialTheme.typography.labelSmall, color = onVariant.copy(alpha = 0.7f))
                                 }
                             }
                         }
@@ -259,23 +265,23 @@ fun LandscapeLaborClubScreen(
                                     item { EmptyScreen("当前没有可报名的活动") }
                                 } else {
                                     if (available.isNotEmpty()) {
-                                        item { Text("可报名 (${available.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
-                                        items(available, key = { it.id }) { a -> LandscapeActivityCard(a, showApplyButton = true, isJoined = state.isActivityJoined(a.id), onApply = { vm.applyActivity(a.id) }, onClick = { showDetailActivity = a }) }
+                                        item { ActivityDrawerHeader("可报名", available.size, expandedAvailable) { expandedAvailable = !expandedAvailable } }
+                                        if (expandedAvailable) items(available, key = { it.id }) { a -> LandscapeActivityCard(a, showApplyButton = true, isJoined = state.isActivityJoined(a.id), onApply = { vm.applyActivity(a.id) }, onClick = { showDetailActivity = a }) }
                                     }
                                     val full = state.fullActivities
                                     if (full.isNotEmpty()) {
-                                        item { Spacer(Modifier.height(8.dp)); Text("已满员 (${full.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
-                                        items(full, key = { it.id }) { a -> LandscapeActivityCard(a, onClick = { showDetailActivity = a }) }
+                                        item { Spacer(Modifier.height(8.dp)); ActivityDrawerHeader("已满员", full.size, expandedFull) { expandedFull = !expandedFull } }
+                                        if (expandedFull) items(full, key = { it.id }) { a -> LandscapeActivityCard(a, onClick = { showDetailActivity = a }) }
                                     }
                                     val notStarted = state.notStartedActivities
                                     if (notStarted.isNotEmpty()) {
-                                        item { Spacer(Modifier.height(8.dp)); Text("未开始报名 (${notStarted.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
-                                        items(notStarted, key = { it.id }) { a -> LandscapeActivityCard(a, onClick = { showDetailActivity = a }) }
+                                        item { Spacer(Modifier.height(8.dp)); ActivityDrawerHeader("未开始报名", notStarted.size, expandedNotStarted) { expandedNotStarted = !expandedNotStarted } }
+                                        if (expandedNotStarted) items(notStarted, key = { it.id }) { a -> LandscapeActivityCard(a, onClick = { showDetailActivity = a }) }
                                     }
                                     val expired = state.expiredActivities
                                     if (expired.isNotEmpty()) {
-                                        item { Spacer(Modifier.height(8.dp)); Text("已过期 (${expired.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
-                                        items(expired, key = { it.id }) { a -> LandscapeActivityCard(a, onClick = { showDetailActivity = a }) }
+                                        item { Spacer(Modifier.height(8.dp)); ActivityDrawerHeader("已过期", expired.size, expandedExpired) { expandedExpired = !expandedExpired } }
+                                        if (expandedExpired) items(expired, key = { it.id }) { a -> LandscapeActivityCard(a, onClick = { showDetailActivity = a }) }
                                     }
                                 }
                             }
@@ -289,6 +295,17 @@ fun LandscapeLaborClubScreen(
     // 活动详情对话框
     showDetailActivity?.let { activity ->
         LandscapeActivityDetailDialog(activity, state, vm) { showDetailActivity = null }
+    }
+}
+
+@Composable
+private fun ActivityDrawerHeader(title: String, count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("$title ($count)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, tint = MaterialTheme.colorScheme.primary)
     }
 }
 

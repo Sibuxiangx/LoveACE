@@ -8,47 +8,21 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import tech.loveace.appv3.service.RemoteManifestService
 import tech.loveace.appv3.widget.SemesterDayWidget
+import tech.loveace.appv3.widget.SemesterPhase
 import tech.loveace.appv3.widget.SemesterWeekWidget
 import tech.loveace.appv3.widget.WidgetDataStore
-import tech.loveace.appv3.service.RemoteManifestService
+import tech.loveace.appv3.widget.WidgetExamCard
+import tech.loveace.appv3.widget.WidgetSemesterData
+import tech.loveace.appv3.widget.WidgetSyncHelper
+import tech.loveace.appv3.widget.displayName
+import tech.loveace.appv3.widget.loadWidgetExams
+import tech.loveace.appv3.widget.resolveSemesterPhase
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
-
-// ── 数据模型 ──
-
-@Serializable
-data class SemesterData(
-    val version: Int = 1,
-    @SerialName("updated_at") val updatedAt: String = "",
-    val semesters: List<SemesterItem> = emptyList(),
-)
-
-@Serializable
-data class SemesterItem(
-    val code: String,
-    val name: String,
-    @SerialName("start_date") val startDate: String,
-    val weeks: Int = 18,
-)
-
-private val TERM_NAME_MAP = mapOf("1" to "第一学期（秋季）", "2" to "第二学期（春季）")
-
-fun SemesterItem.displayName(): String {
-    val parts = code.split("-")
-    if (parts.size == 3) {
-        val yearPart = "${parts[0]}-${parts[1]}"
-        val termText = TERM_NAME_MAP[parts[2]] ?: "第${parts[2]}学期"
-        return "${yearPart}学年 $termText"
-    }
-    return name.ifEmpty { code }
-}
-
 
 // ── 状态 ──
 
@@ -67,6 +41,8 @@ sealed class SemesterStatus {
         val remainingWeeks: Int,
         val isEnding: Boolean,
     ) : SemesterStatus()
+    /** 教学结束后仍有未结束的考试 */
+    data class ExamWeek(val nextExam: WidgetExamCard) : SemesterStatus()
     data class Error(val message: String) : SemesterStatus()
 }
 
@@ -85,6 +61,10 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
 
     init {
         loadSemesterInfo()
+        // 首页预取写入新快照后，只从本地缓存重新计算（不触网）
+        viewModelScope.launch {
+            WidgetSyncHelper.snapshotVersion.drop(1).collect { recomputeFromCache() }
+        }
     }
 
     fun loadSemesterInfo() {
@@ -92,10 +72,9 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
             _uiState.value = SemesterUiState(SemesterStatus.Loading)
             try {
                 val rawText = RemoteManifestService.fetchSemesterJson()
-                val data = json.decodeFromString<SemesterData>(rawText)
+                val data = json.decodeFromString<WidgetSemesterData>(rawText)
                 WidgetDataStore.saveSemesterJson(getApplication(), rawText)
-                val status = computeStatus(data)
-                _uiState.value = SemesterUiState(status)
+                _uiState.value = SemesterUiState(computeStatus(data))
                 // 请求刷新 widget
                 SemesterDayWidget().updateAll(getApplication())
                 SemesterWeekWidget().updateAll(getApplication())
@@ -106,38 +85,35 @@ class SemesterViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun computeStatus(data: SemesterData): SemesterStatus {
-        val today = LocalDate.now()
-        val semesters = data.semesters.sortedBy { it.startDate }
-
-        for (sem in semesters) {
-            val start = LocalDate.parse(sem.startDate, DateTimeFormatter.ISO_LOCAL_DATE)
-            val end = start.plusWeeks(sem.weeks.toLong()).minusDays(1)
-            val display = sem.displayName()
-
-            if (today.isBefore(start)) {
-                val daysUntil = ChronoUnit.DAYS.between(today, start)
-                return SemesterStatus.Vacation(
-                    nextSemesterName = display,
-                    nextStartDate = sem.startDate,
-                    daysUntilStart = daysUntil,
-                )
-            }
-
-            if (!today.isBefore(start) && !today.isAfter(end)) {
-                val weekNum = (ChronoUnit.DAYS.between(start, today) / 7 + 1).toInt()
-                val remaining = sem.weeks - weekNum
-                return SemesterStatus.InSession(
-                    semesterName = display,
-                    currentWeek = weekNum,
-                    totalWeeks = sem.weeks,
-                    remainingWeeks = remaining,
-                    isEnding = remaining <= 2,
-                )
-            }
+    private fun recomputeFromCache() {
+        val raw = WidgetDataStore.loadSemesterJson(getApplication()) ?: return
+        try {
+            _uiState.value = SemesterUiState(computeStatus(json.decodeFromString<WidgetSemesterData>(raw)))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to recompute semester status", e)
         }
+    }
 
-        return SemesterStatus.Vacation()
+    private fun computeStatus(data: WidgetSemesterData): SemesterStatus {
+        val exams = loadWidgetExams(getApplication())
+        return when (val phase = resolveSemesterPhase(data.semesters, exams, LocalDate.now())) {
+            is SemesterPhase.Teaching -> {
+                val weeks = phase.semester.weeks
+                SemesterStatus.InSession(
+                    semesterName = phase.semester.displayName(),
+                    currentWeek = phase.weekNum,
+                    totalWeeks = weeks,
+                    remainingWeeks = weeks - phase.weekNum,
+                    isEnding = weeks - phase.weekNum <= 2,
+                )
+            }
+            is SemesterPhase.ExamWeek -> SemesterStatus.ExamWeek(phase.nextExam)
+            is SemesterPhase.Vacation -> SemesterStatus.Vacation(
+                nextSemesterName = phase.nextSemester?.displayName(),
+                nextStartDate = phase.nextSemester?.startDate,
+                daysUntilStart = phase.daysUntilStart,
+            )
+        }
     }
 
     companion object {

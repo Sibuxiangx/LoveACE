@@ -77,7 +77,7 @@ fun HomeScreen(
             item(key = "semester") {
                 when (semStatus) {
                     is SemesterStatus.Loading -> LoadingTile()
-                    is SemesterStatus.Vacation, is SemesterStatus.InSession -> HomeTile(
+                    is SemesterStatus.Vacation, is SemesterStatus.InSession, is SemesterStatus.ExamWeek -> HomeTile(
                         color = MaterialTheme.colorScheme.surfaceContainerLow,
                     ) {
                         SemesterStatusRow(semStatus)

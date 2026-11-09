@@ -186,6 +186,8 @@ private fun ProgressCard(progress: LaborClubProgressInfo) {
                     }
                 }
             }
+            Spacer(Modifier.height(8.dp))
+            Text("点击活动可以查看详情（包含报名时间和教室）", style = MaterialTheme.typography.labelSmall, color = onCard.copy(alpha = 0.78f))
         }
     }
 }
@@ -286,25 +288,25 @@ private fun LazyListScope.addActivitiesContent(state: LaborClubUiState, vm: Labo
     if (available.isNotEmpty()) {
         item {
             ActivityGroup("可报名", "${available.size} 个活动", Icons.Default.AddCircleOutline,
-                ribbonToneColors(RibbonTone.PRIMARY).first, available, showApplyButton = true, state = state, vm = vm, onActivityClick = onActivityClick)
+                ribbonToneColors(RibbonTone.PRIMARY).first, available, showApplyButton = true, state = state, vm = vm, onActivityClick = onActivityClick, initiallyExpanded = false)
         }
     }
     if (full.isNotEmpty()) {
         item {
             ActivityGroup("已满员", "${full.size} 个活动", Icons.Default.Block,
-                ribbonToneColors(RibbonTone.WARNING).first, full, onActivityClick = onActivityClick)
+                ribbonToneColors(RibbonTone.WARNING).first, full, onActivityClick = onActivityClick, initiallyExpanded = false)
         }
     }
     if (notStarted.isNotEmpty()) {
         item {
             ActivityGroup("未开始报名", "${notStarted.size} 个活动", Icons.Default.Schedule,
-                ribbonToneColors(RibbonTone.SECONDARY).first, notStarted, onActivityClick = onActivityClick)
+                ribbonToneColors(RibbonTone.SECONDARY).first, notStarted, onActivityClick = onActivityClick, initiallyExpanded = false)
         }
     }
     if (expired.isNotEmpty()) {
         item {
             ActivityGroup("已过期", "${expired.size} 个活动", Icons.Default.EventBusy,
-                ribbonToneColors(RibbonTone.NEUTRAL).first, expired, onActivityClick = onActivityClick)
+                ribbonToneColors(RibbonTone.NEUTRAL).first, expired, onActivityClick = onActivityClick, initiallyExpanded = false)
         }
     }
 }
@@ -317,8 +319,9 @@ private fun ActivityGroup(
     showSignStatus: Boolean = false, showApplyButton: Boolean = false,
     state: LaborClubUiState? = null, vm: LaborClubViewModel? = null,
     onActivityClick: (LaborClubActivity) -> Unit,
+    initiallyExpanded: Boolean = true,
 ) {
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
     RibbonCard(Modifier.fillMaxWidth().animateContentSize(), variant = RibbonCardVariant.SURFACE_LOW,
         radius = 28.dp, padding = PaddingValues(0.dp)) {
         Column {

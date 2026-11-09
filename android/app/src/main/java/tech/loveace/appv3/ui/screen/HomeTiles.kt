@@ -35,6 +35,8 @@ import tech.loveace.appv3.ui.md3e.ShapeBadge
 import tech.loveace.appv3.ui.theme.LocalExtendedColors
 import tech.loveace.appv3.ui.theme.RibbonNumeric
 import tech.loveace.appv3.ui.viewmodel.SemesterStatus
+import tech.loveace.appv3.widget.dateText
+import tech.loveace.appv3.widget.daysText
 
 /** 成绩卡主数字（绩点）。 */
 private val HeroNumeric = TextStyle(
@@ -174,7 +176,27 @@ internal fun SemesterStatusRow(status: SemesterStatus, modifier: Modifier = Modi
                 )
             }
         }
-        else -> Unit
+        is SemesterStatus.ExamWeek -> Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            ShapeBadge(
+                shape = RibbonShape.COOKIE_8,
+                size = 48.dp,
+                color = colors.errorContainer,
+                icon = Icons.Default.Quiz,
+                iconTint = colors.onErrorContainer,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("考试周", style = MaterialTheme.typography.titleMedium)
+                val exam = status.nextExam
+                Text(
+                    "下一场：${exam.courseName}\n" + listOf(exam.dateText(), exam.timeText, exam.location, exam.daysText())
+                        .filter { it.isNotEmpty() }.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+        }
+        is SemesterStatus.Error -> Unit
     }
 }
 

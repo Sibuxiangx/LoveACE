@@ -45,8 +45,8 @@ extension WidgetScheduleState {
         return WidgetScheduleState(
             date: .now,
             phase: .inSession(name: "2025-2026学年 第一学期", week: 5, totalWeeks: 18, isEnding: false),
-            today: [course], upcoming: [course], inProgress: nil, next: course,
-            nextDay: nil, liveCourse: nil, lastSyncedAt: .now
+            today: [.course(course)], upcoming: [.course(course)], inProgress: nil, next: .course(course),
+            nextDay: nil, liveItem: nil, lastSyncedAt: .now
         )
     }
 }
@@ -96,15 +96,17 @@ struct SmallScheduleView: View {
     var body: some View {
         if !state.isSynced {
             NotSyncedView()
+        } else if case .examWeek(let exam, let days)? = state.phase {
+            ExamWeekView(exam: exam, daysUntil: days, compact: true)
         } else if case .vacation(let name, _, let days)? = state.phase {
             VacationView(nextName: name, days: days, compact: true)
         } else if let next = state.next {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: "book.fill")
+                    Image(systemName: next.isExam ? "doc.text.fill" : "book.fill")
                         .font(.caption2)
-                        .foregroundStyle(.blue)
-                    Text(state.inProgress != nil ? "正在上课" : "下节课")
+                        .foregroundStyle(next.isExam ? Color.orange : Color.blue)
+                    Text(state.inProgress != nil ? (next.isExam ? "正在考试" : "正在上课") : (next.isExam ? "下场考试" : "下节课"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -117,7 +119,7 @@ struct SmallScheduleView: View {
 
                 Spacer(minLength: 0)
 
-                Label(SchoolCalendar.startText(next), systemImage: "clock")
+                Label(next.startText, systemImage: "clock")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -135,7 +137,7 @@ struct SmallScheduleView: View {
         } else if state.today.isEmpty {
             EmptyDayView(state: state, compact: true)
         } else {
-            AllFinishedView(count: state.today.count, compact: true)
+            AllFinishedView(summary: scheduleSummary(state.today), compact: true)
         }
     }
 }
@@ -148,19 +150,32 @@ struct MediumScheduleView: View {
     var body: some View {
         if !state.isSynced {
             NotSyncedView()
+        } else if case .examWeek(let exam, let days)? = state.phase {
+            ExamWeekView(exam: exam, daysUntil: days, compact: false)
         } else if case .vacation(let name, _, let days)? = state.phase {
             VacationView(nextName: name, days: days, compact: false)
         } else if state.today.isEmpty {
             EmptyDayView(state: state, compact: false)
         } else if state.upcoming.isEmpty {
-            AllFinishedView(count: state.today.count, compact: false)
+            AllFinishedView(summary: scheduleSummary(state.today), compact: false)
         } else {
             CourseListView(state: state)
         }
     }
 }
 
-/// 只展示尚未结束的课程（进行中的排在最前），超出部分显示计数
+/// 今日项目的计数文字：课程按节，考试按场
+func scheduleSummary(_ items: [ScheduleItem]) -> String {
+    let exams = items.filter(\.isExam).count
+    let courses = items.count - exams
+    switch (courses, exams) {
+    case (_, 0): return "\(courses) 节"
+    case (0, _): return "\(exams) 场考试"
+    default: return "\(courses) 节 · \(exams) 场考试"
+    }
+}
+
+/// 只展示尚未结束的项目（进行中的排在最前），超出部分显示计数
 struct CourseListView: View {
     let state: WidgetScheduleState
 
@@ -176,10 +191,10 @@ struct CourseListView: View {
                 Text("·")
                     .font(.caption2)
                     .foregroundStyle(.quaternary)
-                Text("\(state.today.count) 节")
+                Text(scheduleSummary(state.today))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                if state.liveCourse != nil {
+                if state.liveItem != nil {
                     Button(intent: StartCourseActivityIntent()) {
                         Image(systemName: "timer")
                             .font(.caption)
@@ -188,12 +203,12 @@ struct CourseListView: View {
                 }
             }
 
-            ForEach(state.upcoming.prefix(3)) { course in
-                CourseRow(course: course, isNext: course.id == state.next?.id)
+            ForEach(state.upcoming.prefix(3)) { item in
+                CourseRow(item: item, isNext: item.id == state.next?.id)
             }
 
             if state.upcoming.count > 3 {
-                Text("还有 \(state.upcoming.count - 3) 节课...")
+                Text("还有 \(state.upcoming.count - 3) 项...")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
             }
@@ -206,21 +221,21 @@ struct CourseListView: View {
 }
 
 struct CourseRow: View {
-    let course: WidgetCourseEntry
+    let item: ScheduleItem
     let isNext: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(isNext ? Color.blue : Color.secondary.opacity(0.3))
+                .fill(isNext ? (item.isExam ? Color.orange : Color.blue) : Color.secondary.opacity(0.3))
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(course.courseName)
+                Text(item.courseName)
                     .font(.caption)
                     .fontWeight(isNext ? .semibold : .regular)
                     .lineLimit(1)
-                Text("\(SchoolCalendar.rangeText(course)) · \(course.location)")
+                Text(detail)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -228,6 +243,12 @@ struct CourseRow: View {
             Spacer()
         }
         .frame(height: 28)
+    }
+
+    private var detail: String {
+        let kind = item.isExam ? "考试 " : ""
+        let place = item.location.isEmpty ? "" : " · \(item.location)"
+        return "\(kind)\(item.rangeText)\(place)"
     }
 }
 
@@ -297,6 +318,79 @@ struct VacationView: View {
     }
 }
 
+/// 考试周：最近一场考试的课程、日期、时间、地点与距今天数
+struct ExamWeekView: View {
+    let exam: WidgetExamEntry
+    let daysUntil: Int
+    let compact: Bool
+
+    private var daysText: String { daysUntil == 0 ? "今天考试" : "还有 \(daysUntil) 天" }
+
+    var body: some View {
+        if compact {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.text.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.orange)
+                    Text("考试周")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(daysText)
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.orange)
+                }
+
+                Text(exam.courseName)
+                    .font(.system(.subheadline, weight: .semibold))
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+
+                Label(exam.date, systemImage: "calendar")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Label(exam.rangeText, systemImage: "clock")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if !exam.location.isEmpty {
+                    Label(exam.location, systemImage: "mappin")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(2)
+        } else {
+            HStack(spacing: 16) {
+                Image(systemName: "doc.text.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(Color.orange)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("考试周")
+                        .font(.headline)
+                    Text(exam.courseName)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    Text([exam.date, exam.rangeText, exam.location].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text(daysText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(2)
+        }
+    }
+}
+
 struct EmptyDayView: View {
     let state: WidgetScheduleState
     let compact: Bool
@@ -335,7 +429,7 @@ struct EmptyDayView: View {
     @ViewBuilder
     private var nextDayText: some View {
         if let nextDay = state.nextDay {
-            Text("\(nextDay.label) \(SchoolCalendar.startText(nextDay.course)) · \(nextDay.course.courseName)")
+            Text("\(nextDay.label) \(nextDay.item.startText) · \(nextDay.item.courseName)")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -348,7 +442,7 @@ struct EmptyDayView: View {
 }
 
 struct AllFinishedView: View {
-    let count: Int
+    let summary: String
     let compact: Bool
 
     var body: some View {
@@ -370,7 +464,7 @@ struct AllFinishedView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("今日课程已结束")
                         .font(.headline)
-                    Text("今日共 \(count) 节")
+                    Text("今日共 \(summary)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

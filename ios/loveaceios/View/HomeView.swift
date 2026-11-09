@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct HomeView: View {
     @Environment(AuthViewModel.self) private var authVM
@@ -33,6 +34,9 @@ struct HomeView: View {
                 if let ykt = authVM.yktService { yktVM.initialize(service: ykt, portal: authVM.portalService) }
                 academicVM.loadAcademicInfo()
                 yktVM.loadBalance()
+                semesterVM.loadSemesterInfo()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: WidgetSyncCoordinator.snapshotDidChange)) { _ in
                 semesterVM.loadSemesterInfo()
             }
         }
@@ -78,6 +82,15 @@ struct HomeView: View {
                         Text("\(next)").font(.subheadline).foregroundStyle(.white.opacity(0.8))
                         Text("还有 \(days) 天开学").font(.caption).foregroundStyle(.white.opacity(0.6))
                     }
+                }
+            case .examWeek(let exam, let days):
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("考试周").font(AppFont.largeNumber).foregroundStyle(.white)
+                    Text(exam.courseName).font(.subheadline).foregroundStyle(.white.opacity(0.8)).lineLimit(2)
+                    Text([exam.date, exam.rangeText, exam.location].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                    Text(days == 0 ? "今天考试" : "还有 \(days) 天考试")
+                        .font(.caption).foregroundStyle(.white.opacity(0.6))
                 }
             case .error(let msg):
                 Text(msg).foregroundStyle(.white.opacity(0.8))

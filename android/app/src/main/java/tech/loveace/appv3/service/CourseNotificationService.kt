@@ -15,6 +15,11 @@ import tech.loveace.appv3.MainActivity
 import tech.loveace.appv3.R
 import tech.loveace.appv3.widget.WidgetState
 import tech.loveace.appv3.widget.fetchWidgetState
+import tech.loveace.appv3.widget.WidgetCourseEntry
+import tech.loveace.appv3.widget.WidgetExamCard
+import tech.loveace.appv3.widget.currentMinuteOfDay
+import tech.loveace.appv3.widget.dateText
+import tech.loveace.appv3.widget.daysText
 
 class CourseNotificationService : Service() {
 
@@ -120,14 +125,18 @@ class CourseNotificationService : Service() {
         is WidgetState.InSession -> resolveInSession(state)
         is WidgetState.NoCourseToday -> {
             val next = state.nextCourse
-            if (next != null) {
-                val day = state.nextCourseDay ?: ""
-                ResolvedState(next.courseName, "$day ${next.timeText} · ${next.location}".trim())
-            } else {
-                ResolvedState("今日无课", "${state.semesterName} 第${state.currentWeek}周")
+            val whereText = "${state.semesterName} 第${state.currentWeek}周"
+            when {
+                next != null -> ResolvedState(
+                    next.titleText(),
+                    "${state.nextCourseDay.orEmpty()} ${next.timeText} · ${next.location}".trim(),
+                )
+                state.todayFinished -> ResolvedState("今日课程已结束", whereText)
+                else -> ResolvedState("今日无课", whereText)
             }
         }
-        is WidgetState.Vacation -> {
+        is WidgetState.ExamWeek -> examResolved(state.nextExam)
+        is WidgetState.Vacation -> state.nextExam?.let { examResolved(it) } ?: run {
             val d = state.daysUntilStart?.let { "还有${it}天开学" } ?: ""
             ResolvedState("假期中", "${state.nextSemesterName ?: ""} $d".trim())
         }
@@ -141,65 +150,59 @@ class CourseNotificationService : Service() {
             return ResolvedState("今日无课", "${state.semesterName} 第${state.currentWeek}周")
         }
 
-        val now = java.time.LocalTime.now()
+        val nowMin = currentMinuteOfDay()
 
-        val current = state.todayCourses.lastOrNull { entry ->
-            val start = parseSessionTime(entry.sessionStart)
-            val end = courseEndTime(entry.sessionEnd)
-            start != null && end != null && !now.isBefore(start) && now.isBefore(end)
-        }
-        if (current != null) {
-            val startTime = parseSessionTime(current.sessionStart)!!
-            val endTime = courseEndTime(current.sessionEnd)!!
-            val totalMin = java.time.Duration.between(startTime, endTime).toMinutes().toInt()
-            val elapsedMin = java.time.Duration.between(startTime, now).toMinutes().toInt()
-            val endStr = courseEndTimeStr(current.sessionEnd)
+        // 下一项：结束时间仍在未来的最早一项（课或考试）
+        val item = state.todayCourses
+            .filter { it.endMinute > nowMin }
+            .minByOrNull { it.startMinute }
+            ?: return ResolvedState("今日课程已结束", "共${state.todayCourses.size}节课")
 
-            val parts = mutableListOf("${endStr}下课")
-            if (current.location.isNotEmpty()) parts += current.location
-            if (current.teacherName.isNotEmpty()) parts += current.teacherName
+        if (nowMin >= item.startMinute) {
+            val parts = mutableListOf("${minuteText(item.endMinute)}${if (item.isExam) "结束" else "下课"}")
+            if (item.location.isNotEmpty()) parts += item.location
+            if (item.teacherName.isNotEmpty()) parts += item.teacherName
             return ResolvedState(
-                title = "${current.courseName}（上课中）",
+                title = "${item.courseName}（${if (item.isExam) "考试中" else "上课中"}）",
                 text = parts.joinToString(" · "),
                 inClass = true,
-                progressMax = totalMin,
-                progressCur = elapsedMin,
+                progressMax = item.endMinute - item.startMinute,
+                progressCur = nowMin - item.startMinute,
                 clearReminder = true,
             )
         }
 
-        val next = state.todayCourses.firstOrNull { entry ->
-            val start = parseSessionTime(entry.sessionStart)
-            start != null && now.isBefore(start)
-        }
-        if (next != null) {
-            val start = parseSessionTime(next.sessionStart)!!
-            val minutesUntil = java.time.Duration.between(now, start).toMinutes()
-            val sessionKey = "${java.time.LocalDate.now()}-${next.sessionStart}"
+        val minutesUntil = item.startMinute - nowMin
+        val sessionKey = "${java.time.LocalDate.now()}-${item.startMinute}"
+        // 考试不发课前提醒推送，只在常驻通知中显示
+        val shouldRemind = !item.isExam && minutesUntil <= 10 && lastRemindedKey != sessionKey
+        if (shouldRemind) lastRemindedKey = sessionKey
 
-            val shouldRemind = minutesUntil in 0..10 && lastRemindedKey != sessionKey
-            if (shouldRemind) lastRemindedKey = sessionKey
+        val parts = mutableListOf(item.timeText)
+        if (item.location.isNotEmpty()) parts += item.location
+        if (item.teacherName.isNotEmpty()) parts += item.teacherName
 
-            val parts = mutableListOf(next.timeText)
-            if (next.location.isNotEmpty()) parts += next.location
-            if (next.teacherName.isNotEmpty()) parts += next.teacherName
-
-            return ResolvedState(
-                title = next.courseName,
-                text = parts.joinToString(" · "),
-                preClass = minutesUntil <= 10,
-                postReminder = shouldRemind,
-                reminderTitle = "${next.courseName} 即将开始",
-                reminderText = buildString {
-                    append("${minutesUntil}分钟后")
-                    if (next.location.isNotEmpty()) append(" · ${next.location}")
-                    if (next.teacherName.isNotEmpty()) append(" · ${next.teacherName}")
-                },
-            )
-        }
-
-        return ResolvedState("今日课程已结束", "共${state.todayCourses.size}节课")
+        return ResolvedState(
+            title = item.titleText(),
+            text = parts.joinToString(" · "),
+            preClass = minutesUntil <= 10,
+            postReminder = shouldRemind,
+            reminderTitle = "${item.courseName} 即将开始",
+            reminderText = buildString {
+                append("${minutesUntil}分钟后")
+                if (item.location.isNotEmpty()) append(" · ${item.location}")
+                if (item.teacherName.isNotEmpty()) append(" · ${item.teacherName}")
+            },
+        )
     }
+
+    private fun examResolved(exam: WidgetExamCard) = ResolvedState(
+        title = "${exam.courseName}（考试）",
+        text = listOf(exam.dateText(), exam.timeText, exam.location, exam.daysText())
+            .filter { it.isNotEmpty() }.joinToString(" · "),
+    )
+
+    private fun WidgetCourseEntry.titleText(): String = if (isExam) "$courseName（考试）" else courseName
 
     // ── Notification builders ──
 
@@ -262,22 +265,5 @@ class CourseNotificationService : Service() {
 
     // ── Time helpers ──
 
-    private fun courseEndTime(sessionEnd: Int): java.time.LocalTime? =
-        parseSessionTime(sessionEnd)?.plusMinutes(45)
-
-    private fun courseEndTimeStr(sessionEnd: Int): String {
-        val t = courseEndTime(sessionEnd) ?: return ""
-        return "%02d:%02d".format(t.hour, t.minute)
-    }
-
-    private val sessionStartTimes = mapOf(
-        1 to "08:00", 2 to "08:55", 3 to "10:10", 4 to "11:05",
-        5 to "14:00", 6 to "14:55", 7 to "16:10", 8 to "17:05",
-        9 to "19:00", 10 to "19:55", 11 to "20:50",
-    )
-
-    private fun parseSessionTime(session: Int): java.time.LocalTime? {
-        val str = sessionStartTimes[session] ?: return null
-        return try { java.time.LocalTime.parse(str) } catch (_: Exception) { null }
-    }
+    private fun minuteText(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60, minuteOfDay % 60)
 }

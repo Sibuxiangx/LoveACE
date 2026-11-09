@@ -139,7 +139,7 @@ fun RibbonApp(
                     widgetScheduleNav = true
                 }
                 scope.launch {
-                    WidgetSyncHelper.syncWidgetDataIfNeeded(
+                    WidgetSyncHelper.syncWidgetData(
                         context = context,
                         jwcService = authViewModel.jwcService,
                         scheduleService = authViewModel.studentScheduleService,
@@ -172,7 +172,7 @@ fun RibbonApp(
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             Log.d("MainActivity", "App resumed, refreshing widgets")
             if (authState.state == AuthState.Authenticated) {
-                WidgetSyncHelper.syncWidgetDataIfNeeded(
+                WidgetSyncHelper.syncWidgetData(
                     context = context,
                     jwcService = authViewModel.jwcService,
                     scheduleService = authViewModel.studentScheduleService,
