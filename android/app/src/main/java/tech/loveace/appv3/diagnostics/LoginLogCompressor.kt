@@ -45,7 +45,7 @@ object LoginLogCompressor {
     private val urlPattern = Regex("""https?://[^\s"'<>,，。；;]+""")
     private val digitRunPattern = Regex("""(?<!\d)\d{8,12}(?!\d)""")
     private val nonLetterOrDigitPattern = Regex("""[^\p{L}\p{N}]+""")
-    private val unicodeWhitespacePattern = Regex("""(?U)\s+""")
+    private val unicodeWhitespacePattern = Regex("""\s+""")
     private val inputTagPattern = Regex("""(?i)<input[^>]*>""")
     private val hiddenTypePattern = Regex("""(?i)type=["']?hidden""")
     private val inputNamePattern = Regex("""(?i)name=["']?([A-Za-z0-9_\-]+)""")
