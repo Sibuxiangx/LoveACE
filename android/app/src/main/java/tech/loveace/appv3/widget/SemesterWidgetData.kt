@@ -281,6 +281,9 @@ sealed class SemesterPhase {
     ) : SemesterPhase()
 }
 
+/** 教务考试日期可能为空或格式异常：解析失败的考试忽略，不影响课表与其他考试 */
+private fun examDateOrNull(raw: String): LocalDate? = runCatching { LocalDate.parse(raw) }.getOrNull()
+
 /**
  * 学期阶段判定。教学结束 = start + weeks*7 天（下一周一）。
  * 教学周内（含第 18 周周末）为 Teaching，考试只影响课表条目，不影响周次。
@@ -292,7 +295,7 @@ fun resolveSemesterPhase(
     today: LocalDate,
 ): SemesterPhase {
     val nextExam = exams
-        .map { it to LocalDate.parse(it.examDate) }
+        .mapNotNull { exam -> examDateOrNull(exam.examDate)?.let { exam to it } }
         .filter { !it.second.isBefore(today) }
         .minByOrNull { it.second }
         ?.let { (exam, date) ->
@@ -479,8 +482,8 @@ private fun teachingState(
     val colorMap = if (hasCourseData) buildCourseColorMap(courses) else emptyMap()
     val examsByDate: Map<LocalDate, List<WidgetCourseEntry>> = exams
         .mapNotNull { exam ->
-            LocalDate.parse(exam.examDate)
-                .takeIf { !it.isBefore(start) && it.isBefore(teachingEnd) }
+            examDateOrNull(exam.examDate)
+                ?.takeIf { !it.isBefore(start) && it.isBefore(teachingEnd) }
                 ?.let { it to exam.toCourseEntry() }
         }
         .groupBy({ it.first }, { it.second })

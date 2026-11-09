@@ -1,11 +1,17 @@
 package tech.loveace.appv3
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.layout.ContentScale
@@ -109,6 +115,7 @@ fun RibbonApp(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
+    val notifPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val activity = context as? MainActivity
     val widgetNavTarget by (activity?.pendingWidgetNav ?: remember { mutableStateOf(null) })
     var widgetScheduleNav by remember { mutableStateOf(false) }
@@ -137,6 +144,12 @@ fun RibbonApp(
                     activity?.pendingWidgetNav?.value = null
                     activity?.intent?.removeExtra("navigate_to")
                     widgetScheduleNav = true
+                }
+                // Android 13+ 常驻通知需要 POST_NOTIFICATIONS；未授权时申请一次，拒绝不影响同步
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
                 scope.launch {
                     WidgetSyncHelper.syncWidgetData(
