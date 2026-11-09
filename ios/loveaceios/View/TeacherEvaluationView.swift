@@ -111,6 +111,24 @@ struct TeacherEvaluationView: View {
                 miniStat("已评", value: vm.evaluatedCount, tint: .green)
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("评分方式", selection: $vm.scoreMode) {
+                    ForEach(TeacherEvaluationScoreMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(vm.isEvaluating)
+
+                ForEach(TeacherEvaluationScoreMode.allCases) { mode in
+                    Text(mode.explanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Button {
                 showStartConfirmation = true
             } label: {

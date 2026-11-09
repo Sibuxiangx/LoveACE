@@ -44,6 +44,7 @@ class TeacherEvaluationService {
   Future<UniResponse<TeacherEvaluationPreparedForm>> prepareEvaluation(
     TeacherEvaluationCourse course,
     int pendingCount,
+    TeacherEvalScoreMode scoreMode,
   ) async {
     try {
       // 每门课都重新取首页 token，不复用批次开始时的快照
@@ -81,7 +82,7 @@ class TeacherEvaluationService {
       };
 
       for (final question in questionnaire.radioQuestions) {
-        form[question.key] = _chooseOption(question).value;
+        form[question.key] = _chooseOption(question, scoreMode).value;
       }
       for (final question in questionnaire.textQuestions) {
         form[question.key] = _randomText(question.type);
@@ -302,10 +303,11 @@ class TeacherEvaluationService {
     }).whereType<TeacherEvaluationTextQuestion>().toList();
   }
 
-  TeacherEvaluationOption _chooseOption(TeacherEvaluationRadioQuestion question) {
+  TeacherEvaluationOption _chooseOption(TeacherEvaluationRadioQuestion question, TeacherEvalScoreMode mode) {
     final options = [...question.options]..sort((a, b) => b.weight.compareTo(a.weight));
     final fullWeightOptions = options.where((option) => option.weight == 1.0).toList();
-    if (fullWeightOptions.isNotEmpty && _random.nextDouble() < 0.8) {
+    if (fullWeightOptions.isNotEmpty &&
+        (mode == TeacherEvalScoreMode.max || _random.nextDouble() < 0.8)) {
       return fullWeightOptions[_random.nextInt(fullWeightOptions.length)];
     }
     final grouped = <double, List<TeacherEvaluationOption>>{};

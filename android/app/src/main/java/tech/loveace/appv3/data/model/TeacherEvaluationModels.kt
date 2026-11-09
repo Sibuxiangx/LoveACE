@@ -57,6 +57,17 @@ data class TeacherEvaluationCourse(
     }
 }
 
+/** 自动评教单选题的评分模式；存储值 random / max，未知存储值视为 random */
+enum class TeacherEvaluationScoreMode(val stored: String, val label: String) {
+    Random("random", "随机评分"),
+    Max("max", "非常满意");
+
+    companion object {
+        fun fromStored(value: String?): TeacherEvaluationScoreMode =
+            entries.firstOrNull { it.stored == value } ?: Random
+    }
+}
+
 data class TeacherEvaluationQuestionnaire(
     val title: String = "",
     val tokenValue: String = "",

@@ -54,6 +54,7 @@ fun LandscapeTeacherEvaluationScreen(
             onStart = { showConfirm = true },
             onStop = { vm.stop() },
             onRetry = { vm.load() },
+            onScoreModeChange = { vm.setScoreMode(it) },
             modifier = Modifier.fillMaxSize().padding(padding),
         )
     }

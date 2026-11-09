@@ -11,12 +11,18 @@ final class TeacherEvaluationViewModel {
     var isEvaluationClosed = false
     var lastResult: TeacherEvaluationBatchResult?
 
+    /// 评分方式：本地保存（UserDefaults），批次开始时读取一次
+    var scoreMode: TeacherEvaluationScoreMode {
+        didSet { UserDefaults.standard.set(scoreMode.rawValue, forKey: Self.scoreModeKey) }
+    }
+
     private var service: TeacherEvaluationService?
     private var launcherTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
     private var activeTasks: [Task<TeacherEvaluationResult, Never>] = []
     private let launchIntervalSeconds = 6
     private let countdownSeconds = 140
+    private static let scoreModeKey = "teacher_eval_score_mode"
 
     var pendingCourses: [TeacherEvaluationCourse] { courses.filter { !$0.isEvaluated } }
     var evaluatedCourses: [TeacherEvaluationCourse] { courses.filter(\.isEvaluated) }
@@ -26,6 +32,10 @@ final class TeacherEvaluationViewModel {
     var completedTaskCount: Int { tasks.filter(\.isFinished).count }
     var successfulTaskCount: Int { tasks.filter(\.isSuccess).count }
     var progress: Double { tasks.isEmpty ? 0 : Double(completedTaskCount) / Double(tasks.count) }
+
+    init() {
+        scoreMode = TeacherEvaluationScoreMode(storedValue: UserDefaults.standard.string(forKey: Self.scoreModeKey))
+    }
 
     func initialize(service: TeacherEvaluationService) {
         self.service = service
@@ -69,6 +79,8 @@ final class TeacherEvaluationViewModel {
             return
         }
 
+        let mode = scoreMode
+
         isEvaluating = true
         error = nil
         lastResult = nil
@@ -80,7 +92,7 @@ final class TeacherEvaluationViewModel {
 
         launcherTask = Task { [weak self] in
             guard let self else { return }
-            await self.runConcurrentEvaluation()
+            await self.runConcurrentEvaluation(mode: mode)
         }
     }
 
@@ -97,14 +109,14 @@ final class TeacherEvaluationViewModel {
         lastResult = nil
     }
 
-    private func runConcurrentEvaluation() async {
+    private func runConcurrentEvaluation(mode: TeacherEvaluationScoreMode) async {
         guard !tasks.isEmpty else {
             isEvaluating = false
             return
         }
 
         let startTime = Date()
-        var results = await runTaskBatch(Array(tasks))
+        var results = await runTaskBatch(Array(tasks), mode: mode)
         if Task.isCancelled {
             activeTasks.forEach { $0.cancel() }
             markUnfinishedTasksAsCancelled()
@@ -129,7 +141,7 @@ final class TeacherEvaluationViewModel {
                         tasks[index].errorKind = nil
                     }
                 }
-                results.append(contentsOf: await runTaskBatch(stillPending))
+                results.append(contentsOf: await runTaskBatch(stillPending, mode: mode))
             }
         }
 
@@ -161,7 +173,7 @@ final class TeacherEvaluationViewModel {
     }
 
     /// 按标准间隔启动一批任务并等待全部完成
-    private func runTaskBatch(_ batch: [TeacherEvaluationTask]) async -> [TeacherEvaluationResult] {
+    private func runTaskBatch(_ batch: [TeacherEvaluationTask], mode: TeacherEvaluationScoreMode) async -> [TeacherEvaluationResult] {
         var runners: [Task<TeacherEvaluationResult, Never>] = []
 
         for (index, task) in batch.enumerated() {
@@ -180,7 +192,7 @@ final class TeacherEvaluationViewModel {
                 guard let self else {
                     return TeacherEvaluationResult(course: task.course, success: false, errorMessage: "任务已释放")
                 }
-                return await self.executeTask(taskId: task.taskId)
+                return await self.executeTask(taskId: task.taskId, mode: mode)
             }
             activeTasks.append(runner)
             runners.append(runner)
@@ -193,7 +205,7 @@ final class TeacherEvaluationViewModel {
         return results
     }
 
-    private func executeTask(taskId: Int) async -> TeacherEvaluationResult {
+    private func executeTask(taskId: Int, mode: TeacherEvaluationScoreMode) async -> TeacherEvaluationResult {
         guard let service, let task = tasks.first(where: { $0.taskId == taskId }) else {
             return TeacherEvaluationResult(course: TeacherEvaluationCourse(
                 legacyId: "", name: "未知课程", teacher: "", evaluatedPeople: "", evaluatedPeopleNumber: "",
@@ -207,12 +219,12 @@ final class TeacherEvaluationViewModel {
 
         if Task.isCancelled { return failTask(taskId, course: course, message: "已取消") }
 
-        var prepared = await service.prepareEvaluation(course: course, totalCourses: tasks.count)
+        var prepared = await service.prepareEvaluation(course: course, totalCourses: tasks.count, mode: mode)
         if !prepared.success {
             // 瞬时失败（网络抖动/HTTP 5xx）立即重试一次
             addLog("任务 \(taskId) [\(course.displayName)]：准备失败，立即重试一次")
             updateTask(taskId, status: .preparing, message: "准备失败，立即重试")
-            prepared = await service.prepareEvaluation(course: course, totalCourses: tasks.count)
+            prepared = await service.prepareEvaluation(course: course, totalCourses: tasks.count, mode: mode)
         }
         guard prepared.success, let formData = prepared.data else {
             return failTask(taskId, course: course, message: prepared.error ?? "无法访问评价页面", errorKind: "prepareFailed")
@@ -262,7 +274,7 @@ final class TeacherEvaluationViewModel {
             isRetry = true
             addLog("任务 \(taskId) [\(course.displayName)]：提交未生效，重新准备后提交一次")
             updateTask(taskId, status: .preparing, message: "提交未生效，重新准备表单")
-            let retried = await service.prepareEvaluation(course: course, totalCourses: tasks.count)
+            let retried = await service.prepareEvaluation(course: course, totalCourses: tasks.count, mode: mode)
             guard retried.success, let retryForm = retried.data else {
                 return failTask(taskId, course: course, message: retried.error ?? "重试准备失败", errorKind: "submitFailed")
             }

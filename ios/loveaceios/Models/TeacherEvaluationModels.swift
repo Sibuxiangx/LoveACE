@@ -40,6 +40,34 @@ enum TeacherTextQuestionType: String, Codable {
     case general
 }
 
+/// 单选题评分方式；存储值为 rawValue，见 TeacherEvaluationViewModel.scoreModeKey
+enum TeacherEvaluationScoreMode: String, CaseIterable, Identifiable {
+    case random
+    case max
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .random: return "随机评分"
+        case .max: return "非常满意"
+        }
+    }
+
+    /// 页面上的说明，逐字显示
+    var explanation: String {
+        switch self {
+        case .random: return "随机评分（默认）：每道单选题有 80% 的概率选择「非常满意」，20% 的概率选择「满意」。"
+        case .max: return "非常满意：每道单选题 100% 选择「非常满意」。请自行确认是否符合学校的评教要求。"
+        }
+    }
+
+    /// 未知或缺失的存储值按 random 处理
+    init(storedValue: String?) {
+        self = storedValue.flatMap { TeacherEvaluationScoreMode(rawValue: $0) } ?? .random
+    }
+}
+
 struct TeacherQuestionnaireMetadata: Codable, Hashable {
     var title: String = ""
     var evaluatedPerson: String = ""

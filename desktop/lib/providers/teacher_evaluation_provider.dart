@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/jwc/teacher_evaluation.dart';
 import '../services/jwc/teacher_evaluation_service.dart';
@@ -42,6 +43,7 @@ class TeacherEvaluationTaskState {
 class TeacherEvaluationProvider extends ChangeNotifier {
   final TeacherEvaluationService service;
   int _runId = 0;
+  TeacherEvalScoreMode _scoreMode = TeacherEvalScoreMode.random;
 
   TeacherEvaluationState _state = TeacherEvaluationState.initial;
   bool _isRunning = false;
@@ -51,7 +53,26 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   List<TeacherEvaluationTaskState> _tasks = [];
   List<String> _logs = [];
 
-  TeacherEvaluationProvider(this.service);
+  TeacherEvaluationProvider(this.service) {
+    _loadScoreMode();
+  }
+
+  TeacherEvalScoreMode get scoreMode => _scoreMode;
+
+  /// 保存评分方式；运行中的批次已在开始时取得自己的模式，不受影响
+  Future<void> setScoreMode(TeacherEvalScoreMode mode) async {
+    if (_scoreMode == mode) return;
+    _scoreMode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_scoreModeKey, mode.name);
+  }
+
+  Future<void> _loadScoreMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    _scoreMode = TeacherEvalScoreMode.fromStored(prefs.getString(_scoreModeKey));
+    notifyListeners();
+  }
 
   TeacherEvaluationState get state => _state;
   bool get isRunning => _isRunning;
@@ -102,6 +123,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   Future<void> startBatch() async {
     final pending = pendingCourses;
     if (_isRunning || pending.isEmpty) return;
+    final scoreMode = _scoreMode;
 
     final runId = ++_runId;
     _isRunning = true;
@@ -111,7 +133,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _runRound(runId, pending);
+      await _runRound(runId, pending, scoreMode);
       if (!_isCurrentRun(runId)) return;
 
       // 批后补偿：仅当存在 prepareFailed/submitFailed 失败课程，且列表刷新成功时才进行
@@ -124,7 +146,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
       }
       _addLog('批后补偿：${retryCourses.length} 门课程将自动重试一轮');
       notifyListeners();
-      await _runRound(runId, retryCourses);
+      await _runRound(runId, retryCourses, scoreMode);
       if (_isCurrentRun(runId)) await _refreshAfterBatch();
     } finally {
       if (_isCurrentRun(runId)) {
@@ -135,13 +157,17 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   }
 
   /// 按标准间隔启动一轮任务并等待全部完成
-  Future<void> _runRound(int runId, List<TeacherEvaluationCourse> courses) async {
+  Future<void> _runRound(
+    int runId,
+    List<TeacherEvaluationCourse> courses,
+    TeacherEvalScoreMode scoreMode,
+  ) async {
     final futures = <Future<void>>[];
     for (var i = 0; i < courses.length; i++) {
       if (!_isCurrentRun(runId)) break;
       if (i > 0) await Future.delayed(_startInterval);
       if (!_isCurrentRun(runId)) break;
-      futures.add(_runTask(runId, courses[i], courses.length));
+      futures.add(_runTask(runId, courses[i], courses.length, scoreMode));
     }
     await Future.wait(futures);
   }
@@ -196,15 +222,20 @@ class TeacherEvaluationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _runTask(int runId, TeacherEvaluationCourse course, int pendingCount) async {
+  Future<void> _runTask(
+    int runId,
+    TeacherEvaluationCourse course,
+    int pendingCount,
+    TeacherEvalScoreMode scoreMode,
+  ) async {
     if (!_isCurrentRun(runId)) return;
     _updateTask(course, TeacherEvaluationTaskStatus.preparing, '正在访问评价页并生成表单');
-    var prepare = await service.prepareEvaluation(course, pendingCount);
+    var prepare = await service.prepareEvaluation(course, pendingCount, scoreMode);
     if (!prepare.success && prepare.retryable) {
       // 瞬时失败（网络抖动/HTTP 5xx）立即重试一次
       _addLog('${course.displayName} 准备失败，立即重试一次');
       _updateTask(course, TeacherEvaluationTaskStatus.preparing, '准备失败，立即重试');
-      prepare = await service.prepareEvaluation(course, pendingCount);
+      prepare = await service.prepareEvaluation(course, pendingCount, scoreMode);
     }
     if (!_isCurrentRun(runId)) return;
     final firstPrepared = prepare.data;
@@ -244,7 +275,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
       // 服务器确认未记录：重新准备（每次取新 token）后再提交一次
       _addLog('${course.displayName} 提交未生效，重新准备后提交一次');
       _updateTask(course, TeacherEvaluationTaskStatus.preparing, '提交未生效，重新准备表单');
-      final retryPrepare = await service.prepareEvaluation(course, pendingCount);
+      final retryPrepare = await service.prepareEvaluation(course, pendingCount, scoreMode);
       if (!_isCurrentRun(runId)) return;
       final retryPrepared = retryPrepare.data;
       if (!retryPrepare.success || retryPrepared == null) {
@@ -332,6 +363,7 @@ class TeacherEvaluationProvider extends ChangeNotifier {
   static const _startInterval = Duration(seconds: 6);
   static const _waitBeforeSubmit = Duration(seconds: 140);
   static const _retryableErrorKinds = {'prepareFailed', 'submitFailed'};
+  static const _scoreModeKey = 'teacher_eval_score_mode';
 }
 
 extension on TeacherEvaluationTaskStatus {

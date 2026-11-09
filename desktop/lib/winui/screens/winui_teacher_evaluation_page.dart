@@ -171,6 +171,8 @@ class _WinUITeacherEvaluationPageState
               const SizedBox(height: 18),
               _buildSafetyNotice(),
               const SizedBox(height: 18),
+              _buildScoreModeSelector(provider),
+              const SizedBox(height: 18),
               Row(
                 children: [
                   Expanded(
@@ -191,6 +193,44 @@ class _WinUITeacherEvaluationPageState
         ),
         const SizedBox(height: 12),
         _buildLogs(provider.logs),
+      ],
+    );
+  }
+
+  Widget _buildScoreModeSelector(TeacherEvaluationProvider provider) {
+    final theme = FluentTheme.of(context);
+    final running = provider.isRunning;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('评分方式', style: theme.typography.bodyStrong),
+        const SizedBox(height: 8),
+        RadioGroup<TeacherEvalScoreMode>(
+          groupValue: provider.scoreMode,
+          onChanged: (mode) {
+            if (mode != null && !running) provider.setScoreMode(mode);
+          },
+          child: Wrap(
+            spacing: 16,
+            children: [
+              for (final mode in TeacherEvalScoreMode.values)
+                RadioButton<TeacherEvalScoreMode>(
+                  value: mode,
+                  enabled: !running,
+                  content: Text(mode.label),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final mode in TeacherEvalScoreMode.values)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              mode.description,
+              style: theme.typography.caption?.copyWith(color: theme.inactiveColor),
+            ),
+          ),
       ],
     );
   }

@@ -1,6 +1,8 @@
 package tech.loveace.appv3.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import tech.loveace.appv3.data.model.TeacherEvaluationCourse
 import tech.loveace.appv3.data.service.TeacherEvaluationService
 import tech.loveace.appv3.data.model.TeacherEvaluationPreparedForm
+import tech.loveace.appv3.data.model.TeacherEvaluationScoreMode
 import tech.loveace.appv3.data.model.UniResponse
 
 enum class TeacherEvaluationTaskStatus { Pending, Preparing, Waiting, Submitting, Verifying, Success, Failed, Cancelled }
@@ -39,6 +42,7 @@ data class TeacherEvaluationUiState(
     val tasks: List<TeacherEvaluationTaskState> = emptyList(),
     val logs: List<String> = emptyList(),
     val error: String? = null,
+    val scoreMode: TeacherEvaluationScoreMode = TeacherEvaluationScoreMode.Random,
 ) {
     val pendingCourses: List<TeacherEvaluationCourse>
         get() = courses.filter { !it.isEvaluated }
@@ -47,16 +51,29 @@ data class TeacherEvaluationUiState(
         get() = courses.count { it.isEvaluated }
 }
 
-class TeacherEvaluationViewModel : ViewModel() {
+class TeacherEvaluationViewModel(application: Application) : AndroidViewModel(application) {
     private var service: TeacherEvaluationService? = null
     private var schedulerJob: Job? = null
     private var loaderJob: Job? = null
 
-    private val _uiState = MutableStateFlow(TeacherEvaluationUiState())
+    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val _uiState = MutableStateFlow(
+        TeacherEvaluationUiState(
+            scoreMode = TeacherEvaluationScoreMode.fromStored(prefs.getString(KEY_SCORE_MODE, null)),
+        ),
+    )
     val uiState: StateFlow<TeacherEvaluationUiState> = _uiState.asStateFlow()
 
     fun init(service: TeacherEvaluationService) {
         this.service = service
+    }
+
+    /** 切换评分模式并持久化；批量评教进行中不可修改（批次在开始时读取一次） */
+    fun setScoreMode(mode: TeacherEvaluationScoreMode) {
+        if (_uiState.value.isRunning) return
+        prefs.edit().putString(KEY_SCORE_MODE, mode.stored).apply()
+        _uiState.update { it.copy(scoreMode = mode) }
     }
 
     private fun currentService(): TeacherEvaluationService =
@@ -66,12 +83,13 @@ class TeacherEvaluationViewModel : ViewModel() {
     private suspend fun prepareWithFreshToken(
         course: TeacherEvaluationCourse,
         pendingCount: Int,
+        scoreMode: TeacherEvaluationScoreMode,
     ): UniResponse<TeacherEvaluationPreparedForm> {
         val svc = currentService()
         val index = svc.fetchIndexToken()
         val token = index.data?.takeIf { index.success && it.isNotBlank() }
             ?: return UniResponse.failure(index.error ?: "未找到评价页入口 token", retryable = true)
-        return svc.prepareEvaluation(course, pendingCount, token)
+        return svc.prepareEvaluation(course, pendingCount, token, scoreMode)
     }
 
     fun load() {
@@ -129,6 +147,7 @@ class TeacherEvaluationViewModel : ViewModel() {
         if (service == null) return
         val state = _uiState.value
         val pending = state.pendingCourses
+        val scoreMode = state.scoreMode
         if (state.isRunning || pending.isEmpty() || state.indexToken.isBlank()) return
 
         stop(resetRunning = false)
@@ -143,7 +162,7 @@ class TeacherEvaluationViewModel : ViewModel() {
 
         schedulerJob = viewModelScope.launch {
             try {
-                runRound(pending)
+                runRound(pending, scoreMode)
                 if (!isActive) return@launch
 
                 // 批后补偿：先刷新列表，再只对"准备失败/提交失败"且服务器确认未评的课程补跑一轮；刷新失败则不补偿
@@ -155,7 +174,7 @@ class TeacherEvaluationViewModel : ViewModel() {
                     val retryCourses = collectRetryCourses()
                     if (retryCourses.isNotEmpty()) {
                         addLog("批后补偿：${retryCourses.size} 门课程将自动重试一轮")
-                        runRound(retryCourses)
+                        runRound(retryCourses, scoreMode)
                         if (isActive) refreshAfterBatch()
                     } else {
                         addLog("批后补偿：失败课程刷新后均已确认已评，无需重试")
@@ -169,12 +188,15 @@ class TeacherEvaluationViewModel : ViewModel() {
     }
 
     /** 按标准间隔启动一轮任务并等待全部完成（取消通过 delay/joinAll 的取消传播实现） */
-    private suspend fun runRound(courses: List<TeacherEvaluationCourse>) {
+    private suspend fun runRound(
+        courses: List<TeacherEvaluationCourse>,
+        scoreMode: TeacherEvaluationScoreMode,
+    ) {
         coroutineScope {
             val jobs = mutableListOf<Job>()
             courses.forEachIndexed { index, course ->
                 if (index > 0) delay(START_INTERVAL_MS)
-                jobs += launch { runTask(course, courses.size) }
+                jobs += launch { runTask(course, courses.size, scoreMode) }
             }
             jobs.joinAll()
         }
@@ -223,15 +245,19 @@ class TeacherEvaluationViewModel : ViewModel() {
         }
     }
 
-    private suspend fun runTask(course: TeacherEvaluationCourse, pendingCount: Int) {
+    private suspend fun runTask(
+        course: TeacherEvaluationCourse,
+        pendingCount: Int,
+        scoreMode: TeacherEvaluationScoreMode,
+    ) {
         try {
             updateTask(course, TeacherEvaluationTaskStatus.Preparing, "正在访问评价页并生成表单")
-            var prepare = prepareWithFreshToken(course, pendingCount)
+            var prepare = prepareWithFreshToken(course, pendingCount, scoreMode)
             if ((!prepare.success || prepare.data == null) && prepare.retryable) {
                 // 瞬时失败（网络抖动、评价页未返回 token）：重新获取 token 后立即重试一次
                 addLog("${course.displayName()} 准备失败，重新获取 token 后重试一次")
                 updateTask(course, TeacherEvaluationTaskStatus.Preparing, "准备失败，重新获取后重试")
-                prepare = prepareWithFreshToken(course, pendingCount)
+                prepare = prepareWithFreshToken(course, pendingCount, scoreMode)
             }
             val prepared = prepare.data
             if (!prepare.success || prepared == null) {
@@ -265,7 +291,7 @@ class TeacherEvaluationViewModel : ViewModel() {
             // 服务器确认未记录：重新准备表单并提交一次
             addLog("${course.displayName()} 提交未生效，重新准备后提交一次")
             updateTask(course, TeacherEvaluationTaskStatus.Preparing, "提交未生效，重新准备表单")
-            val retryPrepare = prepareWithFreshToken(course, pendingCount)
+            val retryPrepare = prepareWithFreshToken(course, pendingCount, scoreMode)
             val retryPrepared = retryPrepare.data
             if (!retryPrepare.success || retryPrepared == null) {
                 failTask(course, retryPrepare.error ?: "重试准备评价表单失败", "submitFailed")
@@ -387,6 +413,8 @@ class TeacherEvaluationViewModel : ViewModel() {
         .ifBlank { displayId }
 
     companion object {
+        private const val PREFS_NAME = "teacher_evaluation"
+        private const val KEY_SCORE_MODE = "teacher_eval_score_mode"
         private const val START_INTERVAL_MS = 6_000L
         private const val WAIT_BEFORE_SUBMIT_SECONDS = 140
 

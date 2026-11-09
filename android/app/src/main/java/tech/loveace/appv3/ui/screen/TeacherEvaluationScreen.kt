@@ -20,6 +20,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import tech.loveace.appv3.data.model.TeacherEvaluationCourse
+import tech.loveace.appv3.data.model.TeacherEvaluationScoreMode
 import tech.loveace.appv3.ui.components.EmptyScreen
 import tech.loveace.appv3.ui.components.ErrorScreen
 import tech.loveace.appv3.ui.components.LoadingScreen
@@ -102,6 +106,7 @@ fun TeacherEvaluationScreen(
             onStart = { showConfirm = true },
             onStop = { vm.stop() },
             onRetry = { vm.load() },
+            onScoreModeChange = { vm.setScoreMode(it) },
         )
     }
 }
@@ -112,6 +117,7 @@ fun TeacherEvaluationContent(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRetry: () -> Unit,
+    onScoreModeChange: (TeacherEvaluationScoreMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when {
@@ -134,6 +140,8 @@ fun TeacherEvaluationContent(
                     failed = state.tasks.count { it.status == TeacherEvaluationTaskStatus.Failed },
                     onStart = onStart,
                     onStop = onStop,
+                    scoreMode = state.scoreMode,
+                    onScoreModeChange = onScoreModeChange,
                 )
             }
 
@@ -172,6 +180,8 @@ private fun NoticeCard(
     failed: Int,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    scoreMode: TeacherEvaluationScoreMode,
+    onScoreModeChange: (TeacherEvaluationScoreMode) -> Unit,
 ) {
     RibbonCard(
         variant = RibbonCardVariant.PRIMARY_CONTAINER,
@@ -217,11 +227,44 @@ private fun NoticeCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
             )
+            ScoreModeSection(scoreMode = scoreMode, enabled = !isRunning, onScoreModeChange = onScoreModeChange)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onStart, enabled = !isRunning && pendingCount > 0) { Text("开始批量评教") }
                 OutlinedButton(onClick = onStop, enabled = isRunning) { Text("停止") }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScoreModeSection(
+    scoreMode: TeacherEvaluationScoreMode,
+    enabled: Boolean,
+    onScoreModeChange: (TeacherEvaluationScoreMode) -> Unit,
+) {
+    val modes = TeacherEvaluationScoreMode.entries
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            modes.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = scoreMode == mode,
+                    onClick = { onScoreModeChange(mode) },
+                    enabled = enabled,
+                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                ) { Text(mode.label) }
+            }
+        }
+        Text(
+            "随机评分（默认）：每道单选题有 80% 的概率选择「非常满意」，20% 的概率选择「满意」。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+        )
+        Text(
+            "非常满意：每道单选题 100% 选择「非常满意」。请自行确认是否符合学校的评教要求。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+        )
     }
 }
 

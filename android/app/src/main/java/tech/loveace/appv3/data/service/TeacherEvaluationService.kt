@@ -22,6 +22,7 @@ import tech.loveace.appv3.data.model.TeacherEvaluationOption
 import tech.loveace.appv3.data.model.TeacherEvaluationPreparedForm
 import tech.loveace.appv3.data.model.TeacherEvaluationQuestionnaire
 import tech.loveace.appv3.data.model.TeacherEvaluationRadioQuestion
+import tech.loveace.appv3.data.model.TeacherEvaluationScoreMode
 import tech.loveace.appv3.data.model.TeacherEvaluationSubmitResult
 import tech.loveace.appv3.data.model.TeacherEvaluationTextQuestion
 import tech.loveace.appv3.data.model.TeacherEvaluationTextType
@@ -72,6 +73,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
         course: TeacherEvaluationCourse,
         pendingCount: Int,
         indexToken: String,
+        scoreMode: TeacherEvaluationScoreMode,
     ): UniResponse<TeacherEvaluationPreparedForm> = withContext(Dispatchers.IO) {
         try {
             if (indexToken.isBlank()) throw Exception("首页 token 为空")
@@ -103,7 +105,7 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
             )
 
             questionnaire.radioQuestions.forEach { question ->
-                form[question.key] = chooseOption(question).value
+                form[question.key] = chooseOption(question, scoreMode).value
             }
             questionnaire.textQuestions.forEach { question ->
                 form[question.key] = randomText(question.type)
@@ -344,9 +346,19 @@ class TeacherEvaluationService(private val connection: AUFEConnection) {
         }
     }
 
-    private fun chooseOption(question: TeacherEvaluationRadioQuestion): TeacherEvaluationOption {
+    /**
+     * 单选题选项。非常满意（max）：有满分选项时必选满分。随机评分（random）：80% 满分、20% 次高权重组。
+     * 无满分选项时两种模式都沿用原有兜底（最高权重组）。
+     */
+    private fun chooseOption(
+        question: TeacherEvaluationRadioQuestion,
+        scoreMode: TeacherEvaluationScoreMode,
+    ): TeacherEvaluationOption {
         val options = question.options.sortedByDescending { it.weight }
         val fullWeightOptions = options.filter { it.weight == 1.0 }
+        if (scoreMode == TeacherEvaluationScoreMode.Max && fullWeightOptions.isNotEmpty()) {
+            return fullWeightOptions.random()
+        }
         if (fullWeightOptions.isNotEmpty() && Random.nextDouble() < 0.8) {
             return fullWeightOptions.random()
         }

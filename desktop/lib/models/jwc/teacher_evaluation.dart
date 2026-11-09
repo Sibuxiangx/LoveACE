@@ -149,6 +149,19 @@ class TeacherEvaluationTextQuestion {
   });
 }
 
+enum TeacherEvalScoreMode {
+  random('随机评分', '随机评分（默认）：每道单选题有 80% 的概率选择「非常满意」，20% 的概率选择「满意」。'),
+  max('非常满意', '非常满意：每道单选题 100% 选择「非常满意」。请自行确认是否符合学校的评教要求。');
+
+  final String label;
+  final String description;
+  const TeacherEvalScoreMode(this.label, this.description);
+
+  /// 未知或缺失的存储值一律视为默认的 random
+  static TeacherEvalScoreMode fromStored(String? value) =>
+      TeacherEvalScoreMode.values.asNameMap()[value] ?? TeacherEvalScoreMode.random;
+}
+
 enum TeacherEvaluationTextType { overall, inspiration, suggestion, general }
 
 class TeacherEvaluationPreparedForm {

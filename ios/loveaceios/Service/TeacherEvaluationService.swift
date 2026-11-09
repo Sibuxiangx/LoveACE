@@ -99,7 +99,7 @@ actor TeacherEvaluationService {
 
     // MARK: - Evaluation Flow
 
-    func prepareEvaluation(course: TeacherEvaluationCourse, totalCourses: Int) async -> UniResponse<[String: String]> {
+    func prepareEvaluation(course: TeacherEvaluationCourse, totalCourses: Int, mode: TeacherEvaluationScoreMode) async -> UniResponse<[String: String]> {
         do {
             guard let html = try await accessEvaluationPage(course: course, totalCourses: totalCourses) else {
                 throw ServiceError.parseError("无法访问评价页面")
@@ -108,7 +108,7 @@ actor TeacherEvaluationService {
                 throw ServiceError.parseError("会话已失效，请重新登录")
             }
             let questionnaire = try parseQuestionnaire(html)
-            let formData = buildFormData(questionnaire: questionnaire, course: course, totalCourses: totalCourses)
+            let formData = buildFormData(questionnaire: questionnaire, course: course, totalCourses: totalCourses, mode: mode)
             guard formData["tokenValue"]?.isEmpty == false else {
                 throw ServiceError.parseError("评价页缺少 token")
             }
@@ -287,7 +287,7 @@ actor TeacherEvaluationService {
 
     // MARK: - Form Building
 
-    private func buildFormData(questionnaire: TeacherQuestionnaire, course: TeacherEvaluationCourse, totalCourses: Int) -> [String: String] {
+    private func buildFormData(questionnaire: TeacherQuestionnaire, course: TeacherEvaluationCourse, totalCourses: Int, mode: TeacherEvaluationScoreMode) -> [String: String] {
         var formData: [String: String] = [
             "optType": "submit",
             "tokenValue": questionnaire.tokenValue,
@@ -298,7 +298,7 @@ actor TeacherEvaluationService {
         ]
 
         for question in questionnaire.radioQuestions {
-            guard let selected = selectBestOption(question.options) else { continue }
+            guard let selected = selectBestOption(question.options, mode: mode) else { continue }
             formData[question.key] = selected.value
         }
 
@@ -309,12 +309,14 @@ actor TeacherEvaluationService {
         return formData
     }
 
-    private func selectBestOption(_ options: [TeacherRadioOption]) -> TeacherRadioOption? {
+    /// random：80% 从满分组随机，否则从次高权重组随机；max：满分组随机。无满分选项时两种模式都走次高权重组（原有兜底）
+    private func selectBestOption(_ options: [TeacherRadioOption], mode: TeacherEvaluationScoreMode) -> TeacherRadioOption? {
         guard !options.isEmpty else { return nil }
         let sorted = options.sorted { $0.weight > $1.weight }
         let fullWeightOptions = sorted.filter { $0.weight == 1.0 }
-        if !fullWeightOptions.isEmpty, Double.random(in: 0..<1) < 0.8 {
-            return fullWeightOptions.randomElement()
+        if !fullWeightOptions.isEmpty {
+            let pickFull = mode == .max || Double.random(in: 0..<1) < 0.8
+            if pickFull { return fullWeightOptions.randomElement() }
         }
         if sorted.count > 1 {
             let highest = sorted[0].weight

@@ -89,6 +89,7 @@
 - Post-batch compensation runs only for `prepareFailed`/`submitFailed` courses, after a successful list refresh; `verifyUnknown` is excluded.
 - A VPN login-page response is reported as "会话已失效，请重新登录"; `URLError` maps to a Chinese message, so raw `localizedDescription` text does not reach the UI.
 - `TeacherEvaluationView.onDisappear` calls `cancelEvaluation()`, which stops the batch and marks unfinished tasks cancelled. Android and desktop keep the batch running after the page is left; iOS stays different until the user asks to unify.
+- Score mode (`TeacherEvaluationScoreMode`, UserDefaults `teacher_eval_score_mode`): 随机评分 (`random`, default; 80% full-weight, 20% second group) and 非常满意 (`max`; always full-weight, `random` fallback when a question has none). Read once at batch start and passed through `prepareEvaluation` → `buildFormData` → `selectBestOption(_:mode:)`; the picker is disabled while a batch runs. Android and desktop must offer the same two modes.
 
 ## Widget, Live Activity, and class reminders
 
