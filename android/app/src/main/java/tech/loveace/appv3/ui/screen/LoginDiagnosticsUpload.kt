@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -116,6 +117,7 @@ internal fun LoginDiagnosticsUploadSection(
 }
 
 /** 上传成功后的结果页：可选中的链接、复制链接、加入用户群（群号来自 [QqGroupService]，与登录页入口同一数据） */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DiagnosticsUploadResultSheet(result: DiagnosticsUploadSuccess, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
