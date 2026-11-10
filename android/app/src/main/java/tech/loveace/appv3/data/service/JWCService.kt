@@ -295,10 +295,10 @@ class JWCService(private val connection: AUFEConnection) {
                 val records = json["records"]?.jsonArray
                     ?: json["list"]?.jsonObject?.get("records")?.jsonArray
                     ?: JsonArray(emptyList())
-                records.mapNotNull { parseOtherExam(it) }
+                records.mapNotNull { parseOtherExam(it, termCode) }
             } catch (_: Exception) { emptyList() }
 
-            val all = (schoolExams + otherExams).sortedWith(compareBy({ it.examDate }, { it.examTime }))
+            val all = (schoolExams + otherExams).sortedBy { examSortKey(it) }
             UniResponse.success(all)
         } catch (e: Exception) {
             Log.e(TAG, "getExamInfo failed", e)
@@ -342,36 +342,85 @@ class JWCService(private val connection: AUFEConnection) {
         )
     }
 
-    private fun parseOtherExam(element: JsonElement): UnifiedExamInfo? = when (element) {
-        is JsonArray -> parseOtherExamArray(element)
-        is JsonObject -> parseOtherExamObject(element)
+    /** 其他考试的日期规范化：yyyy-MM-dd、yyyy年M月d日、yyyy/M/d；无年份的 M月d日 用学期码推算年份（9–12 月属于学期开始年，1–8 月属于结束年）。解析不了返回 null，保留原文。 */
+    private fun normalizeOtherExamDate(raw: String, termCode: String): String? {
+        val text = raw.trim()
+        val full = Regex("""^(\d{4})\D+(\d{1,2})\D+(\d{1,2})""").find(text)
+        val (year, month, day) = if (full != null) {
+            Triple(full.groupValues[1].toInt(), full.groupValues[2].toInt(), full.groupValues[3].toInt())
+        } else {
+            val short = Regex("""^(\d{1,2})\D+(\d{1,2})""").find(text) ?: return null
+            val years = termCode.split('-').mapNotNull { it.toIntOrNull() }
+            if (years.size < 2) return null
+            val m = short.groupValues[1].toInt()
+            Triple(if (m >= 9) years[0] else years[1], m, short.groupValues[2].toInt())
+        }
+        // LocalDate.of 对非法日期（如 2 月 30 日）抛异常，runCatching 之后返回 null
+        return runCatching { java.time.LocalDate.of(year, month, day).toString() }.getOrNull()
+    }
+
+    /** 其他考试的时间规范化：全角数字与冒号转半角，分隔符统一为 -，输出 HH:mm-HH:mm。解析不了返回 null，保留原文。 */
+    private fun normalizeOtherExamTime(raw: String): String? {
+        var text = raw.trim().map { c -> if (c in '０'..'９') '0' + (c - '０') else c }.joinToString("")
+        text = text.replace('：', ':')
+        for ((from, to) in listOf("～" to "-", "—" to "-", "–" to "-", "~" to "-", "至" to "-", "到" to "-")) {
+            text = text.replace(from, to)
+        }
+        val m = Regex("""^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})""").find(text) ?: return null
+        val (sh, sm, eh, em) = m.destructured
+        if (sh.toInt() > 23 || eh.toInt() > 23 || sm.toInt() > 59 || em.toInt() > 59) return null
+        return "%02d:%02d-%02d:%02d".format(sh.toInt(), sm.toInt(), eh.toInt(), em.toInt())
+    }
+
+    /** 排序键：可解析的 ISO 日期在前，解析不了的日期排到最后 */
+    private fun examSortKey(exam: UnifiedExamInfo): String {
+        val isIso = Regex("""\d{4}-\d{2}-\d{2}""").matches(exam.examDate)
+        return (if (isIso) exam.examDate else "9999-12-31") + "|" + exam.examTime
+    }
+
+    /** 统一构造其他考试：日期、时间能规范化就用规范化结果，否则保留原文 */
+    private fun makeOtherExam(
+        courseName: String, rawDate: String, rawTime: String,
+        location: String, note: String, termCode: String,
+    ): UnifiedExamInfo = UnifiedExamInfo(
+        courseName = courseName,
+        examDate = normalizeOtherExamDate(rawDate, termCode) ?: rawDate,
+        examTime = normalizeOtherExamTime(rawTime) ?: rawTime,
+        examLocation = location,
+        examType = "其他考试",
+        note = note,
+    )
+
+    private fun parseOtherExam(element: JsonElement, termCode: String): UnifiedExamInfo? = when (element) {
+        is JsonArray -> parseOtherExamArray(element, termCode)
+        is JsonObject -> parseOtherExamObject(element, termCode)
         else -> null
     }
 
-    private fun parseOtherExamArray(arr: JsonArray): UnifiedExamInfo? {
+    private fun parseOtherExamArray(arr: JsonArray, termCode: String): UnifiedExamInfo? {
         if (arr.size < 8) return null
-        return UnifiedExamInfo(
+        return makeOtherExam(
             courseName = arr[2].jsonPrimitive.contentOrNull ?: "",
-            examDate = arr[4].jsonPrimitive.contentOrNull ?: "",
-            examTime = arr[5].jsonPrimitive.contentOrNull ?: "",
-            examLocation = arr[6].jsonPrimitive.contentOrNull ?: "",
-            examType = "其他考试",
+            rawDate = arr[4].jsonPrimitive.contentOrNull ?: "",
+            rawTime = arr[5].jsonPrimitive.contentOrNull ?: "",
+            location = arr[6].jsonPrimitive.contentOrNull ?: "",
             note = arr.getOrNull(7)?.jsonPrimitive?.contentOrNull ?: "",
+            termCode = termCode,
         )
     }
 
-    private fun parseOtherExamObject(obj: JsonObject): UnifiedExamInfo? {
+    private fun parseOtherExamObject(obj: JsonObject, termCode: String): UnifiedExamInfo? {
         val courseName = obj.string("KCM")
         val examDate = obj.string("KSRQ")
         val examTime = obj.string("KSSJ")
         if (courseName.isEmpty() && examDate.isEmpty() && examTime.isEmpty()) return null
-        return UnifiedExamInfo(
+        return makeOtherExam(
             courseName = courseName,
-            examDate = examDate,
-            examTime = examTime,
-            examLocation = obj.string("KSDD"),
-            examType = "其他考试",
+            rawDate = examDate,
+            rawTime = examTime,
+            location = obj.string("KSDD"),
             note = obj.string("BZ"),
+            termCode = termCode,
         )
     }
 

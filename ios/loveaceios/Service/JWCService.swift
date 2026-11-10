@@ -295,10 +295,10 @@ actor JWCService {
                let jsonData = otherBody.data(using: .utf8),
                let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
                 let records = otherExamRecords(from: json)
-                otherExams = records.compactMap { parseOtherExam($0) }
+                otherExams = records.compactMap { parseOtherExam($0, termCode: termCode) }
             }
 
-            let all = (schoolExams + otherExams).sorted { ($0.examDate, $0.examTime) < ($1.examDate, $1.examTime) }
+            let all = (schoolExams + otherExams).sorted { examSortKey($0) < examSortKey($1) }
             return .success(all)
         } catch {
             logger.error("getExamInfo failed: \(error.localizedDescription)")
@@ -366,6 +366,67 @@ actor JWCService {
         )
     }
 
+    /// 其他考试的日期规范化：yyyy-MM-dd、yyyy年M月d日、yyyy/M/d；无年份的 M月d日 用学期码推算年份（9–12 月属于学期开始年，1–8 月属于结束年）。解析不了返回 nil，保留原文。
+    private func normalizeOtherExamDate(_ raw: String, termCode: String) -> String? {
+        let text = raw.trimmingCharacters(in: .whitespaces)
+        let year: Int
+        let month: Int
+        let day: Int
+        if let full = text.firstMatch(of: #/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})/#) {
+            year = Int(full.1) ?? 0
+            month = Int(full.2) ?? 0
+            day = Int(full.3) ?? 0
+        } else if let short = text.firstMatch(of: #/^(\d{1,2})\D+(\d{1,2})/#) {
+            month = Int(short.1) ?? 0
+            day = Int(short.2) ?? 0
+            let years = termCode.split(separator: "-").compactMap { Int($0) }
+            guard years.count >= 2 else { return nil }
+            year = month >= 9 ? years[0] : years[1]
+        } else {
+            return nil
+        }
+        let calendar = Calendar(identifier: .gregorian)
+        guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else { return nil }
+        let back = calendar.dateComponents([.year, .month, .day], from: date)
+        // 2 月 30 日这类非法日期会被系统进位，回读对不上就拒绝
+        guard back.year == year, back.month == month, back.day == day else { return nil }
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    /// 其他考试的时间规范化：全角数字与冒号转半角，分隔符统一为 -，输出 HH:mm-HH:mm。解析不了返回 nil，保留原文。
+    private func normalizeOtherExamTime(_ raw: String) -> String? {
+        var text = raw.trimmingCharacters(in: .whitespaces)
+        for (index, digit) in "０１２３４５６７８９".enumerated() {
+            text = text.replacingOccurrences(of: String(digit), with: String(index))
+        }
+        for (from, to) in [("：", ":"), ("～", "-"), ("—", "-"), ("–", "-"), ("~", "-"), ("至", "-"), ("到", "-")] {
+            text = text.replacingOccurrences(of: from, with: to)
+        }
+        guard let m = text.firstMatch(of: #/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/#),
+              let sh = Int(m.1), let sm = Int(m.2), let eh = Int(m.3), let em = Int(m.4),
+              sh < 24, eh < 24, sm < 60, em < 60 else { return nil }
+        return String(format: "%02d:%02d-%02d:%02d", sh, sm, eh, em)
+    }
+
+    /// 排序键：可解析的 ISO 日期在前，解析不了的日期排到最后
+    private func examSortKey(_ exam: UnifiedExamInfo) -> String {
+        let isISO = exam.examDate.firstMatch(of: #/^\d{4}-\d{2}-\d{2}$/#) != nil
+        return (isISO ? exam.examDate : "9999-12-31") + "|" + exam.examTime
+    }
+
+    /// 统一构造其他考试：日期、时间能规范化就用规范化结果，否则保留原文
+    private func makeOtherExam(courseName: String, rawDate: String, rawTime: String,
+                               location: String, note: String, termCode: String) -> UnifiedExamInfo {
+        UnifiedExamInfo(
+            courseName: courseName,
+            examDate: normalizeOtherExamDate(rawDate, termCode: termCode) ?? rawDate,
+            examTime: normalizeOtherExamTime(rawTime) ?? rawTime,
+            examLocation: location,
+            examType: "其他考试",
+            note: note
+        )
+    }
+
     private func otherExamRecords(from json: [String: Any]) -> [Any] {
         if let records = json["records"] as? [Any] { return records }
         if let list = json["list"] as? [String: Any],
@@ -375,33 +436,29 @@ actor JWCService {
         return []
     }
 
-    private func parseOtherExam(_ record: Any) -> UnifiedExamInfo? {
-        if let arr = record as? [Any] { return parseOtherExamArray(arr) }
-        if let obj = record as? [String: Any] { return parseOtherExamObject(obj) }
+    private func parseOtherExam(_ record: Any, termCode: String) -> UnifiedExamInfo? {
+        if let arr = record as? [Any] { return parseOtherExamArray(arr, termCode: termCode) }
+        if let obj = record as? [String: Any] { return parseOtherExamObject(obj, termCode: termCode) }
         return nil
     }
 
-    private func parseOtherExamArray(_ arr: [Any]) -> UnifiedExamInfo? {
+    private func parseOtherExamArray(_ arr: [Any], termCode: String) -> UnifiedExamInfo? {
         guard arr.count >= 8 else { return nil }
         func str(_ i: Int) -> String { "\(arr[i])" == "<null>" ? "" : "\(arr[i])" }
-        return UnifiedExamInfo(
-            courseName: str(2), examDate: str(4), examTime: str(5),
-            examLocation: str(6), examType: "其他考试", note: str(7)
+        return makeOtherExam(
+            courseName: str(2), rawDate: str(4), rawTime: str(5),
+            location: str(6), note: str(7), termCode: termCode
         )
     }
 
-    private func parseOtherExamObject(_ obj: [String: Any]) -> UnifiedExamInfo? {
+    private func parseOtherExamObject(_ obj: [String: Any], termCode: String) -> UnifiedExamInfo? {
         let courseName = stringValue(obj["KCM"])
         let examDate = stringValue(obj["KSRQ"])
         let examTime = stringValue(obj["KSSJ"])
         guard !courseName.isEmpty || !examDate.isEmpty || !examTime.isEmpty else { return nil }
-        return UnifiedExamInfo(
-            courseName: courseName,
-            examDate: examDate,
-            examTime: examTime,
-            examLocation: stringValue(obj["KSDD"]),
-            examType: "其他考试",
-            note: stringValue(obj["BZ"])
+        return makeOtherExam(
+            courseName: courseName, rawDate: examDate, rawTime: examTime,
+            location: stringValue(obj["KSDD"]), note: stringValue(obj["BZ"]), termCode: termCode
         )
     }
 
