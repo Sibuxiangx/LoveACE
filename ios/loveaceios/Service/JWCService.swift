@@ -368,7 +368,10 @@ actor JWCService {
 
     /// 其他考试的日期规范化：yyyy-MM-dd、yyyy年M月d日、yyyy/M/d；无年份的 M月d日 用学期码推算年份（9–12 月属于学期开始年，1–8 月属于结束年）。解析不了返回 nil，保留原文。
     private func normalizeOtherExamDate(_ raw: String, termCode: String) -> String? {
-        let text = raw.trimmingCharacters(in: .whitespaces)
+        let text = halfWidthDigits(raw).trimmingCharacters(in: .whitespaces)
+        // 含时间（如 "2026年1月3日 16:45-18:05"）或含两个及以上日期（如 "1月5日-1月6日"）：不能可靠归为单一日期，保留原文
+        if text.firstMatch(of: #/\d{1,2}\s*[:：]\s*\d{2}/#) != nil { return nil }
+        if text.matches(of: #/\d+/#).count > 3 { return nil }
         let year: Int
         let month: Int
         let day: Int
@@ -393,12 +396,18 @@ actor JWCService {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
-    /// 其他考试的时间规范化：全角数字与冒号转半角，分隔符统一为 -，输出 HH:mm-HH:mm。解析不了返回 nil，保留原文。
-    private func normalizeOtherExamTime(_ raw: String) -> String? {
-        var text = raw.trimmingCharacters(in: .whitespaces)
+    /// 全角数字转半角（日期、时间共用）
+    private func halfWidthDigits(_ raw: String) -> String {
+        var text = raw
         for (index, digit) in "０１２３４５６７８９".enumerated() {
             text = text.replacingOccurrences(of: String(digit), with: String(index))
         }
+        return text
+    }
+
+    /// 其他考试的时间规范化：全角数字与冒号转半角，分隔符统一为 -，输出 HH:mm-HH:mm。解析不了返回 nil，保留原文。
+    private func normalizeOtherExamTime(_ raw: String) -> String? {
+        var text = halfWidthDigits(raw).trimmingCharacters(in: .whitespaces)
         for (from, to) in [("：", ":"), ("～", "-"), ("—", "-"), ("–", "-"), ("~", "-"), ("至", "-"), ("到", "-")] {
             text = text.replacingOccurrences(of: from, with: to)
         }

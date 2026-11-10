@@ -344,7 +344,10 @@ class JWCService(private val connection: AUFEConnection) {
 
     /** 其他考试的日期规范化：yyyy-MM-dd、yyyy年M月d日、yyyy/M/d；无年份的 M月d日 用学期码推算年份（9–12 月属于学期开始年，1–8 月属于结束年）。解析不了返回 null，保留原文。 */
     private fun normalizeOtherExamDate(raw: String, termCode: String): String? {
-        val text = raw.trim()
+        val text = halfWidthDigits(raw).trim()
+        // 含时间（如 "2026年1月3日 16:45-18:05"）或含两个及以上日期（如 "1月5日-1月6日"）：不能可靠归为单一日期，保留原文
+        if (Regex("""\d{1,2}\s*[:：]\s*\d{2}""").containsMatchIn(text)) return null
+        if (Regex("""\d+""").findAll(text).count() > 3) return null
         val full = Regex("""^(\d{4})\D+(\d{1,2})\D+(\d{1,2})""").find(text)
         val (year, month, day) = if (full != null) {
             Triple(full.groupValues[1].toInt(), full.groupValues[2].toInt(), full.groupValues[3].toInt())
@@ -359,9 +362,13 @@ class JWCService(private val connection: AUFEConnection) {
         return runCatching { java.time.LocalDate.of(year, month, day).toString() }.getOrNull()
     }
 
+    /** 全角数字转半角（日期、时间共用） */
+    private fun halfWidthDigits(raw: String): String =
+        raw.map { c -> if (c in '０'..'９') '0' + (c - '０') else c }.joinToString("")
+
     /** 其他考试的时间规范化：全角数字与冒号转半角，分隔符统一为 -，输出 HH:mm-HH:mm。解析不了返回 null，保留原文。 */
     private fun normalizeOtherExamTime(raw: String): String? {
-        var text = raw.trim().map { c -> if (c in '０'..'９') '0' + (c - '０') else c }.joinToString("")
+        var text = halfWidthDigits(raw).trim()
         text = text.replace('：', ':')
         for ((from, to) in listOf("～" to "-", "—" to "-", "–" to "-", "~" to "-", "至" to "-", "到" to "-")) {
             text = text.replace(from, to)
