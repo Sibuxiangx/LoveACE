@@ -11,6 +11,9 @@ struct SettingsView: View {
     @State private var classReminderOn = ClassReminderScheduler.isEnabled
     @State private var reminderDenied = false
     @State private var qqGroupManifest: QqGroupManifest?
+    @Environment(\.openURL) private var openURL
+    @State private var isCheckingUpdate = false
+    @State private var updateResult: IOSUpdateCheckResult?
 
     private var classReminderBinding: Binding<Bool> {
         Binding(
@@ -29,6 +32,57 @@ struct SettingsView: View {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return "\(v) (\(b))"
+    }
+
+    private var isUpdateResultPresented: Binding<Bool> {
+        Binding(
+            get: { updateResult != nil },
+            set: { if !$0 { updateResult = nil } }
+        )
+    }
+
+    private var updateAlertTitle: String {
+        switch updateResult {
+        case .upToDate:
+            return "已是最新版本"
+        case .available(let update):
+            return "发现新版本 \(update.version) (\(update.build))"
+        default:
+            return "检查更新失败"
+        }
+    }
+
+    private var updateAlertMessage: String {
+        switch updateResult {
+        case .upToDate:
+            return "当前版本 \(appVersion)"
+        case .available(let update):
+            return update.changelog
+        default:
+            return "请检查网络后重试。"
+        }
+    }
+
+    @ViewBuilder
+    private var updateAlertActions: some View {
+        if case .available(let update) = updateResult {
+            Button("前往 TestFlight") {
+                openURL(update.testflightURL)
+                updateResult = nil
+            }
+            Button("取消", role: .cancel) { updateResult = nil }
+        } else {
+            Button("好的", role: .cancel) { updateResult = nil }
+        }
+    }
+
+    private func checkForUpdate() {
+        isCheckingUpdate = true
+        Task {
+            let result = await IOSUpdateService.check()
+            isCheckingUpdate = false
+            updateResult = result
+        }
     }
 
     var body: some View {
@@ -136,6 +190,18 @@ struct SettingsView: View {
                     } label: {
                         Label("版本", systemImage: "info.circle.fill")
                     }
+                    Button {
+                        checkForUpdate()
+                    } label: {
+                        HStack {
+                            Label("检查更新", systemImage: "arrow.triangle.2.circlepath")
+                            Spacer()
+                            if isCheckingUpdate {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isCheckingUpdate)
                     LabeledContent {
                         Text("SwiftUI")
                     } label: {
@@ -173,6 +239,11 @@ struct SettingsView: View {
                 Button("好的", role: .cancel) {}
             } message: {
                 Text(logExportError ?? "未知错误")
+            }
+            .alert(updateAlertTitle, isPresented: isUpdateResultPresented) {
+                updateAlertActions
+            } message: {
+                Text(updateAlertMessage)
             }
             .sheet(isPresented: Binding(
                 get: { logArchiveURL != nil && !isExportingLogs },

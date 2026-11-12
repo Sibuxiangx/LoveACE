@@ -62,6 +62,7 @@
 - `Service/IOSUpdateService.swift` reads `loveace/manifest_v2_ios_testflight.json` (not `manifest_v2.json`, so old clients never decode the new file) from `loveace.linota.cn`, then `release.loveace.top`. The alert shows only when `enabled`, `schema_version == 1`, `build` > `CFBundleVersion`, and the user has not tapped 「稍后」 for that build.
 - The alert is a `.background` view on `ContentView` (separate from the announcement `.alert`) and is suppressed while an announcement is showing. Only builds that contain this code show it.
 - Source of truth: `utils/manifest_v2/ios_testflight.json`. Update `version`/`build`/`changelog` with each TestFlight upload, then run `.github/workflows/ios-testflight-manifest.yml` with `dry_run=false`. Publish is idempotent (unchanged content is skipped).
+- Settings → 关于 → 检查更新 calls `IOSUpdateService.check()`. It ignores 「稍后」 and reports one of: up to date, available (with 前往 TestFlight), or failed. The launch prompt uses `fetchPromptUpdate()`, which applies the 「稍后」 filter.
 
 ## Login captcha and cooldown
 

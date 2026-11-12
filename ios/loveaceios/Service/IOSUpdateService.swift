@@ -34,6 +34,13 @@ struct IOSTestFlightUpdate: Equatable, Sendable {
     let changelog: String
 }
 
+/// 一次检查的结果。`failed` 包括所有地址都不可用、响应无效或 schema 不匹配。
+enum IOSUpdateCheckResult: Sendable {
+    case upToDate
+    case available(IOSTestFlightUpdate)
+    case failed
+}
+
 enum IOSUpdateService {
     private static let manifestURLs = [
         URL(string: "https://loveace.linota.cn/loveace/manifest_v2_ios_testflight.json")!,
@@ -46,10 +53,10 @@ enum IOSUpdateService {
         Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0
     }
 
-    /// 拉取更新提示。网络、非 2xx、解码失败时换下一个地址；拿到有效配置后不再回退。
-    /// 只在 enabled、schema_version 为 1、build 高于当前构建、且用户没有对该构建点过「稍后」时返回结果。
-    /// 任何失败都返回 nil。响应内容不记录日志。
-    static func fetchUpdate() async -> IOSTestFlightUpdate? {
+    /// 检查是否有更新。不考虑「稍后」的忽略记录，设置页的手动检查总是给出结果。
+    /// 网络、非 2xx、解码失败时换下一个地址；拿到有效配置后不再回退。
+    /// 响应内容不记录日志。
+    static func check() async -> IOSUpdateCheckResult {
         let current = currentBuild
         for url in manifestURLs {
             do {
@@ -66,26 +73,35 @@ enum IOSUpdateService {
                 }
                 let manifest = try JSONDecoder().decode(IOSTestFlightManifest.self, from: data)
                 guard manifest.schemaVersion == 1,
-                      manifest.enabled,
-                      manifest.build > current,
-                      manifest.build != UserDefaults.standard.integer(forKey: ignoredBuildKey),
                       let testflightURL = URL(string: manifest.testflightURL),
                       testflightURL.scheme == "https",
                       testflightURL.host == "testflight.apple.com" else {
-                    return nil
+                    return .failed
                 }
-                return IOSTestFlightUpdate(
+                guard manifest.enabled, manifest.build > current else {
+                    return .upToDate
+                }
+                return .available(IOSTestFlightUpdate(
                     version: manifest.version,
                     build: manifest.build,
                     testflightURL: testflightURL,
                     title: manifest.title,
                     changelog: manifest.changelog
-                )
+                ))
             } catch {
                 continue
             }
         }
-        return nil
+        return .failed
+    }
+
+    /// 启动时的更新弹窗：只返回用户没有对该构建点过「稍后」的更新
+    static func fetchPromptUpdate() async -> IOSTestFlightUpdate? {
+        guard case .available(let update) = await check(),
+              update.build != UserDefaults.standard.integer(forKey: ignoredBuildKey) else {
+            return nil
+        }
+        return update
     }
 
     /// 用户点了「稍后」：忽略这个构建，更高的构建会再次提示

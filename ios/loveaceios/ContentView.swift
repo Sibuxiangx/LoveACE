@@ -48,7 +48,7 @@ struct ContentView: View {
         }
         .animation(.default, value: authVM.state == .authenticated)
         .task { announcementVM.loadAnnouncements() }
-        .task { testFlightUpdate = await IOSUpdateService.fetchUpdate() }
+        .task { testFlightUpdate = await IOSUpdateService.fetchPromptUpdate() }
         .task(id: authVM.sessionGeneration) { await refreshWidgetAndReminders(force: true) }
         .task(id: authVM.state == .authenticated) {
             // 前台期间每分钟检查一次灵动岛时段（上课中）
