@@ -1,8 +1,8 @@
 {
   "enabled": true,
   "version": "1.1",
-  "build": 18,
+  "build": 20,
   "testflight_url": "https://testflight.apple.com/join/V2KrVbYZ",
   "title": "发现新版本",
-  "changelog": "彩带小工具 1.1（18）已在 TestFlight 发布。请前往 TestFlight 更新到最新版。"
+  "changelog": "测试：TestFlight 更新提示弹窗（build 20）。仅用于验证提示，请忽略。"
 }
