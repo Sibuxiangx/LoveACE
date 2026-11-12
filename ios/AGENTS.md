@@ -58,6 +58,11 @@
 - `AnnouncementService.fetchPreloginNotice()` reads the optional top-level `prelogin_notice` field of manifest v2; `LoginView` renders the banner below the brand header and must stay silent on fetch failure. Desktop ignores this field.
 - QQ group entry: `QqGroupService.fetch()` (`Service/QqGroupService.swift`) reads `qq_group_v1.json` (key `qq_group_v1.json`, not manifest_v2), tries `loveace.linota.cn` then `release.loveace.top`, and shows entries only when `schema_version == 1` and `enabled == true`. Result is in-memory per screen, never persisted or logged. UI: `QqGroupEntryCard` under the login button and `QqGroupSettingsRow` in 我的, both opening `QqGroupPopup` (`View/QqGroupPopup.swift`).
 
+## TestFlight update prompt
+- `Service/IOSUpdateService.swift` reads `loveace/manifest_v2_ios_testflight.json` (not `manifest_v2.json`, so old clients never decode the new file) from `loveace.linota.cn`, then `release.loveace.top`. The alert shows only when `enabled`, `schema_version == 1`, `build` > `CFBundleVersion`, and the user has not tapped 「稍后」 for that build.
+- The alert is a `.background` view on `ContentView` (separate from the announcement `.alert`) and is suppressed while an announcement is showing. Only builds that contain this code show it.
+- Source of truth: `utils/manifest_v2/ios_testflight.json`. Update `version`/`build`/`changelog` with each TestFlight upload, then run `.github/workflows/ios-testflight-manifest.yml` with `dry_run=false`. Publish is idempotent (unchanged content is skipped).
+
 ## Login captcha and cooldown
 
 - `AUFEConnection.ecLogin(captchaCode:)` is the only EC entry point. Without a code it returns `captchaRequired` with `captchaImage` when the auth page has `<RndImg>1</RndImg>` or the POST answers 20041. With a code it must reuse the actor's pending auth context (single-use, 180 s); a 20023 answer is `captchaInvalid`, which counts as a failure and triggers a fresh challenge.

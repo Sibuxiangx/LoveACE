@@ -28,6 +28,7 @@ from manifest import (
 )
 from s3_client import CANONICAL_CDN_BASE_URL, S3Client
 import qq_group
+import ios_testflight
 
 
 app = typer.Typer(help="LoveACE 发布管理工具")
@@ -417,6 +418,17 @@ def qq_group_publish(
     client = S3Client()
     result_status, document = qq_group.publish(client, dry_run=dry_run)
     console.print(f"[green]QQ group manifest {result_status}[/] [dim]{qq_group.QQ_GROUP_KEY}[/]")
+    console.print_json(json.dumps(document, ensure_ascii=False))
+
+
+@app.command("ios-testflight-publish")
+def ios_testflight_publish(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate and print without writing to S3"),
+):
+    """Publish the iOS TestFlight update manifest; unchanged content is skipped."""
+    client = S3Client()
+    result_status, document = ios_testflight.publish(client, dry_run=dry_run)
+    console.print(f"[green]iOS TestFlight manifest {result_status}[/] [dim]{ios_testflight.IOS_TESTFLIGHT_KEY}[/]")
     console.print_json(json.dumps(document, ensure_ascii=False))
 
 

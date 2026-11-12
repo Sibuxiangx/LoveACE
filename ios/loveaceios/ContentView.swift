@@ -4,10 +4,20 @@ struct ContentView: View {
     @Environment(AuthViewModel.self) private var authVM
     @Environment(AnnouncementViewModel.self) private var announcementVM
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
+    @State private var testFlightUpdate: IOSTestFlightUpdate?
 
     private var isAnnouncementPresented: Binding<Bool> {
         Binding(
             get: { announcementVM.currentAnnouncement != nil },
+            set: { _ in }
+        )
+    }
+
+    /// 有 TestFlight 新构建且当前没有公告弹窗时才显示更新提示
+    private var isTestFlightUpdatePresented: Binding<Bool> {
+        Binding(
+            get: { testFlightUpdate != nil && announcementVM.currentAnnouncement == nil },
             set: { _ in }
         )
     }
@@ -38,6 +48,7 @@ struct ContentView: View {
         }
         .animation(.default, value: authVM.state == .authenticated)
         .task { announcementVM.loadAnnouncements() }
+        .task { testFlightUpdate = await IOSUpdateService.fetchUpdate() }
         .task(id: authVM.sessionGeneration) { await refreshWidgetAndReminders(force: true) }
         .task(id: authVM.state == .authenticated) {
             // 前台期间每分钟检查一次灵动岛时段（上课中）
@@ -63,6 +74,24 @@ struct ContentView: View {
             }
         } message: { announcement in
             Text(announcement.content)
+        }
+        .background {
+            Color.clear.alert(
+                testFlightUpdate?.title ?? "发现新版本",
+                isPresented: isTestFlightUpdatePresented,
+                presenting: testFlightUpdate
+            ) { update in
+                Button("前往 TestFlight") {
+                    openURL(update.testflightURL)
+                    testFlightUpdate = nil
+                }
+                Button("稍后", role: .cancel) {
+                    IOSUpdateService.ignore(update)
+                    testFlightUpdate = nil
+                }
+            } message: { update in
+                Text(update.changelog)
+            }
         }
     }
 }
