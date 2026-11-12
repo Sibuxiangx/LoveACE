@@ -40,7 +40,7 @@ struct ContentView: View {
         .task { announcementVM.loadAnnouncements() }
         .task(id: authVM.sessionGeneration) { await refreshWidgetAndReminders(force: true) }
         .task(id: authVM.state == .authenticated) {
-            // 前台期间每分钟检查一次灵动岛时段（提前量内或上课中）
+            // 前台期间每分钟检查一次灵动岛时段（上课中）
             guard authVM.state == .authenticated else { return }
             while !Task.isCancelled {
                 await CourseLiveActivityController.sync()

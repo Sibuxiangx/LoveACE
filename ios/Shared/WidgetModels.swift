@@ -349,7 +349,7 @@ struct NextDayItem {
     let label: String
 }
 
-/// 处于灵动岛时段（提前量内或进行中）的项目
+/// 正在进行中的项目（灵动岛只在上课时段显示）
 struct LiveItem {
     let item: ScheduleItem
     let start: Date
@@ -371,7 +371,7 @@ struct WidgetScheduleState {
     let next: ScheduleItem?
     /// 今日无项目时，之后最近的一项
     let nextDay: NextDayItem?
-    /// 处于灵动岛时段（提前量内或进行中）的项目
+    /// 正在进行中的项目（灵动岛只在上课时段显示）
     let liveItem: LiveItem?
     let lastSyncedAt: Date?
 
@@ -384,7 +384,7 @@ struct WidgetScheduleState {
 }
 
 enum WidgetScheduleBuilder {
-    /// 上课前多久开始提醒，灵动岛与本地通知共用
+    /// 上课前多久发送本地提醒（灵动岛不提前显示）
     static let reminderLeadMinutes = 10
 
     static func state(at date: Date, snapshot: WidgetSnapshot?, calendar: Calendar = .current) -> WidgetScheduleState {
@@ -455,18 +455,17 @@ enum WidgetScheduleBuilder {
         return dates.sorted()
     }
 
-    /// 当前时刻是否处于灵动岛时段：开始前 reminderLeadMinutes 分钟起，到结束为止。课程与考试共用此规则
+    /// 当前时刻是否处于灵动岛时段：上课（或考试）进行中，即 start <= now < end。课程与考试共用此规则
     static func liveItem(at now: Date, snapshot: WidgetSnapshot?, calendar: Calendar = .current) -> LiveItem? {
         guard let snapshot else { return nil }
         let dayStart = calendar.startOfDay(for: now)
         let phase = SchoolTerm.phase(on: dayStart, semesters: snapshot.semesters, exams: snapshot.examList, calendar: calendar)
-        let lead = TimeInterval(reminderLeadMinutes * 60)
         let parts = calendar.dateComponents([.year, .month, .day], from: dayStart)
         for item in itemsForDay(dayStart, phase: phase, snapshot: snapshot, calendar: calendar) {
             guard let span = item.minuteSpan,
                   let start = calendar.date(byAdding: .minute, value: span.start, to: dayStart),
                   let end = calendar.date(byAdding: .minute, value: span.end, to: dayStart),
-                  now >= start.addingTimeInterval(-lead), now < end else { continue }
+                  now >= start, now < end else { continue }
             let key = "\(parts.year ?? 0)\(parts.month ?? 0)\(parts.day ?? 0)-\(item.id)"
             return LiveItem(item: item, start: start, end: end, key: key)
         }
@@ -546,7 +545,7 @@ enum CourseLiveActivityController {
 /// 小组件按钮与控制中心控件使用：不打开 App，即可在后台开启当前课程的灵动岛
 struct StartCourseActivityIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "显示当前课程"
-    static let description = IntentDescription("在灵动岛显示正在上课或即将开始的课程")
+    static let description = IntentDescription("在灵动岛显示正在上课的课程")
 
     func perform() async throws -> some IntentResult {
         await CourseLiveActivityController.sync()

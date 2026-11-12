@@ -516,11 +516,7 @@ struct CourseActivityWidgetCountdown: View {
     let state: CourseActivityAttributes.ContentState
 
     var body: some View {
-        if Date.now < state.startDate {
-            Text(timerInterval: Date.now...state.startDate, pauseTime: state.startDate, countsDown: true)
-        } else {
-            Text(timerInterval: Date.now...state.endDate, pauseTime: state.endDate, countsDown: true)
-        }
+        Text(timerInterval: state.startDate...state.endDate, pauseTime: state.endDate, countsDown: true)
     }
 }
 
@@ -544,7 +540,7 @@ struct CourseLockScreenView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(Date.now < state.startDate ? "距上课" : "距下课")
+                    Text("距下课")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     CourseActivityWidgetCountdown(state: state)
