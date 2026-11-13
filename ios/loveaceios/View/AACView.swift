@@ -149,16 +149,48 @@ struct AACView: View {
 
     @ViewBuilder
     private func creditHeader(_ info: AACCreditInfo) -> some View {
-        HStack(spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                creditScoreText(info)
-                creditBadge(info)
+        VStack(spacing: 16) {
+            HStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    creditScoreText(info)
+                    creditBadge(info)
+                }
+                Spacer()
+                creditRing(info)
             }
-            Spacer()
-            creditRing(info)
+            graduationRows
         }
         .padding(18)
         .glassCard(cornerRadius: 18)
+    }
+
+    /// 毕业统计两项：社会实践、劳动实践（与 Android 毕业进度一致）
+    @ViewBuilder
+    private var graduationRows: some View {
+        let practice = AACGraduationStats.practiceScore(vm.categories)
+        let labor = AACGraduationStats.laborScore(vm.categories)
+        HStack(spacing: 12) {
+            graduationItem(title: "社会实践", current: practice, required: AACGraduationStats.practiceMin)
+            graduationItem(title: "劳动实践", current: labor, required: AACGraduationStats.laborRequired)
+        }
+    }
+
+    private func graduationItem(title: String, current: Double, required: Double) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(String(format: "%.1f", current))
+                    .font(.headline)
+                Text("/ \(String(format: "%.0f", required)) 分")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: min(current / required, 1.0))
+                .tint(current >= required ? .green : .orange)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
