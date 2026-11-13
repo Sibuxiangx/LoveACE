@@ -33,11 +33,11 @@ private const val GRADUATION_TOTAL = 10.0
 private const val PRACTICE_MIN = 1.0
 private const val LABOR_REQUIRED = 4.0
 
-/** 从分类列表中提取社会实践分数（三下乡/社会实践 项目在劳动教育/让逸竞劳分类下） */
+/** 从分类列表中提取社会实践分数（三下乡/社会实践 项目在劳动实践分类下） */
 private fun calcPracticeScore(categories: List<AACCreditCategory>): Double {
     var score = 0.0
     for (cat in categories) {
-        if (cat.typeName.contains("劳动教育") || cat.typeName.contains("让逸竞劳")) {
+        if (cat.typeName.contains("劳动实践")) {
             for (item in cat.children) {
                 if (item.typeName.contains("三下乡") || item.title.contains("三下乡") || item.title.contains("社会实践")) {
                     score += item.score
@@ -48,9 +48,9 @@ private fun calcPracticeScore(categories: List<AACCreditCategory>): Double {
     return score
 }
 
-/** 提取劳动教育分数 */
+/** 提取劳动实践分数 */
 private fun calcLaborScore(categories: List<AACCreditCategory>): Double {
-    return categories.filter { it.typeName.contains("劳动教育") || it.typeName.contains("让逸竞劳") }
+    return categories.filter { it.typeName.contains("劳动实践") }
         .sumOf { it.totalScore }
 }
 

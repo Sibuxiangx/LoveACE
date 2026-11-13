@@ -43,7 +43,7 @@ private const val LABOR_REQUIRED = 4.0
 private fun calcPracticeScore(categories: List<AACCreditCategory>): Double {
     var score = 0.0
     for (cat in categories) {
-        if (cat.typeName.contains("劳动教育") || cat.typeName.contains("让逸竞劳")) {
+        if (cat.typeName.contains("劳动实践")) {
             for (item in cat.children) {
                 if (item.typeName.contains("三下乡") || item.title.contains("三下乡") || item.title.contains("社会实践")) score += item.score
             }
@@ -53,7 +53,7 @@ private fun calcPracticeScore(categories: List<AACCreditCategory>): Double {
 }
 
 private fun calcLaborScore(categories: List<AACCreditCategory>): Double =
-    categories.filter { it.typeName.contains("劳动教育") || it.typeName.contains("让逸竞劳") }.sumOf { it.totalScore }
+    categories.filter { it.typeName.contains("劳动实践") }.sumOf { it.totalScore }
 
 /**
  * 横屏爱安财：左侧毕业进度 + 分类选择器，右侧分类明细
