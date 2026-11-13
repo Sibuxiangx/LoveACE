@@ -63,6 +63,9 @@
 - The alert is a `.background` view on `ContentView` (separate from the announcement `.alert`) and is suppressed while an announcement is showing. Only builds that contain this code show it.
 - Source of truth: `utils/manifest_v2/ios_testflight.json`. Update `version`/`build`/`changelog` with each TestFlight upload, then run `.github/workflows/ios-testflight-manifest.yml` with `dry_run=false`. Publish is idempotent (unchanged content is skipped).
 - Settings → 关于 → 检查更新 calls `IOSUpdateService.check()`. It ignores 「稍后」 and reports one of: up to date, available (with 前往 TestFlight), or failed. The launch prompt uses `fetchPromptUpdate()`, which applies the 「稍后」 filter.
+- Current state: `CURRENT_PROJECT_VERSION` is 20 on `main`, uploaded to TestFlight from `c33236b`. Build 19 (`2db90ee`) is on TestFlight without the prompt code. Bump again only when the user asks.
+- `utils/manifest_v2/ios_testflight.json` is published with `build: 20` and the real build 20 changelog. Set `build` and `changelog` again with the next TestFlight upload.
+- AAC (第二课堂) graduation rows: `AACGraduationStats` in `ViewModel/AACViewModel.swift` mirrors Android. 社会实践 takes 三下乡/社会实践 items under the 劳动实践 category; 劳动实践 sums that category's total. Category names come from the school, so a rename there breaks these rows.
 
 ## Login captcha and cooldown
 
@@ -119,4 +122,3 @@
 - Portal requests send `X-Requested-With: XMLHttpRequest`, `Referer: <portal base>/spa/portal/static/index.html`, and `sdp-app-session` (the VPN session id, same as AAC and the labor club). Every successful `hpdata` in the logs carried `sdp-app-session`; the two that omitted it were intercepted. Repeated full logins or session setups within a few minutes can trigger the gateway's `404` with `Errormsg: securityIntercept`, so session setup is single-flight and a `securityIntercept` starts a 180 s cooldown (the recovery window is one observation, not a measured limit). Browser comparison (VPN login page in a browser, same portal, same `hpdata` request): `hpdata` carries `sf_request_type=fetch` in the query, the same `X-Requested-With`, and the Referer above; the browser also requested `/sf-webproxy/api/vpn-config` 4 times during the portal load. The App now sends the query parameter (`PortalService.apiURL` on all 7 portal API URLs), the Referer, and one `vpn-config` GET before `hpdata` (`ensureSession`). This is an untested change: no evidence yet that it fixes `securityIntercept`, and the App has not been run against the gateway with it.
 - Entries: 更多 → 校园生活 (门禁查询, 我的借阅); 我的 → 账号 → 企业邮箱初始密码. Services are created in `AuthViewModel.initServices` and cleared in `clearServices`.
 - Not the same as 门卡 (`DoorCardService`, BLE door card on spoyn.cn).
-<parameter name="i">Documenting the portal features, the log exclusion, and the scratch-card implementation in ios/AGENTS.md

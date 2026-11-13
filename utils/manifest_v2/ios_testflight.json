@@ -4,5 +4,5 @@
   "build": 20,
   "testflight_url": "https://testflight.apple.com/join/V2KrVbYZ",
   "title": "发现新版本",
-  "changelog": "测试：TestFlight 更新提示弹窗（build 20）。仅用于验证提示，请忽略。"
+  "changelog": "彩带小工具 1.1（20）：爱安财页面新增「社会实践」「劳动实践」统计；设置页新增「检查更新」，可手动检查 TestFlight 新版本；发现新版本时弹窗提示前往 TestFlight 更新。"
 }
