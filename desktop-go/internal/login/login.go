@@ -13,6 +13,7 @@ import (
 	"github.com/Sibuxiangx/loveace-desktop/internal/design"
 	"github.com/Sibuxiangx/loveace-desktop/internal/host"
 	"github.com/Sibuxiangx/loveace-desktop/internal/settings"
+	"github.com/Sibuxiangx/loveace-desktop/internal/snapshot"
 	"github.com/Sibuxiangx/loveace-go/core/errs"
 	"github.com/Sibuxiangx/loveace-go/core/session"
 	"github.com/egoist/mygo/ui"
@@ -35,6 +36,13 @@ type Feature struct {
 	st         *settings.Settings
 	onSignedIn func(*account.Account)
 	form       loginForm
+
+	// The saved timetables, read from the disk, and the one on show.
+	snaps       []snapshot.Entry
+	viewing     bool
+	snapAccount string
+	snapTerm    string
+	copied      bool
 }
 
 // New makes the sign-in page. st is the settings the app shares: a successful
@@ -56,12 +64,19 @@ type loginForm struct {
 	pending              *account.Account
 }
 
-// Reset clears the form. The shell calls it on sign-out.
-func (f *Feature) Reset() { f.form = loginForm{} }
+// Reset clears the form and the snapshot view, and reads the saved timetables again. The
+// shell calls it on sign-out.
+func (f *Feature) Reset() {
+	f.form = loginForm{}
+	f.viewing = false
+	f.reloadSnapshots()
+}
 
-// AutoSignIn signs the remembered account in at launch, with the password from
-// the credential store. A captcha or a failure then shows on the sign-in page.
+// AutoSignIn signs the remembered account in at launch, with the password from the
+// credential store. A captcha or a failure then shows on the sign-in page. The saved
+// timetables are read first: they are offered even when no sign-in starts.
 func (f *Feature) AutoSignIn() {
+	f.reloadSnapshots()
 	id := f.st.RememberID
 	if id == "" {
 		return
@@ -130,7 +145,11 @@ func (f *Feature) View(c *ui.Context, t *ui.Theme) {
 		pane.Children(func() {
 			ui.Box(c).Height(design.TitleBarHeight).Shrink(0).DragWindow()
 			ui.Column(c).Grow(1).Center().Children(func() {
-				f.card(c, t, fill, fillFocus)
+				if f.viewing {
+					f.snapshotCard(c, t)
+				} else {
+					f.card(c, t, fill, fillFocus)
+				}
 			})
 		})
 	})
@@ -262,6 +281,19 @@ func (f *Feature) card(c *ui.Context, t *ui.Theme, fill, fillFocus ui.Color) {
 
 		if fm.status != "" {
 			ui.Text(c, fm.status).FontSize(13).TextColor(t.TextMuted).TextAlign(ui.Center).Width(fieldWidth)
+		}
+
+		if len(f.snaps) > 0 {
+			open := ui.ButtonBase(c.Key("open-snapshot")).Width(fieldWidth).Height(44).Radius(22).Center()
+			if open.Hovered() {
+				open.Background(t.SurfaceHover)
+			}
+			open.Children(func() {
+				ui.Text(c, "查看选课快照（离线）").FontSize(14).TextColor(t.Accent)
+			})
+			if open.Clicked() {
+				f.openSnapshots()
+			}
 		}
 	})
 }

@@ -1,5 +1,6 @@
 import '../../bridge/mygo_bridge.dart';
 import '../../models/backend/uni_response.dart';
+import '../logger_service.dart';
 import '../../models/jwc/course_schedule_record.dart';
 import '../../models/jwc/term_item.dart';
 
@@ -20,6 +21,28 @@ class ScheduleTermItem {
   });
 }
 
+/// One term's course offerings, and when the school gave them. The Go side reuses them for
+/// thirty minutes unless a refresh asks again.
+class CourseOfferings {
+  CourseOfferings({required this.fetchedAt, required this.records});
+
+  /// When the school gave these offerings.
+  final DateTime fetchedAt;
+
+  final List<CourseScheduleRecord> records;
+
+  factory CourseOfferings.fromJson(Map<String, dynamic> json) {
+    return CourseOfferings(
+      fetchedAt: DateTime.fromMillisecondsSinceEpoch(
+        (json['fetched_at'] as num).toInt(),
+      ),
+      records: jsonList(json['records'])
+          .map(CourseScheduleRecord.fromJson)
+          .toList(),
+    );
+  }
+}
+
 /// The school's course offerings by term, read through the Go side.
 class CourseScheduleService {
   Future<UniResponse<List<ScheduleTermItem>>> getScheduleTerms() {
@@ -34,16 +57,35 @@ class CourseScheduleService {
     });
   }
 
-  /// Every offering of the term. The Go side reads the term in one call, so
-  /// [onProgress] is never called.
-  Future<UniResponse<List<CourseScheduleRecord>>> queryAllCoursesForTerm({
+  /// Every offering of the term. The Go side answers from its cache while the cache is
+  /// fresh; [forceRefresh] makes it ask the school at once.
+  Future<UniResponse<CourseOfferings>> queryAllCoursesForTerm({
     required String termCode,
-    void Function(int completed, int total, int records)? onProgress,
+    bool forceRefresh = false,
   }) {
     return readGo(
       'SmartData.CourseSchedule',
-      (json) => jsonList(json).map(CourseScheduleRecord.fromJson).toList(),
-      [termCode],
+      (json) => CourseOfferings.fromJson(json as Map<String, dynamic>),
+      [termCode, forceRefresh],
     );
+  }
+
+  /// Keeps the simulated picks of a term on the Go side, with the term's saved timetable, so
+  /// the sign-in page's snapshot shows them. [added] are the offering records of the 模拟选课,
+  /// [removed] the keys of the 模拟退课. A failed save is logged; the picks stay on this device.
+  Future<void> saveDraft({
+    required String termCode,
+    required List<CourseScheduleRecord> added,
+    required List<String> removed,
+  }) async {
+    try {
+      await callGo('SmartData.SaveDraft', [
+        termCode,
+        [for (final record in added) record.toJson()],
+        removed,
+      ]);
+    } on BridgeException catch (e) {
+      LoggerService.error('保存模拟选课失败', error: e.message);
+    }
   }
 }

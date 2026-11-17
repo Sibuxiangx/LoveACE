@@ -3,6 +3,8 @@ package settings
 import (
 	"log"
 	"time"
+
+	"github.com/Sibuxiangx/loveace-desktop/internal/userdata"
 )
 
 // cooldownLadder is the wait after the n-th wrong sign-in: none after the
@@ -37,7 +39,7 @@ type Throttle struct {
 // failures.
 func LoadThrottle() *Throttle {
 	t := &Throttle{file: "throttle.json", records: map[string]failure{}}
-	if err := readJSON(t.file, &t.records); err != nil {
+	if err := userdata.ReadJSON(t.file, &t.records); err != nil {
 		log.Printf("throttle: %v", err)
 	}
 	return t
@@ -78,7 +80,7 @@ func (t *Throttle) persist() {
 	if t.file == "" {
 		return
 	}
-	if err := writeJSON(t.file, t.records); err != nil {
+	if err := userdata.WriteJSON(t.file, t.records); err != nil {
 		log.Printf("throttle: %v", err)
 	}
 }

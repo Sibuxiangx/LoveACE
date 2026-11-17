@@ -48,6 +48,9 @@
 - 学校接口能用 `loveace-go` 的服务就用它，不自己发请求。拿不到的字段，
   才在 `internal/home/home_data.go` 里读同一个接口（如 `academicAverage`），并注释原因。
 - 智能排课的读取经 `SmartData`，由 webview 发起，不走 `host.Start`。`SmartData` 的 JSON 键是 loveace-go 结构体的 snake_case 标签，`smartui/app` 模型的 `@JsonKey` 必须与之一致。账号随 `signedIn` / `signOut` 写入 `SmartData.acc`。
+- 智能排课的学校读取由 Go 侧缓存（`smart_cache.go`，按种类、账号与键哈希成文件，放在用户数据目录），缓存 30 分钟内直接复用。开课数据（`smart_offerings.go`）、培养方案、学期列表都走缓存；只有“刷新开课数据”按钮强制向学校读取开课数据。切换学期、切回个人课表、启动时都只用缓存。开课数据很大，不放进 webview 的 localStorage。
+- 个人课表每次都向学校读取。读取成功后，`internal/snapshot`（`smart_snapshots.json`）按学号与学期保存学校课表。每次选课持久化时，`SmartData.SaveDraft` 把模拟选课与模拟退课记到同一学期的快照里；学校课表覆盖保存时保留模拟状态。快照页与复制文本按 Flutter 选课清单的口径分“需要退课 / 需要选课 / 保持不变”。课表模式不送模拟状态，快照里保留最后一次个人模式的模拟状态。
+- 智能排课的选课（模拟选退）按“用户 + 学期”各存一份（`smart_course_selection_<userId>_<term>`），`smart_course_selection_<userId>_last_term` 记住上次的学期。切换学期只读取目标学期自己的数据，不覆盖其它学期。
 
 ## 凭据与隐私
 

@@ -16,6 +16,7 @@ import '../widgets/winui_loading.dart';
 import '../widgets/winui_empty_state.dart';
 import '../mixins/user_scope_data_loader.dart';
 import '../../utils/credit_format.dart';
+import '../../utils/schedule_spans.dart';
 
 /// 课程信息辅助类（用于选课清单）
 class _CourseInfo {
@@ -35,6 +36,27 @@ class _CourseInfo {
     this.schedule,
   });
 }
+
+/// 课表网格里的一个课程块:星期、起始节次、跨越节数,以及如何画出卡片。
+class _GridBlock {
+  const _GridBlock({
+    required this.weekday,
+    required this.startSession,
+    required this.sessionCount,
+    required this.build,
+  });
+
+  final int weekday;
+  final int startSession;
+  final int sessionCount;
+  final Widget Function() build;
+
+  int get endSession => startSession + sessionCount - 1;
+}
+
+/// 课程跨越的节数,至少为 1。
+int _sessionCount(int? continuingSession) =>
+    continuingSession != null && continuingSession > 0 ? continuingSession : 1;
 
 class _ClassCurriculumDialog extends StatefulWidget {
   final String termCode;
@@ -235,6 +257,9 @@ class WinUISmartCourseSelectionPage extends StatefulWidget {
 class _WinUISmartCourseSelectionPageState
     extends State<WinUISmartCourseSelectionPage>
     with UserScopeDataLoader<WinUISmartCourseSelectionPage> {
+  /// 当前展开的课程块(`_buildCourseCards` 中 blocks 的下标)。null 时每组第一门展开。
+  int? _focusedBlock;
+
   @override
   bool get isUserScopeReady =>
       Provider.of<SmartCourseSelectionProvider?>(context, listen: false) != null;
@@ -1278,7 +1303,8 @@ class _WinUISmartCourseSelectionPageState
     );
   }
 
-  /// 构建课程卡片列表
+  /// 构建课程卡片列表。同一天、节次有重叠的课程共享这一列:展开的一门占大头,其余为窄条。
+  /// 点窄条即展开它;点展开的卡片照常使用它自己的点击。
   List<Widget> _buildCourseCards(
     BuildContext context,
     SmartCourseSelectionProvider provider,
@@ -1287,30 +1313,25 @@ class _WinUISmartCourseSelectionPageState
     double headerHeight,
     double sessionColumnWidth,
   ) {
-    final cards = <Widget>[];
+    final blocks = <_GridBlock>[];
 
     if (provider.usingClassCurriculum) {
       for (final course in provider.classCurriculumCourses) {
         if (course.skxq == null || course.skjc == null) continue;
         final courseKey = '${course.kch}_${course.kxh}';
         if (provider.removedCourses.contains(courseKey)) continue;
-        final left = sessionColumnWidth + (course.skxq! - 1) * cellWidth;
-        final top = headerHeight + (course.skjc! - 1) * cellHeight;
-        final continuingSession = course.cxjc ?? 1;
-        final height = continuingSession * cellHeight;
-
-        cards.add(
-          Positioned(
-            left: left + 2,
-            top: top + 2,
-            width: cellWidth - 4,
-            height: height - 4,
-            child: _buildClassCurriculumCourseCard(context, course, provider),
+        blocks.add(
+          _GridBlock(
+            weekday: course.skxq!,
+            startSession: course.skjc!,
+            sessionCount: _sessionCount(course.cxjc),
+            build: () =>
+                _buildClassCurriculumCourseCard(context, course, provider),
           ),
         );
       }
     } else {
-      // 已有课程（排除已退课的）
+      // 已有课程(排除已退课的)
       if (provider.studentSchedule != null) {
         for (final course in provider.studentSchedule!.courses) {
           final courseKey = '${course.courseCode}_${course.courseSequence}';
@@ -1318,17 +1339,13 @@ class _WinUISmartCourseSelectionPageState
           if (provider.removedCourses.contains(courseKey)) continue;
 
           for (final tp in course.timeAndPlaceList) {
-            final left = sessionColumnWidth + (tp.classDay - 1) * cellWidth;
-            final top = headerHeight + (tp.classSessions - 1) * cellHeight;
-            final height = tp.continuingSession * cellHeight;
-
-            cards.add(
-              Positioned(
-                left: left + 2,
-                top: top + 2,
-                width: cellWidth - 4,
-                height: height - 4,
-                child: _buildExistingCourseCard(context, course, tp, provider),
+            blocks.add(
+              _GridBlock(
+                weekday: tp.classDay,
+                startSession: tp.classSessions,
+                sessionCount: _sessionCount(tp.continuingSession),
+                build: () =>
+                    _buildExistingCourseCard(context, course, tp, provider),
               ),
             );
           }
@@ -1336,28 +1353,65 @@ class _WinUISmartCourseSelectionPageState
       }
     }
 
-    // 模拟选课（新增的课程）
+    // 模拟选课(新增的课程)
     for (final key in provider.currentSelectedCourses) {
       for (final course in provider.getAvailableCourseRecordsByKey(key)) {
         if (course.skxq == null || course.skjc == null) continue;
-
-        final left = sessionColumnWidth + (course.skxq! - 1) * cellWidth;
-        final top = headerHeight + (course.skjc! - 1) * cellHeight;
-        final continuingSession = course.cxjc ?? 1;
-        final height = continuingSession * cellHeight;
-
-        cards.add(
-          Positioned(
-            left: left + 2,
-            top: top + 2,
-            width: cellWidth - 4,
-            height: height - 4,
-            child: _buildSimulatedCourseCard(context, course, provider),
+        blocks.add(
+          _GridBlock(
+            weekday: course.skxq!,
+            startSession: course.skjc!,
+            sessionCount: _sessionCount(course.cxjc),
+            build: () => _buildSimulatedCourseCard(context, course, provider),
           ),
         );
       }
     }
 
+    final spans = layoutSpans(
+      [
+        for (final b in blocks)
+          (weekday: b.weekday, start: b.startSession, end: b.endSession),
+      ],
+      focused: _focusedBlock,
+    );
+
+    final columnCardWidth = cellWidth - 4;
+    final cards = <Widget>[];
+    for (var i = 0; i < blocks.length; i++) {
+      final block = blocks[i];
+      final span = spans[i];
+      final width = span.width * cellWidth - 4;
+      // 展开的卡片按自己的宽度排版;窄条按整列宽排版再裁剪,只露出左边一截,文字不溢出。
+      final cardWidth = span.focused ? width : columnCardWidth;
+      final card = span.focused
+          ? block.build()
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _focusedBlock = i),
+              child: IgnorePointer(child: block.build()),
+            );
+      cards.add(
+        Positioned(
+          left:
+              sessionColumnWidth +
+              (block.weekday - 1) * cellWidth +
+              span.offset * cellWidth +
+              2,
+          top: headerHeight + (block.startSession - 1) * cellHeight + 2,
+          width: width,
+          height: block.sessionCount * cellHeight - 4,
+          child: ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.topLeft,
+              minWidth: cardWidth,
+              maxWidth: cardWidth,
+              child: card,
+            ),
+          ),
+        ),
+      );
+    }
     return cards;
   }
 

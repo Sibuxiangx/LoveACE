@@ -10,6 +10,7 @@ import '../models/jwc/plan_option.dart';
 import '../models/jwc/smart_course_selection.dart';
 import '../models/jwc/student_schedule.dart';
 import '../models/jwc/term_item.dart';
+import '../services/jwc/course_schedule_service.dart';
 import '../services/jwc/jwc_service.dart';
 import '../services/logger_service.dart';
 
@@ -196,9 +197,6 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
 
   SmartCourseSelectionProvider(this.jwcService);
 
-  /// 获取存储键
-  String _getStorageKey(String userId) => '$_storagePrefix$userId';
-
   /// 重置所有数据（用户切换时调用）
   void _resetAllData() {
     _selectionData = null;
@@ -316,15 +314,10 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
         await _loadStudentSchedule(_selectedTermCode!, userId);
       }
 
-      // 6. 如果没有开课数据或数据为空，自动刷新
-      if (_selectionData == null || _selectionData!.availableCourses.isEmpty) {
-        LoggerService.info('📭 没有开课数据，自动刷新...');
-        if (_usingClassCurriculum && _selectedTermCode != null) {
-          await _ensureAvailableCoursesForTerm(userId, _selectedTermCode!);
-          await _savePersistedData(userId);
-        } else {
-          await _refreshCourseDataInternal(userId);
-        }
+      // 6. 开课数据：优先用缓存（Go 侧 30 分钟内复用），过期才向学校重新读取
+      if (_selectedTermCode != null) {
+        await _ensureAvailableCoursesForTerm(userId, _selectedTermCode!);
+        await _savePersistedData(userId);
       }
 
       // 7. 如果没有课表快照，初始化快照
@@ -378,15 +371,16 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
         await _loadStudentSchedule(_selectedTermCode!, userId);
       }
 
-      // 如果没有开课数据或数据为空，自动刷新
-      if (_selectionData == null || _selectionData!.availableCourses.isEmpty) {
-        LoggerService.info('📭 没有开课数据，自动刷新...');
-        if (_usingClassCurriculum && _selectedTermCode != null) {
-          await _ensureAvailableCoursesForTerm(userId, _selectedTermCode!);
-          await _savePersistedData(userId);
-        } else {
-          await _refreshCourseDataInternal(userId);
+      // 开课数据优先用缓存；个人模式的课表快照在没有时初始化
+      if (_selectedTermCode != null) {
+        await _ensureAvailableCoursesForTerm(userId, _selectedTermCode!);
+        if (!_usingClassCurriculum &&
+            _selectionData != null &&
+            _selectionData!.baseScheduleSnapshot.isEmpty &&
+            _studentSchedule != null) {
+          await initializeScheduleSnapshot(userId);
         }
+        await _savePersistedData(userId);
       }
 
       _state = SmartCourseSelectionState.loaded;
@@ -413,64 +407,141 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 加载持久化数据
+  /// 每个学期单独保存一份选课数据，切换学期互不覆盖。
+  String _termStorageKey(String userId, String termCode) =>
+      '$_storagePrefix${userId}_$termCode';
+
+  /// 上次选中的学期的键，启动时据此找到要读取的学期数据。
+  String _lastTermStorageKey(String userId) =>
+      '$_storagePrefix${userId}_last_term';
+
+  /// 旧版本把所有学期放在同一个键里（`smart_course_selection_<userId>`）。
+  String _legacyStorageKey(String userId) => '$_storagePrefix$userId';
+
+  /// 读取某学期保存的选课数据；没有或读取失败时为 null。
+  Future<SmartCourseSelectionData?> _readTermData(
+    String userId,
+    String termCode,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_termStorageKey(userId, termCode));
+      if (jsonStr == null) return null;
+      return _upgradeStoredData(
+        SmartCourseSelectionData.fromJson(
+          jsonDecode(jsonStr) as Map<String, dynamic>,
+        ),
+      );
+    } catch (e) {
+      LoggerService.error('❌ 读取学期选课数据失败', error: e);
+      return null;
+    }
+  }
+
+  /// 旧版班级课表模式把 availableCourses 覆盖成班级课表，这里挪到 classCurriculumCourses。
+  SmartCourseSelectionData _upgradeStoredData(SmartCourseSelectionData data) {
+    if (data.usingClassCurriculum &&
+        data.classCurriculumCourses.isEmpty &&
+        data.availableCourses.isNotEmpty) {
+      LoggerService.info('🔁 已迁移旧版班级课表缓存');
+      return data.copyWith(
+        availableCourses: const [],
+        classCurriculumCourses: data.availableCourses,
+      );
+    }
+    return data;
+  }
+
+  /// 加载持久化数据：找到上次选中的学期，读取它的选课数据。
   Future<void> _loadPersistedData(String userId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = _getStorageKey(userId);
-      final jsonStr = prefs.getString(key);
+      var termCode = prefs.getString(_lastTermStorageKey(userId));
+      termCode ??= await _migrateLegacyStorage(prefs, userId);
 
-      if (jsonStr != null) {
-        final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-        _selectionData = SmartCourseSelectionData.fromJson(json);
-
-        // v1.1.7 之前班级课表模式会把 availableCourses 覆盖成班级课表。
-        // 迁移时先把旧数据挪到 classCurriculumCourses，后续初始化再补全量开课数据。
-        if (_selectionData!.usingClassCurriculum &&
-            _selectionData!.classCurriculumCourses.isEmpty &&
-            _selectionData!.availableCourses.isNotEmpty) {
-          _selectionData = _selectionData!.copyWith(
-            availableCourses: const [],
-            classCurriculumCourses: _selectionData!.availableCourses,
-          );
-          LoggerService.info('🔁 已迁移旧版班级课表缓存');
-        }
-
-        _selectedTermCode = _selectionData!.termCode;
-        _usingClassCurriculum = _selectionData!.usingClassCurriculum;
-        _classCurriculumName = _selectionData!.classCurriculumName;
-        LoggerService.info(
-          '📦 加载持久化数据成功，学期: $_selectedTermCode，班级课表: $_usingClassCurriculum',
-        );
-      } else {
+      final data = termCode == null
+          ? null
+          : await _readTermData(userId, termCode);
+      if (data == null) {
         LoggerService.info('📭 没有持久化数据');
+        return;
       }
+
+      _selectionData = data;
+      _selectedTermCode = data.termCode;
+      _usingClassCurriculum = data.usingClassCurriculum;
+      _classCurriculumName = data.classCurriculumName;
+      LoggerService.info(
+        '📦 加载持久化数据成功，学期: $_selectedTermCode，班级课表: $_usingClassCurriculum',
+      );
     } catch (e) {
       LoggerService.error('❌ 加载持久化数据失败', error: e);
     }
   }
 
-  /// 清除持久化数据
+  /// 把旧版单键数据搬到按学期分开的键里，选课不丢。
+  Future<String?> _migrateLegacyStorage(
+    SharedPreferences prefs,
+    String userId,
+  ) async {
+    final legacyKey = _legacyStorageKey(userId);
+    final jsonStr = prefs.getString(legacyKey);
+    if (jsonStr == null) return null;
+
+    final data = _upgradeStoredData(
+      SmartCourseSelectionData.fromJson(
+        jsonDecode(jsonStr) as Map<String, dynamic>,
+      ),
+    );
+    await prefs.setString(
+      _termStorageKey(userId, data.termCode),
+      jsonEncode(data.copyWith(availableCourses: const []).toJson()),
+    );
+    await prefs.setString(_lastTermStorageKey(userId), data.termCode);
+    await prefs.remove(legacyKey);
+    LoggerService.info('🔁 已迁移旧版选课数据');
+    return data.termCode;
+  }
+
+  /// 清除持久化数据（用户切换时调用）。
   Future<void> _clearPersistedData(String userId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = _getStorageKey(userId);
-      await prefs.remove(key);
+      final lastTerm = prefs.getString(_lastTermStorageKey(userId));
+      if (lastTerm != null) {
+        await prefs.remove(_termStorageKey(userId, lastTerm));
+      }
+      await prefs.remove(_lastTermStorageKey(userId));
+      await prefs.remove(_legacyStorageKey(userId));
       LoggerService.info('🗑️ 已清除用户 $userId 的持久化数据');
     } catch (e) {
       LoggerService.error('❌ 清除持久化数据失败', error: e);
     }
   }
 
-  /// 保存持久化数据
+  /// 保存持久化数据：当前学期的选课与设置。开课数据不存这里（体积大，由 Go 侧缓存）。
   Future<void> _savePersistedData(String userId) async {
-    if (_selectionData == null) return;
+    final data = _selectionData;
+    if (data == null) return;
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = _getStorageKey(userId);
-      final jsonStr = jsonEncode(_selectionData!.toJson());
-      await prefs.setString(key, jsonStr);
+      await prefs.setString(
+        _termStorageKey(userId, data.termCode),
+        jsonEncode(data.copyWith(availableCourses: const []).toJson()),
+      );
+      await prefs.setString(_lastTermStorageKey(userId), data.termCode);
+      // 模拟选课与退课也交给 Go 侧，随学期快照保存，快照页与复制才能看到。课表模式不送。
+      if (!data.usingClassCurriculum) {
+        await jwcService.courseSchedule.saveDraft(
+          termCode: data.termCode,
+          added: [
+            for (final key in data.currentSelectedCourses)
+              ...getAvailableCourseRecordsByKey(key),
+          ],
+          removed: data.removedCourses,
+        );
+      }
       LoggerService.info('💾 持久化数据保存成功');
     } catch (e) {
       LoggerService.error('❌ 保存持久化数据失败', error: e);
@@ -573,29 +644,29 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     LoggerService.info('✅ 已自动同步课表变化，新基准共 ${currentKeys.length} 门课');
   }
 
-  /// 切换学期
+  /// 切换学期：先存当前学期的选课，再读取目标学期自己保存的数据，切换学期不覆盖另一学期的模拟选课。
   Future<void> selectTerm(String termCode, String userId) async {
     if (_selectedTermCode == termCode) return;
+
+    await _savePersistedData(userId);
 
     _selectedTermCode = termCode;
     _state = SmartCourseSelectionState.loading;
     notifyListeners();
 
     try {
-      // 更新或创建选课数据（确保 userId 和 termCode 都匹配）
-      if (_selectionData == null ||
-          _selectionData!.userId != userId ||
-          _selectionData!.termCode != termCode) {
-        _selectionData = SmartCourseSelectionData.empty(userId, termCode);
+      _selectionData =
+          await _readTermData(userId, termCode) ??
+          SmartCourseSelectionData.empty(userId, termCode);
+      _usingClassCurriculum = _selectionData!.usingClassCurriculum;
+      _classCurriculumName = _selectionData!.classCurriculumName;
+
+      if (_usingClassCurriculum) {
+        await _loadStudentSchedule(termCode, userId);
       }
 
-      // 加载新学期的课表
-      await _loadStudentSchedule(termCode, userId);
-
-      // 自动刷新开课数据
+      // 开课数据优先用缓存，不强制向学校重新读取；个人课表在刷新中读取，刷新结束时保存。
       await _refreshCourseDataInternal(userId);
-
-      await _savePersistedData(userId);
 
       _state = SmartCourseSelectionState.loaded;
     } catch (e) {
@@ -607,29 +678,27 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<CourseScheduleRecord>> _fetchAvailableCoursesForTerm(
-    String termCode,
-  ) async {
-    LoggerService.info('🔄 获取全量开课数据: $termCode');
+  /// 读取某学期的全部开课数据（Go 侧 30 分钟内复用缓存；forceRefresh 时向学校重新读取）。
+  Future<CourseOfferings> _fetchAvailableCoursesForTerm(
+    String termCode, {
+    bool forceRefresh = false,
+  }) async {
+    LoggerService.info(
+      '🔄 获取全量开课数据: $termCode${forceRefresh ? '（强制刷新）' : ''}',
+    );
 
     final response = await jwcService.courseSchedule.queryAllCoursesForTerm(
       termCode: termCode,
-      onProgress: (completed, total, records) {
-        _loadingProgressCompleted = completed;
-        _loadingProgressTotal = total;
-        _loadingProgressRecords = records;
-        _loadingMessage = '正在获取开课数据 ($completed/$total 页，$records 条)';
-        notifyListeners();
-      },
+      forceRefresh: forceRefresh,
     );
 
     if (!response.success || response.data == null) {
       throw Exception(response.error ?? '获取开课数据失败');
     }
 
-    final allCourses = response.data!;
-    LoggerService.info('📊 共获取到 ${allCourses.length} 条开课记录');
-    return allCourses;
+    final offerings = response.data!;
+    LoggerService.info('📊 共 ${offerings.records.length} 条开课记录');
+    return offerings;
   }
 
   Future<void> _ensureAvailableCoursesForTerm(
@@ -648,7 +717,10 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     _loadingMessage = '正在获取开课数据...';
     notifyListeners();
 
-    final allCourses = await _fetchAvailableCoursesForTerm(termCode);
+    final offerings = await _fetchAvailableCoursesForTerm(
+      termCode,
+      forceRefresh: forceRefresh,
+    );
 
     _loadingMessage = '正在保存开课数据...';
     notifyListeners();
@@ -661,29 +733,28 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
 
     _selectionData = _selectionData!.copyWith(
       termCode: termCode,
-      availableCourses: allCourses,
-      courseDataRefreshTime: DateTime.now(),
+      availableCourses: offerings.records,
+      courseDataRefreshTime: offerings.fetchedAt,
     );
   }
 
-  /// 刷新开课数据（内部方法，不改变状态）
-  Future<void> _refreshCourseDataInternal(String userId) async {
+  /// 刷新开课数据（内部方法，不改变状态）。forceRefresh 时向学校重新读取，否则优先用缓存。
+  Future<void> _refreshCourseDataInternal(
+    String userId, {
+    bool forceRefresh = false,
+  }) async {
     if (_selectedTermCode == null) return;
 
     try {
       LoggerService.info('🔄 刷新开课数据...');
 
-      // 重置进度
-      _loadingProgressCompleted = 0;
-      _loadingProgressTotal = 0;
-      _loadingProgressRecords = 0;
       _loadingMessage = '正在获取开课数据...';
       notifyListeners();
 
       await _ensureAvailableCoursesForTerm(
         userId,
         _selectedTermCode!,
-        forceRefresh: true,
+        forceRefresh: forceRefresh,
       );
 
       if (!_usingClassCurriculum) {
@@ -711,7 +782,7 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _refreshCourseDataInternal(userId);
+      await _refreshCourseDataInternal(userId, forceRefresh: true);
 
       _state = SmartCourseSelectionState.loaded;
     } catch (e) {
@@ -726,11 +797,8 @@ class SmartCourseSelectionProvider extends ChangeNotifier {
   Future<void> _switchToPersonalScheduleInternal(String userId) async {
     if (_selectedTermCode == null) return;
 
-    await _ensureAvailableCoursesForTerm(
-      userId,
-      _selectedTermCode!,
-      forceRefresh: true,
-    );
+    // 切回个人课表只用缓存的开课数据；强制刷新只由“刷新开课数据”按钮触发。
+    await _ensureAvailableCoursesForTerm(userId, _selectedTermCode!);
 
     _selectionData = _selectionData!.copyWith(
       classCurriculumCourses: const [],
