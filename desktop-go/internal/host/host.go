@@ -19,6 +19,11 @@ const (
 	PageLabor
 	PagePlan
 	PageCard
+	PagePortal
+	PageRepair
+	PageElectricity
+	PageExam
+	PageTimetable
 	PageSmart
 	PageSettings
 )

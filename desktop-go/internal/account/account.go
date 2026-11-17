@@ -32,7 +32,11 @@ func (CaptchaNeeded) Error() string { return "the school asks for a captcha" }
 // NewAccount prepares a session for a student. The school is reached directly,
 // with no proxy.
 func NewAccount(id, password string) *Account {
-	s := session.New(id, password, password, transport.NewHTTPTransport(6))
+	// The session permits writes. The app writes only when the user presses a button for it:
+	// submitting or uploading a repair, applying for an activity.
+	cfg := session.DefaultConfig()
+	cfg.AllowWrites = true
+	s := session.NewWithConfig(id, password, password, transport.NewHTTPTransport(6), cfg)
 	return &Account{ID: id, Sess: s, Jwc: jwc.New(s)}
 }
 

@@ -53,6 +53,21 @@ func JoinNonEmpty(parts ...string) string {
 	return out
 }
 
+// Choice is one pill of a row of choices, filled while it is the one on screen. It reports a
+// click.
+func Choice(c *ui.Context, t *ui.Theme, s palette.Scheme, key, label string, on bool) bool {
+	fill, fg := UIColor(s.SurfaceContainerHigh), t.Text
+	if on {
+		fill, fg = UIColor(s.PrimaryContainer), UIColor(s.OnPrimaryContainer)
+	}
+	btn := ui.ButtonBase(c.Key(key)).Radius(999).Padding(6, 14)
+	btn.Background(fill)
+	btn.Children(func() {
+		ui.Text(c, label).FontSize(13).SingleLine().TextColor(fg)
+	})
+	return btn.Clicked()
+}
+
 // CategoryContainer is the container pair of a category badge, by its position: the
 // primary and secondary containers take turns, with a neutral one in between, so the
 // badges stay in the accent's family.

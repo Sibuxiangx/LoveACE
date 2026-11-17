@@ -21,6 +21,7 @@ type Page struct {
 	h         host.Host
 	onSignOut func()
 	st        *Settings
+	mail      mailPassword
 }
 
 // New reads the settings and makes the page. onSignOut is called after the
@@ -34,11 +35,12 @@ func New(h host.Host, onSignOut func()) *Page {
 // every other part of the app that reads or saves settings.
 func (p *Page) Settings() *Settings { return p.st }
 
-// signOut forgets the remembered password, as the sign-out always did, and
-// hands the account over to the shell.
+// signOut forgets the remembered password and the mail password, and hands the account over
+// to the shell.
 func (p *Page) signOut() {
 	p.st.DropRemembered()
 	p.st.Persist()
+	p.Leave()
 	p.onSignOut()
 }
 
@@ -109,6 +111,8 @@ func (p *Page) View(c *ui.Context, t *ui.Theme, s palette.Scheme) {
 						}
 						design.ListRow(c, t, "remember", design.RowBadge{Shape: design.Clover4, Icon: design.IconLock, Fill: t.Accent, Tint: t.AccentText},
 							"记住密码", caption, remember, nil)
+
+						p.mailRow(c, t, s)
 					})
 
 					section(c, t, "关于", func() {

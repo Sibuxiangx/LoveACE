@@ -46,16 +46,30 @@ func (f *Feature) View(c *ui.Context, t *ui.Theme, s palette.Scheme, x design.Ex
 	})
 }
 
+// header is the title, the export and refresh buttons, and the note of the last export under them.
+// The export button shows once the records are read.
 func (f *Feature) header(c *ui.Context, t *ui.Theme) {
-	ui.Row(c).AlignItems(ui.Center).Padding(4, design.PageSide, 16, design.PageSide).Gap(12).Children(func() {
-		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, "爱安财").FontSize(22).Bold().TextColor(t.Text)
-			ui.Text(c, "毕业学分与各分类明细").FontSize(12).TextColor(t.TextMuted)
+	ui.Column(c).Padding(4, design.PageSide, 16, design.PageSide).Gap(8).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(12).Children(func() {
+			ui.Column(c).Grow(1).Gap(2).Children(func() {
+				ui.Text(c, "爱安财").FontSize(22).Bold().TextColor(t.Text)
+				ui.Text(c, "毕业学分与各分类明细").FontSize(12).TextColor(t.TextMuted)
+			})
+			if f.st.Pending {
+				design.ShapeLoader(c, t.Accent, 40)
+			} else {
+				if f.st.Loaded {
+					design.IconButton(c.Key("aac-export"), t, design.IconFileDownload, "导出", f.Export)
+				}
+				design.IconButton(c, t, design.IconRefresh, "刷新", f.Load)
+			}
 		})
-		if f.st.Pending {
-			design.ShapeLoader(c, t.Accent, 40)
-		} else {
-			design.IconButton(c, t, design.IconRefresh, "刷新", f.Load)
+		if f.st.ExportNote != "" {
+			color := t.TextMuted
+			if f.st.ExportErr {
+				color = t.Danger
+			}
+			design.Note(c, f.st.ExportNote, color)
 		}
 	})
 }

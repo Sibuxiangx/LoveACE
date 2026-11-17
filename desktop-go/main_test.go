@@ -36,17 +36,20 @@ func newSignedInApp(p host.Page) *app {
 func TestNavigationRailSwitchesPages(t *testing.T) {
 	a := newSignedInApp(host.PageHome)
 	tt := newTester(a)
-	// The 培养方案 page is not clicked here: opening it starts a school read, and a test
-	// has no account to read with.
+	// The pages that read the school when they open (培养方案, 考试安排, 一卡通's neighbours
+	// 电费 and 零星维修, 借阅门禁) are not clicked here: opening them starts a school read, and a
+	// test has no session to read with.
 	for _, step := range []struct {
 		label string
 		want  host.Page
+		down  float32 // how far the rail scrolls, for a destination below the window
 	}{
-		{"爱安财", host.PageAAC},
-		{"一卡通", host.PageCard},
-		{"设置", host.PageSettings},
-		{"首页", host.PageHome},
+		{"爱安财", host.PageAAC, 0},
+		{"一卡通", host.PageCard, 1000},
+		{"设置", host.PageSettings, 0},
+		{"首页", host.PageHome, 0},
 	} {
+		scrollRail(tt, step.down)
 		if err := tt.Click(step.label); err != nil {
 			t.Fatalf("click %s: %v", step.label, err)
 		}
@@ -56,10 +59,21 @@ func TestNavigationRailSwitchesPages(t *testing.T) {
 	}
 }
 
+// scrollRail puts the navigation rail at its top, then down by dy, so a destination below the
+// window's height is under the pointer to click. The rail sits in the left column of the window.
+func scrollRail(tt *ui.Tester, dy float32) {
+	const railX, railY = 44, 300
+	tt.Scroll(railX, railY, 0, -10000)
+	if dy != 0 {
+		tt.Scroll(railX, railY, 0, dy)
+	}
+	tt.Frame()
+}
+
 // Each signed-in page draws in the default window with no data loaded yet: the cards show
 // their loading state rather than failing.
 func TestSignedInPagesDraw(t *testing.T) {
-	for _, p := range []host.Page{host.PageHome, host.PageAAC, host.PageLabor, host.PagePlan, host.PageCard, host.PageSettings} {
+	for _, p := range []host.Page{host.PageHome, host.PageAAC, host.PageLabor, host.PagePlan, host.PageTimetable, host.PageExam, host.PageCard, host.PageElectricity, host.PageRepair, host.PagePortal, host.PageSettings} {
 		a := newSignedInApp(p)
 		tt := newTester(a)
 		tt.Frame()

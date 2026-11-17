@@ -43,6 +43,16 @@ func (a *app) refreshPage() {
 		a.plan.Load(a.plan.Snapshot().PlanID)
 	case host.PageCard:
 		a.card.Load()
+	case host.PagePortal:
+		a.portal.Load()
+	case host.PageRepair:
+		a.repair.Load()
+	case host.PageElectricity:
+		a.electricity.Load()
+	case host.PageExam:
+		a.exam.Load()
+	case host.PageTimetable:
+		a.timetable.Load()
 	case host.PageLabor:
 		a.labor.Load()
 	}

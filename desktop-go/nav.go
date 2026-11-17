@@ -50,9 +50,16 @@ var navGroups = [][]navDest{
 		{host.PageLabor, "nav-labor", "劳动俱乐部", design.IconLabor, design.IconLaborFill, nil, nil},
 	},
 	{
+		{host.PageTimetable, "nav-timetable", "课程表", design.IconSchedule, design.IconSchedule, nil, nil},
 		{host.PagePlan, "nav-plan", "培养方案", design.IconCourse, design.IconCourseFill, nil, nil},
-		{host.PageCard, "nav-card", "一卡通", design.IconCard, design.IconCardFill, nil, nil},
+		{host.PageExam, "nav-exam", "考试安排", design.IconExam, design.IconExam, nil, nil},
 		{id: "nav-smart", label: "智能排课", icon: design.IconWeekView, selected: design.IconWeekViewFill, launch: (*app).openSmartWindow},
+	},
+	{
+		{host.PageCard, "nav-card", "一卡通", design.IconCard, design.IconCardFill, nil, nil},
+		{host.PageElectricity, "nav-electricity", "电费", design.IconBolt, design.IconBoltFill, nil, nil},
+		{host.PageRepair, "nav-repair", "零星维修", design.IconBuild, design.IconBuildFill, nil, nil},
+		{host.PagePortal, "nav-portal", "借阅门禁", design.IconLibrary, design.IconLibrary, nil, nil},
 	},
 }
 

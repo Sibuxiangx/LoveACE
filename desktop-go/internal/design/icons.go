@@ -91,6 +91,20 @@ var (
 	laborSVG []byte
 	//go:embed assets/icons/handyman_fill.svg
 	laborFillSVG []byte
+	//go:embed assets/icons/bolt.svg
+	boltSVG []byte
+	//go:embed assets/icons/bolt_fill.svg
+	boltFillSVG []byte
+	//go:embed assets/icons/build.svg
+	buildSVG []byte
+	//go:embed assets/icons/build_fill.svg
+	buildFillSVG []byte
+	//go:embed assets/icons/add_a_photo.svg
+	addPhotoSVG []byte
+	//go:embed assets/icons/close.svg
+	closeSVG []byte
+	//go:embed assets/icons/file_download.svg
+	fileDownloadSVG []byte
 	//go:embed assets/icons/location_on.svg
 	locationSVG []byte
 	//go:embed assets/icons/add_task.svg
@@ -143,7 +157,14 @@ var (
 	IconLabor         = ui.MustParseSVG(laborSVG)
 	IconLaborFill     = ui.MustParseSVG(laborFillSVG)
 	IconLocation      = ui.MustParseSVG(locationSVG)
+	IconBolt          = ui.MustParseSVG(boltSVG)
+	IconBoltFill      = ui.MustParseSVG(boltFillSVG)
+	IconBuild         = ui.MustParseSVG(buildSVG)
+	IconBuildFill     = ui.MustParseSVG(buildFillSVG)
 	IconAddTask       = ui.MustParseSVG(addTaskSVG)
 	IconWeekView      = ui.MustParseSVG(weekViewSVG)
 	IconWeekViewFill  = ui.MustParseSVG(weekViewFillSVG)
+	IconAddPhoto      = ui.MustParseSVG(addPhotoSVG)
+	IconClose         = ui.MustParseSVG(closeSVG)
+	IconFileDownload  = ui.MustParseSVG(fileDownloadSVG)
 )

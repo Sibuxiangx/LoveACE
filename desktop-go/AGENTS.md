@@ -16,11 +16,11 @@
 
 ## 文件分工
 
-根目录是 `package main`，只剩应用壳：入口、窗口、导航、焦点、外观、智能排课的窗口与数据。各功能在 `internal/` 下，每个功能包都提供 `New`、`Load`、`Reset`、`View`、`Snapshot`。
+根目录是 `package main`，只剩应用壳：入口、窗口、导航、焦点、外观、智能排课的窗口与数据。各功能在 `internal/` 下，每个功能包都提供 `New`、`Load`、`Reset`、`View`；给其它页面看的数据再提供 `Snapshot`。
 
 - `main.go`：入口、窗口选项、字体，启动时 `newApp` 并调用 `login.AutoSignIn`。
 - `app.go`：`app` 壳，持有各功能包，实现 `host.Host`（`Account`、`Update`、`Open`）；登录后的 `signedIn`、登出 `signOut`、`openPage`、视图分发。
-- `nav.go`：左侧导航栏（首页 / 爱安财 / 培养方案 / 一卡通 / 智能排课（开窗口）/ 设置）。
+- `nav.go`：左侧导航栏（首页 / 爱安财 / 劳动俱乐部 / 课程表 / 培养方案 / 考试安排 / 智能排课（开窗口）/ 一卡通 / 电费 / 零星维修 / 借阅门禁 / 设置）。
 - `appearance.go`：外观（跟随系统、浅色、深色）与配色方案。
 - `focus.go`：回到焦点时刷新当前页（mygo 的 `OnDidBecomeActive` / `OnDidResignActive`，离开满一分钟才刷新）。
 - `smart_window.go`：智能排课窗口，最大化的 webview；`init` 里把 `smartui` 设为应用的前端。
@@ -30,7 +30,8 @@
 - `internal/read`：读取重试 `Retry`、读取状态 `State`（`Done` 与 `Loaded`/`Err`/`Value`）、错误文案 `ErrText`。
 - `internal/design`：组件（m3e）、形状、主题、图标（`assets/icons/`）、页面共用的布局常量与辅助函数、应用图标 `AppIcon`。
 - `internal/palette`：配色算法。
-- 功能包：`internal/aac`（爱安财）、`internal/card`（一卡通）、`internal/plan`（培养方案）、`internal/labor`（劳动俱乐部）、`internal/home`（首页与时钟）、`internal/settings`（设置存储、登录节流、设置页）、`internal/login`（登录页与登录流程）。
+- `internal/xlsx`：导出用的 xlsx 写入，只用标准库，一个工作表（文本为内联字符串，表头加粗并冻结）。
+- 功能包：`internal/aac`（爱安财，含导出）、`internal/card`（一卡通）、`internal/portal`（借阅与门禁）、`internal/repair`（零星维修）、`internal/electricity`（电费）、`internal/exam`（考试安排）、`internal/timetable`（课程表，课程色在 `colors.go`）、`internal/plan`（培养方案）、`internal/labor`（劳动俱乐部）、`internal/home`（首页与时钟）、`internal/settings`（设置存储、登录节流、设置页）、`internal/login`（登录页与登录流程）。
 - `smartui/`：智能排课网页。`embed.go` 嵌入 `dist/`；`app/` 是 Flutter 源码（从旧 `desktop/lib` 剥离）；`dist/` 是构建产物，不手改。
 - `assets/`：字体（MiSans）、应用图标。
 
@@ -39,10 +40,12 @@
 - 所有读取用 `host.Start(f.h, acc, func(ctx, apply) { ... })`（`internal/host`）。
   `apply` 里的改动回到主线程，账号变了（登出、换号）会被丢弃。
 - 劳动俱乐部的读取一个接一个做（进度、已报名、添加活动、每个已报名活动的详情与签到），每个结果单独 `apply`。添加活动只在已报名列表成功时读取，否则会把已报名的活动也列进来。
-- 报名是写操作：与读取一样经 `host.Start`，但不经 `read.Retry`，只发一次，失败不重试。
+- 报名是写操作：与读取一样经 `host.Start`，但不经 `read.Retry`，只发一次，失败不重试。报修提交（`internal/repair`）同理，并且先确认再发；报修图片上传也是写操作，同样只发一次。
+- 账号会话开启写权限（`account.NewAccount` 用 `session.NewWithConfig` 并设 `AllowWrites`）。写操作只由界面上用户的按钮触发：报修提交与图片上传、劳动俱乐部报名。
+- 导出是本地写文件，不是学校写操作：导出按钮先弹保存窗口（`mygo.Dialog.Save`，在后台 goroutine 里），选定后用 `internal/xlsx` 写出，文件权限 0600，不经 `host.Start`，也不经 `read.Retry`。导出的数据取自页面已读到的状态，不另发请求。
 - 读取分开做：一块失败，不影响别的块。不要把两块放进同一个 `apply`。
 - 首页的读取计数用 `home` 包 `State` 的 `Pending`，最后一个结束时写 `Stamp`。
-- 页面何时读：登录时读首页、爱安财、一卡通；培养方案在第一次打开时读（`app.openPage`）。页头的刷新只读当前页，首页的刷新同时读一卡通余额（`home.Refresh`）。
+- 页面何时读：登录时读首页、爱安财、一卡通；培养方案、借阅门禁、零星维修、电费、考试安排在第一次打开时读（`app.openPage`）。页头的刷新只读当前页，首页的刷新同时读一卡通余额（`home.Refresh`）。
 - 学校读取都经 `read.Retry` 包住：可修复的错误（如网络、超时、页面解析失败）间隔 2 秒、5 秒重试，凭据、取消类错误不重试（见 `internal/read` 的 `neverRetried`）。最终失败时写一行错误码日志，不写消息。
 - 错误文案用 `read.ErrText`，不要自己写新的错误判断。
 - 学校接口能用 `loveace-go` 的服务就用它，不自己发请求。拿不到的字段，
@@ -58,6 +61,8 @@
 - `settings.json` 只存学号（`remember_id`），不存密码。
 - 不打印、不记录：密码、Cookie、TWFID、验证码图片字节、学校原始响应。
   日志只写错误码或固定说明。
+- 企业邮箱初始密码（门户 `MailInitialPassword`）只在设置页内存中：点“查看”才读取，离开设置页或退出登录即清空。不写日志，不落盘，程序不写入剪贴板；明文显示后由用户选中复制。
+- 电费房间按学号存在 `electricity_rooms.json`（用户数据目录），只有房间编码与显示文字，不含密码。
 
 ## 界面规则（摘要，全文在 DESIGN.md）
 
@@ -68,7 +73,7 @@
 - 加载态用 `design.ShapeLoader`（或 `design.Loading`），不用 `ui.Spinner`。原生圆点与设计不符。
 - 卡片头用 `design.CardHeader`；圆角、内边距、间距用 `internal/design/m3e.go` 的常量，不写魔法数字。
   （`internal/home/home.go` 里的 `Padding(8, 4)` 之类的小块内边距允许，但要在 DESIGN.md 里有对应。）
-- 颜色只从 `palette.Scheme`（经 `design.UIColor`）和 `design.Extended` 来。不要写 `ui.Hex("#...")`。
+- 颜色只从 `palette.Scheme`（经 `design.UIColor`）和 `design.Extended` 来。不要写 `ui.Hex("#...")`。例外：课程表的课程色是课表自己的固定色表（`internal/timetable/colors.go`），不随主题变化，这是有意的。
 - 默认窗口里要能看到主要信息。新增内容时，先检查渲染，再决定要不要滚动。
 
 ## 图标

@@ -29,6 +29,10 @@ type State struct {
 	Info     *aac.AacCreditInfo
 	Cats     []aac.AacCreditCategory
 	Selected string // the ID of the category the detail column shows
+
+	Exporting  bool   // the save window is open or the file is being written
+	ExportNote string // what the last export did, "" when nothing to say
+	ExportErr  bool   // ExportNote is a failure
 }
 
 // Feature is the 爱安财 page: its state, and the reads that fill it.
@@ -58,13 +62,16 @@ func (f *Feature) Load() {
 		cats, listErr := read.Retry(ctx, svc.CreditList)
 		apply(func() {
 			f.st = State{
-				Loaded:   true,
-				Stamp:    time.Now(),
-				InfoErr:  read.ErrText(infoErr),
-				ListErr:  read.ErrText(listErr),
-				Info:     info,
-				Cats:     cats,
-				Selected: f.st.Selected,
+				Loaded:     true,
+				Stamp:      time.Now(),
+				InfoErr:    read.ErrText(infoErr),
+				ListErr:    read.ErrText(listErr),
+				Info:       info,
+				Cats:       cats,
+				Selected:   f.st.Selected,
+				Exporting:  f.st.Exporting,
+				ExportNote: f.st.ExportNote,
+				ExportErr:  f.st.ExportErr,
 			}
 		})
 	})

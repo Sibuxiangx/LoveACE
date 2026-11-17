@@ -5,12 +5,17 @@ import (
 	"github.com/Sibuxiangx/loveace-desktop/internal/account"
 	"github.com/Sibuxiangx/loveace-desktop/internal/card"
 	"github.com/Sibuxiangx/loveace-desktop/internal/design"
+	"github.com/Sibuxiangx/loveace-desktop/internal/electricity"
+	"github.com/Sibuxiangx/loveace-desktop/internal/exam"
 	"github.com/Sibuxiangx/loveace-desktop/internal/home"
 	"github.com/Sibuxiangx/loveace-desktop/internal/host"
 	"github.com/Sibuxiangx/loveace-desktop/internal/labor"
 	"github.com/Sibuxiangx/loveace-desktop/internal/login"
 	"github.com/Sibuxiangx/loveace-desktop/internal/plan"
+	"github.com/Sibuxiangx/loveace-desktop/internal/portal"
+	"github.com/Sibuxiangx/loveace-desktop/internal/repair"
 	"github.com/Sibuxiangx/loveace-desktop/internal/settings"
+	"github.com/Sibuxiangx/loveace-desktop/internal/timetable"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -31,6 +36,11 @@ type app struct {
 	card         *card.Feature
 	plan         *plan.Feature
 	labor        *labor.Feature
+	portal       *portal.Feature
+	repair       *repair.Feature
+	electricity  *electricity.Feature
+	exam         *exam.Feature
+	timetable    *timetable.Feature
 	smartWin     *mygo.Window // the 智能排课 window, nil while it is closed
 	// data is the school data of the smart window; its account follows acc.
 	data *SmartData
@@ -47,6 +57,11 @@ func newApp(data *SmartData) *app {
 	a.card = card.New(a)
 	a.plan = plan.New(a)
 	a.labor = labor.New(a)
+	a.portal = portal.New(a)
+	a.repair = repair.New(a)
+	a.electricity = electricity.New(a)
+	a.exam = exam.New(a)
+	a.timetable = timetable.New(a)
 	a.home = home.New(a, a.aac, a.card)
 	a.login = login.New(a, a.throttle, a.set, a.signedIn)
 	return a
@@ -87,6 +102,16 @@ func (a *app) view(c *ui.Context) {
 				a.card.View(c, t, s, x)
 			case host.PageLabor:
 				a.labor.View(c, t, s, x)
+			case host.PagePortal:
+				a.portal.View(c, t, s)
+			case host.PageRepair:
+				a.repair.View(c, t, s)
+			case host.PageElectricity:
+				a.electricity.View(c, t, s)
+			case host.PageExam:
+				a.exam.View(c, t, s)
+			case host.PageTimetable:
+				a.timetable.View(c, t, s)
 			case host.PageSettings:
 				a.settingsPage.View(c, t, s)
 			}
@@ -105,8 +130,9 @@ func (a *app) signedIn(acc *account.Account) {
 	a.card.Load()
 }
 
-// openPage shows a page chosen on the navigation rail. The 培养方案 and 劳动俱乐部 pages
-// read the first time they open; the other pages are read at sign-in.
+// openPage shows a page chosen on the navigation rail. The 培养方案, 劳动俱乐部, 借阅门禁, 零星维修,
+// 电费, 考试安排, 课程表 pages read the first time they open; the other pages are read at
+// sign-in. Leaving the settings page forgets the mail password it showed.
 func (a *app) openPage(p host.Page) {
 	a.page = p
 	if p == host.PagePlan && !a.plan.Snapshot().Info.Loaded() {
@@ -114,6 +140,21 @@ func (a *app) openPage(p host.Page) {
 	}
 	if p == host.PageLabor && !a.labor.Snapshot().Joined.Loaded() {
 		a.labor.Load()
+	}
+	switch p {
+	case host.PagePortal:
+		a.portal.Open()
+	case host.PageRepair:
+		a.repair.Open()
+	case host.PageElectricity:
+		a.electricity.Open()
+	case host.PageExam:
+		a.exam.Open()
+	case host.PageTimetable:
+		a.timetable.Open()
+	}
+	if p != host.PageSettings {
+		a.settingsPage.Leave()
 	}
 }
 
@@ -128,6 +169,11 @@ func (a *app) signOut() {
 	a.card.Reset()
 	a.plan.Reset()
 	a.labor.Reset()
+	a.portal.Reset()
+	a.repair.Reset()
+	a.electricity.Reset()
+	a.exam.Reset()
+	a.timetable.Reset()
 	a.login.Reset()
 	a.page = host.PageLogin
 }
