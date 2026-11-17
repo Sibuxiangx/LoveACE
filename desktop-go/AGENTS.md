@@ -16,15 +16,16 @@
 
 ## 文件分工
 
-根目录是 `package main`，只剩应用壳：入口、窗口、导航、焦点、外观、智能排课的窗口与数据。各功能在 `internal/` 下，每个功能包都提供 `New`、`Load`、`Reset`、`View`；给其它页面看的数据再提供 `Snapshot`。
+根目录只有 `main.go`（注册字体，然后调用 `app.Run`）。应用壳在 `internal/app`：入口、窗口、导航、焦点、外观、智能排课的窗口与数据。各功能在 `internal/` 下，每个功能包都提供 `New`、`Load`、`Reset`、`View`；给其它页面看的数据再提供 `Snapshot`。应用壳的测试与源码同在 `internal/app`，和其它包一致，不另设 `tests/` 目录。
 
-- `main.go`：入口、窗口选项、字体，启动时 `newApp` 并调用 `login.AutoSignIn`。
-- `app.go`：`app` 壳，持有各功能包，实现 `host.Host`（`Account`、`Update`、`Open`）；登录后的 `signedIn`、登出 `signOut`、`openPage`、视图分发。
-- `nav.go`：左侧导航栏（首页 / 爱安财 / 劳动俱乐部 / 课程表 / 培养方案 / 考试安排 / 智能排课（开窗口）/ 一卡通 / 电费 / 零星维修 / 借阅门禁 / 设置）。
-- `appearance.go`：外观（跟随系统、浅色、深色）与配色方案。
-- `focus.go`：回到焦点时刷新当前页（mygo 的 `OnDidBecomeActive` / `OnDidResignActive`，离开满一分钟才刷新）。
-- `smart_window.go`：智能排课窗口，最大化的 webview；`init` 里把 `smartui` 设为应用的前端。
-- `smart_data.go`：`SmartData` 绑定服务，webview 经它读学校数据，复用 loveace-go 的 jwc，返回其结构体的 JSON。
+- `main.go`：字体注册，然后调用 `app.Run`。
+- `internal/app/app.go`：`app` 壳，持有各功能包，实现 `host.Host`（`Account`、`Update`、`Open`）；登录后的 `signedIn`、登出 `signOut`、`openPage`、视图分发。
+- `internal/app/run.go`：`Run`，绑定智能排课数据、开主窗口、启动时调用 `login.AutoSignIn`，然后进入事件循环。
+- `internal/app/nav.go`：左侧导航栏（首页 / 爱安财 / 劳动俱乐部 / 课程表 / 培养方案 / 考试安排 / 智能排课（开窗口）/ 一卡通 / 电费 / 零星维修 / 借阅门禁 / 设置）。
+- `internal/app/appearance.go`：外观（跟随系统、浅色、深色）与配色方案。
+- `internal/app/focus.go`：回到焦点时刷新当前页（mygo 的 `OnDidBecomeActive` / `OnDidResignActive`，离开满一分钟才刷新）。
+- `internal/app/smart_window.go`：智能排课窗口，最大化的 webview；`init` 里把 `smartui` 设为应用的前端。
+- `internal/app/smart_data.go`：`SmartData` 绑定服务，webview 经它读学校数据，复用 loveace-go 的 jwc，返回其结构体的 JSON。
 - `internal/host`：页面枚举、`Host` 接口（账号、主线程更新、打开页面）与后台读取 `Start`。
 - `internal/account`：学校账号与会话、密码存取。
 - `internal/read`：读取重试 `Retry`、读取状态 `State`（`Done` 与 `Loaded`/`Err`/`Value`）、错误文案 `ErrText`。
@@ -51,7 +52,7 @@
 - 学校接口能用 `loveace-go` 的服务就用它，不自己发请求。拿不到的字段，
   才在 `internal/home/home_data.go` 里读同一个接口（如 `academicAverage`），并注释原因。
 - 智能排课的读取经 `SmartData`，由 webview 发起，不走 `host.Start`。`SmartData` 的 JSON 键是 loveace-go 结构体的 snake_case 标签，`smartui/app` 模型的 `@JsonKey` 必须与之一致。账号随 `signedIn` / `signOut` 写入 `SmartData.acc`。
-- 智能排课的学校读取由 Go 侧缓存（`smart_cache.go`，按种类、账号与键哈希成文件，放在用户数据目录），缓存 30 分钟内直接复用。开课数据（`smart_offerings.go`）、培养方案、学期列表都走缓存；只有“刷新开课数据”按钮强制向学校读取开课数据。切换学期、切回个人课表、启动时都只用缓存。开课数据很大，不放进 webview 的 localStorage。
+- 智能排课的学校读取由 Go 侧缓存（`internal/app/smart_cache.go`，按种类、账号与键哈希成文件，放在用户数据目录），缓存 30 分钟内直接复用。开课数据（`internal/app/smart_offerings.go`）、培养方案、学期列表都走缓存；只有“刷新开课数据”按钮强制向学校读取开课数据。切换学期、切回个人课表、启动时都只用缓存。开课数据很大，不放进 webview 的 localStorage。
 - 个人课表每次都向学校读取。读取成功后，`internal/snapshot`（`smart_snapshots.json`）按学号与学期保存学校课表。每次选课持久化时，`SmartData.SaveDraft` 把模拟选课与模拟退课记到同一学期的快照里；学校课表覆盖保存时保留模拟状态。快照页与复制文本按 Flutter 选课清单的口径分“需要退课 / 需要选课 / 保持不变”。课表模式不送模拟状态，快照里保留最后一次个人模式的模拟状态。
 - 智能排课的选课（模拟选退）按“用户 + 学期”各存一份（`smart_course_selection_<userId>_<term>`），`smart_course_selection_<userId>_last_term` 记住上次的学期。切换学期只读取目标学期自己的数据，不覆盖其它学期。
 
