@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync/atomic"
 
+	"github.com/Sibuxiangx/loveace-desktop/internal/account"
+	"github.com/Sibuxiangx/loveace-desktop/internal/read"
 	"github.com/Sibuxiangx/loveace-go/core/services/jwc"
 )
 
@@ -19,7 +21,7 @@ var errPlanChoice = errors.New("这位同学有多个培养方案，请先在培
 // The page holds no school session: every read goes through the signed-in account. The
 // account is set on the main thread and read from the service's goroutines, hence atomic.
 type SmartData struct {
-	acc atomic.Pointer[account]
+	acc atomic.Pointer[account.Account]
 }
 
 // service is the school service of the signed-in account, for a read.
@@ -28,13 +30,13 @@ func (d *SmartData) service() (*jwc.Service, error) {
 	if acc == nil {
 		return nil, errNotSignedIn
 	}
-	return acc.jwc, nil
+	return acc.Jwc, nil
 }
 
 // UserID is the signed-in student's id, "" while no account is signed in.
 func (d *SmartData) UserID() string {
 	if acc := d.acc.Load(); acc != nil {
-		return acc.id
+		return acc.ID
 	}
 	return ""
 }
@@ -45,7 +47,7 @@ func (d *SmartData) ScheduleTerms(ctx context.Context) ([]jwc.TermItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, sv.CourseScheduleTerms)
+	return read.Retry(ctx, sv.CourseScheduleTerms)
 }
 
 // CourseSchedule returns every course offering of a term.
@@ -54,7 +56,7 @@ func (d *SmartData) CourseSchedule(ctx context.Context, termCode string) ([]jwc.
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, func(ctx context.Context) ([]jwc.CourseScheduleRecord, error) {
+	return read.Retry(ctx, func(ctx context.Context) ([]jwc.CourseScheduleRecord, error) {
 		return sv.CourseScheduleForTerm(ctx, termCode)
 	})
 }
@@ -65,7 +67,7 @@ func (d *SmartData) StudentSchedule(ctx context.Context, termCode string) (*jwc.
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, func(ctx context.Context) (*jwc.StudentScheduleResponse, error) {
+	return read.Retry(ctx, func(ctx context.Context) (*jwc.StudentScheduleResponse, error) {
 		return sv.StudentSchedule(ctx, termCode)
 	})
 }
@@ -77,7 +79,7 @@ func (d *SmartData) PlanCompletion(ctx context.Context, planID *string) (jwc.Pla
 	if err != nil {
 		return jwc.PlanCompletionInfo{}, err
 	}
-	outcome, err := readRetry(ctx, func(ctx context.Context) (*jwc.PlanCompletionOutcome, error) {
+	outcome, err := read.Retry(ctx, func(ctx context.Context) (*jwc.PlanCompletionOutcome, error) {
 		return sv.PlanCompletion(ctx, planID)
 	})
 	if err != nil {
@@ -95,7 +97,7 @@ func (d *SmartData) ClassTerms(ctx context.Context) ([]jwc.TermItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, sv.ClassCurriculumTerms)
+	return read.Retry(ctx, sv.ClassCurriculumTerms)
 }
 
 // Departments returns the departments of the class curriculum.
@@ -104,7 +106,7 @@ func (d *SmartData) Departments(ctx context.Context) ([]jwc.ClassCurriculumOptio
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, sv.ClassCurriculumDepartments)
+	return read.Retry(ctx, sv.ClassCurriculumDepartments)
 }
 
 // Subjects returns the subjects of a department.
@@ -113,7 +115,7 @@ func (d *SmartData) Subjects(ctx context.Context, departmentCode string) ([]jwc.
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, func(ctx context.Context) ([]jwc.ClassCurriculumOption, error) {
+	return read.Retry(ctx, func(ctx context.Context) ([]jwc.ClassCurriculumOption, error) {
 		return sv.ClassCurriculumSubjects(ctx, departmentCode)
 	})
 }
@@ -125,7 +127,7 @@ func (d *SmartData) Classes(ctx context.Context, planCode, departmentCode string
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, func(ctx context.Context) ([]jwc.ClassCurriculumClassOption, error) {
+	return read.Retry(ctx, func(ctx context.Context) ([]jwc.ClassCurriculumClassOption, error) {
 		return sv.ClassCurriculumClasses(ctx, planCode, departmentCode, subjectCode)
 	})
 }
@@ -136,7 +138,7 @@ func (d *SmartData) ClassCurriculum(ctx context.Context, planCode, classCode str
 	if err != nil {
 		return nil, err
 	}
-	return readRetry(ctx, func(ctx context.Context) ([]jwc.CourseScheduleRecord, error) {
+	return read.Retry(ctx, func(ctx context.Context) ([]jwc.CourseScheduleRecord, error) {
 		return sv.ClassCurriculum(ctx, planCode, classCode)
 	})
 }

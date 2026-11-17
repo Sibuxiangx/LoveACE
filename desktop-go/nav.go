@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/Sibuxiangx/loveace-desktop/internal/design"
+	"github.com/Sibuxiangx/loveace-desktop/internal/host"
 	"github.com/Sibuxiangx/loveace-desktop/internal/palette"
 	"github.com/egoist/mygo/ui"
 )
@@ -16,13 +18,13 @@ const (
 // The shape is chosen by the destination's place in the rail, so neighbours never
 // share one, and a new destination takes the next shape without a change here.
 var (
-	railCircle = ribbonShape{lobes: 0}
-	railShapes = []ribbonShape{cookie8, flower5, clover4, cookie12}
+	railCircle = design.RibbonShape{Lobes: 0}
+	railShapes = []design.RibbonShape{design.Cookie8, design.Flower5, design.Clover4, design.Cookie12}
 )
 
-// railShapeAt is the shape of the n-th destination of the rail, counting from the
-// top, across the groups and the footer.
-func railShapeAt(n int) ribbonShape {
+// railShapeAt is the shape of the n-th destination of the rail, counting from the top,
+// across the groups and the footer.
+func railShapeAt(n int) design.RibbonShape {
 	return railShapes[n%len(railShapes)]
 }
 
@@ -30,7 +32,7 @@ func railShapeAt(n int) ribbonShape {
 // window instead, its label and icons, and, when set, whether it wants attention, which
 // its indicator shows as a dot.
 type navDest struct {
-	page      page
+	page      host.Page
 	id, label string
 	icon      *ui.SVG // outlined, as the destination rests
 	selected  *ui.SVG // filled, as it is chosen
@@ -38,41 +40,41 @@ type navDest struct {
 	launch    func(a *app) // when set, the destination launches its window instead of opening a page
 }
 
-// navGroups are the destinations above the footer, in runs. A rule separates the
-// runs. A new page is a constant in app.go, a case in app.view, and a destination
-// here or in navFooter.
+// navGroups are the destinations above the footer, in runs. A rule separates the runs. A
+// new page is a constant in internal/host, a case in app.view, and a destination here or
+// in navFooter.
 var navGroups = [][]navDest{
 	{
-		{pageHome, "nav-home", "首页", iconHome, iconHomeFill, nil, nil},
-		{pageAAC, "nav-aac", "爱安财", iconVolunteer, iconVolunteerFill, aacNeedsAttention, nil},
-		{pageLabor, "nav-labor", "劳动俱乐部", iconLabor, iconLaborFill, nil, nil},
+		{host.PageHome, "nav-home", "首页", design.IconHome, design.IconHomeFill, nil, nil},
+		{host.PageAAC, "nav-aac", "爱安财", design.IconVolunteer, design.IconVolunteerFill, aacNeedsAttention, nil},
+		{host.PageLabor, "nav-labor", "劳动俱乐部", design.IconLabor, design.IconLaborFill, nil, nil},
 	},
 	{
-		{pagePlan, "nav-plan", "培养方案", iconCourse, iconCourseFill, nil, nil},
-		{pageCard, "nav-card", "一卡通", iconCard, iconCardFill, nil, nil},
-		{id: "nav-smart", label: "智能排课", icon: iconWeekView, selected: iconWeekViewFill, launch: (*app).openSmartWindow},
+		{host.PagePlan, "nav-plan", "培养方案", design.IconCourse, design.IconCourseFill, nil, nil},
+		{host.PageCard, "nav-card", "一卡通", design.IconCard, design.IconCardFill, nil, nil},
+		{id: "nav-smart", label: "智能排课", icon: design.IconWeekView, selected: design.IconWeekViewFill, launch: (*app).openSmartWindow},
 	},
 }
 
 // navFooter is pinned to the bottom of the rail, below the scrolling groups.
 var navFooter = []navDest{
-	{pageSettings, "nav-settings", "设置", iconSettings, iconSettingsFill, nil, nil},
+	{host.PageSettings, "nav-settings", "设置", design.IconSettings, design.IconSettingsFill, nil, nil},
 }
 
 // aacNeedsAttention is whether the graduation total is short of the school's
 // requirement, which the 爱安财 destination marks with a dot.
 func aacNeedsAttention(a *app) bool {
-	return a.aac.loaded && a.aac.infoErr == "" && a.aac.info != nil && !a.aac.info.IsTypeAdopt
+	return a.aac.NeedsAttention()
 }
 
-// navRail is the left column of a signed-in window: the app's mark, the groups
-// of destinations, which scroll when they run past the window's height, and the
-// footer at the bottom. Its strip at the top is the room the window controls
-// leave, so it drags the window.
+// navRail is the left column of a signed-in window: the app's mark, the groups of
+// destinations, which scroll when they run past the window's height, and the footer at
+// the bottom. Its strip at the top is the room the window controls leave, so it drags
+// the window.
 func (a *app) navRail(c *ui.Context, t *ui.Theme, s palette.Scheme) {
 	n := 0 // the shape index of the next destination, counted down the rail
-	ui.Column(c).Width(railWidth).Shrink(0).AlignItems(ui.Center).Background(uiColor(s.SurfaceContainerLow)).Children(func() {
-		dragStrip(c)
+	ui.Column(c).Width(railWidth).Shrink(0).AlignItems(ui.Center).Background(design.UIColor(s.SurfaceContainerLow)).Children(func() {
+		design.DragStrip(c)
 		railMark(c)
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
@@ -97,11 +99,11 @@ func (a *app) navRail(c *ui.Context, t *ui.Theme, s palette.Scheme) {
 	})
 }
 
-// railMark is the app's mark at the top of the rail. It leans when the pointer
-// rests on it, as the sign-in page's logo does.
+// railMark is the app's mark at the top of the rail. It leans when the pointer rests on
+// it, as the sign-in page's logo does.
 func railMark(c *ui.Context) {
 	ui.Column(c).FillWidth().AlignItems(ui.Center).Padding(4, 0, 12, 0).Children(func() {
-		logo := ui.Image(c, appIcon).Size(40, 40).Fit(ui.Contain).Radius(14)
+		logo := ui.Image(c, design.AppIcon).Size(40, 40).Fit(ui.Contain).Radius(14)
 		pose := ui.Pose{}
 		if logo.Hovered() {
 			pose = ui.Pose{Rotate: 8, Scale: 1.06}
@@ -117,16 +119,15 @@ func railRule(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// navItem is one destination. Its indicator grows from a circle into shape when
-// the destination is chosen, and its icon crossfades from outline to filled; the
-// hover tint, the press squeeze and the label's weight move on springs too. Its
-// key is its id, so its animated values follow it through the rebuilds of each
-// frame.
-func (a *app) navItem(c *ui.Context, t *ui.Theme, s palette.Scheme, d navDest, shape ribbonShape) {
+// navItem is one destination. Its indicator grows from a circle into shape when the
+// destination is chosen, and its icon crossfades from outline to filled; the hover tint,
+// the press squeeze and the label's weight move on springs too. Its key is its id, so
+// its animated values follow it through the rebuilds of each frame.
+func (a *app) navItem(c *ui.Context, t *ui.Theme, s palette.Scheme, d navDest, shape design.RibbonShape) {
 	on := d.launch == nil && a.page == d.page
 	btn := ui.ButtonBase(c.Key(d.id)).Width(railWidth-16).Radius(20).Padding(4, 0).Label(d.label)
-	// sel overshoots when it springs, which the indicator's bounce wants; hover is
-	// the tint under the pointer.
+	// sel overshoots when it springs, which the indicator's bounce wants; hover is the
+	// tint under the pointer.
 	sel := btn.AnimateTo("sel", flag01(on), ui.Bouncy)
 	hover := btn.AnimateTo("hover", flag01(btn.Hovered()), ui.Smooth)
 	press := ui.Pose{}
@@ -155,11 +156,10 @@ func (a *app) navItem(c *ui.Context, t *ui.Theme, s palette.Scheme, d navDest, s
 	})
 }
 
-// navIndicator draws a destination's indicator: the blob behind its icon, the
-// icon crossfading from outline to filled, and the dot that asks for attention.
-// The blob starts as a circle and morphs into the destination's shape while it
-// turns into place.
-func navIndicator(c *ui.Context, t *ui.Theme, s palette.Scheme, d navDest, shape ribbonShape, sel float32, needs bool) {
+// navIndicator draws a destination's indicator: the blob behind its icon, the icon
+// crossfading from outline to filled, and the dot that asks for attention. The blob
+// starts as a circle and morphs into the destination's shape while it turns into place.
+func navIndicator(c *ui.Context, t *ui.Theme, s palette.Scheme, d navDest, shape design.RibbonShape, sel float32, needs bool) {
 	ind := ui.Box(c.Key(d.id+"-indicator")).Size(railIndicator, railIndicator)
 	attn := ind.AnimateTo("attention", flag01(needs), ui.Bouncy)
 	m := clamp01(sel)
@@ -167,14 +167,14 @@ func navIndicator(c *ui.Context, t *ui.Theme, s palette.Scheme, d navDest, shape
 	ind.Draw(func(p *ui.Painter, r ui.Rect) {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2
 		if grow > 0 {
-			blob := scallop(cx, cy, railBlob*grow, railCircle, shape, float64(m))
+			blob := design.Scallop(cx, cy, railBlob*grow, railCircle, shape, float64(m))
 			p.Transform(ui.Rotation((1-grow)*-72), cx, cy, func() {
-				p.FillPath(blob, uiColor(s.SecondaryContainer))
+				p.FillPath(blob, design.UIColor(s.SecondaryContainer))
 			})
 		}
 		icon := ui.Rect{X: cx - 12, Y: cy - 12, W: 24, H: 24}
 		p.Icon(d.icon, icon, t.TextMuted.Alpha(1-m))
-		p.Icon(d.selected, icon, uiColor(s.OnSecondaryContainer).Alpha(m))
+		p.Icon(d.selected, icon, design.UIColor(s.OnSecondaryContainer).Alpha(m))
 		if attn > 0 {
 			rad := 4 * attn
 			p.Fill(ui.Rect{X: cx + 11 - rad, Y: cy - 15 - rad, W: 2 * rad, H: 2 * rad}, t.Danger, rad)
