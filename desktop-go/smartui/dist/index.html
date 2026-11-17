@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="智能排课">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>智能排课</title>
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <script>
+    // The Dart bridge (lib/bridge/mygo_bridge.dart) calls a Go service through this:
+    // the arguments are a JSON array, and the result is the JSON text of the value.
+    window.smartCall = async (method, args) => {
+      const value = await window.mygo.call(method, ...JSON.parse(args));
+      return JSON.stringify(value === undefined ? null : value);
+    };
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
