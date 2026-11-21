@@ -58,6 +58,12 @@ enum WidgetSyncCoordinator {
         await CourseLiveActivityController.sync()
     }
 
+    /// 切换灵动岛独立开关并刷新小组件（控制小组件内快捷按钮的显隐）
+    static func setLiveActivityEnabled(_ enabled: Bool) async {
+        await CourseLiveActivityController.setEnabled(enabled)
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     /// 登出或会话结束时清空小组件快照、提醒与灵动岛
     static func clearAll() {
         WidgetSnapshotStore.clear()

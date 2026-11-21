@@ -508,8 +508,33 @@ struct CourseActivityAttributes: ActivityAttributes {
 }
 
 enum CourseLiveActivityController {
+    static let enabledKey = "live_activity_enabled"
+
+    private static var sharedDefaults: UserDefaults {
+        UserDefaults(suiteName: WidgetSnapshotStore.suiteName) ?? .standard
+    }
+
+    /// 独立开关，存于 App Group 供主应用与小组件共享；默认开启，保持既有行为
+    static var isEnabled: Bool {
+        guard sharedDefaults.object(forKey: enabledKey) != nil else { return true }
+        return sharedDefaults.bool(forKey: enabledKey)
+    }
+
+    static func setEnabled(_ enabled: Bool) async {
+        sharedDefaults.set(enabled, forKey: enabledKey)
+        if enabled {
+            await sync()
+        } else {
+            await endAll()
+        }
+    }
+
     /// 在灵动岛显示当前课程：同一节课不重复创建；过期活动结束；只保留一个活动
     static func sync(now: Date = .now) async {
+        guard isEnabled else {
+            await endAll()
+            return
+        }
         for activity in Activity<CourseActivityAttributes>.activities where activity.content.state.endDate <= now {
             await activity.end(nil, dismissalPolicy: .immediate)
         }

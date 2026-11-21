@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var logExportError: String?
     @State private var classReminderOn = ClassReminderScheduler.isEnabled
     @State private var reminderDenied = false
+    @State private var liveActivityOn = CourseLiveActivityController.isEnabled
     @State private var qqGroupManifest: QqGroupManifest?
     @Environment(\.openURL) private var openURL
     @State private var isCheckingUpdate = false
@@ -23,6 +24,18 @@ struct SettingsView: View {
                     let granted = await ClassReminderScheduler.setEnabled(newValue, snapshot: WidgetSnapshotStore.load())
                     classReminderOn = granted
                     reminderDenied = newValue && !granted
+                }
+            }
+        )
+    }
+
+    private var liveActivityBinding: Binding<Bool> {
+        Binding(
+            get: { liveActivityOn },
+            set: { newValue in
+                liveActivityOn = newValue
+                Task {
+                    await WidgetSyncCoordinator.setLiveActivityEnabled(newValue)
                 }
             }
         )
@@ -119,8 +132,13 @@ struct SettingsView: View {
                     Toggle(isOn: classReminderBinding) {
                         Label("上课提醒", systemImage: "bell.badge")
                     }
+                    Toggle(isOn: liveActivityBinding) {
+                        Label("灵动岛", systemImage: "platter.filled.top.iphone")
+                    }
                 } footer: {
-                    Text(reminderDenied ? "未获得通知权限，请在系统设置中允许通知。" : "上课前 10 分钟通知。灵动岛在上课时显示，前台自动开启，也可在小组件中手动开启。")
+                    Text(reminderDenied
+                         ? "未获得通知权限，请在系统设置中允许通知。灵动岛可独立开关，关闭后将立即结束当前活动并不再自动开启。"
+                         : "上课提醒在上课前 10 分钟通知。灵动岛在上课时显示，前台自动开启，也可在小组件中手动开启；关闭后将不再显示。")
                 }
 
                 Section("数据说明") {

@@ -194,7 +194,7 @@ struct CourseListView: View {
                 Text(scheduleSummary(state.today))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                if state.liveItem != nil {
+                if state.liveItem != nil && CourseLiveActivityController.isEnabled {
                     Button(intent: StartCourseActivityIntent()) {
                         Image(systemName: "timer")
                             .font(.caption)
