@@ -51,8 +51,8 @@
 - If upload fails with `Failed to Use Accounts`, the local Xcode App Store Connect login likely expired; ask the user to re-login in Xcode Settings > Accounts, then retry the same archive.
 
 ## CI (TestFlight)
-- `.github/workflows/ios-testflight.yml` is `workflow_dispatch` with `dry_run` (default `true`: archive, sign, upload artifact, no TestFlight upload). Trigger a real upload with `gh workflow run ios-testflight.yml --ref main -f dry_run=false`.
-- Every run revokes the distribution certificates/profiles it created at the end (`always()` cleanup step). If a run still fails with "reached the maximum number of certificates", historical certificates need manual revocation on developer.apple.com — the API key may not be able to see/revoke those.
+- `.github/workflows/ios-testflight.yml` is `workflow_dispatch` with `dry_run` (default `true`: archive, sign, upload artifact, no TestFlight upload). Trigger a real upload with `gh workflow run ios-testflight.yml -R Sibuxiangx/LoveACE --ref main -f dry_run=false`.
+- Signing uses a pinned `Apple Distribution` `.p12` stored in GitHub Secrets (`IOS_DIST_CERTIFICATE_BASE64`, `IOS_DIST_CERTIFICATE_PASSWORD`), imported into a temporary runner keychain. The workflow matches the certificate by serial number via App Store Connect API, reuses (or creates once) the two `IOS_APP_STORE` profiles (`LoveACE CI AppStore App` and `LoveACE CI AppStore Widget`), and patches the runner-local `project.pbxproj` Release configs to Manual signing so CI never creates new certificates (no Development or Distribution cert leaks). Local Xcode stays `Automatic`. When the pinned certificate expires (annually), replace the two Secrets with a new `.p12` — no workflow code change needed.
 
 ## Pre-login notice
 - `AnnouncementService.fetchPreloginNotice()` reads the optional top-level `prelogin_notice` field of manifest v2; `LoginView` renders the banner below the brand header and must stay silent on fetch failure. Desktop ignores this field.

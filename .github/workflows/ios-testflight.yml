@@ -88,6 +88,13 @@ jobs:
           echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "Current iOS version: $MARKETING_VERSION ($BUILD_NUMBER)"
 
+      - name: Set up App Store Connect API venv
+        run: |
+          python3 -m venv /tmp/asc-api-venv
+          source /tmp/asc-api-venv/bin/activate
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet pyjwt cryptography requests
+
       - name: Check TestFlight build number
         if: ${{ inputs.dry_run == 'false' }}
         env:
@@ -98,10 +105,7 @@ jobs:
           MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
           BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
         run: |
-          python3 -m venv /tmp/asc-api-venv
           source /tmp/asc-api-venv/bin/activate
-          python -m pip install --upgrade pip
-          python -m pip install pyjwt cryptography requests
           python3 - <<'PY'
           import os
           import sys
@@ -159,19 +163,222 @@ jobs:
               sys.exit(1)
           PY
 
-      - name: Prepare export options
+      - name: Install pinned Apple Distribution certificate
         env:
-          DRY_RUN: ${{ inputs.dry_run }}
+          IOS_DIST_CERTIFICATE_BASE64: ${{ secrets.IOS_DIST_CERTIFICATE_BASE64 }}
+          IOS_DIST_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DIST_CERTIFICATE_PASSWORD }}
         run: |
-          cp ios/ExportOptions.plist /tmp/ExportOptions.plist
-          if [ "$DRY_RUN" = "true" ]; then
-            /usr/libexec/PlistBuddy -c "Set :destination export" /tmp/ExportOptions.plist
-          fi
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/ios-ci.keychain-db"
+          KEYCHAIN_PASS=$(openssl rand -hex 24)
+          P12_PATH="$RUNNER_TEMP/ios_dist.p12"
 
-      - name: Archive app
+          printf '%s' "$IOS_DIST_CERTIFICATE_BASE64" | base64 --decode > "$P12_PATH"
+          CERT_SERIAL=$(/usr/bin/openssl pkcs12 -in "$P12_PATH" -passin env:IOS_DIST_CERTIFICATE_PASSWORD -clcerts -nokeys \
+            | /usr/bin/openssl x509 -noout -serial \
+            | sed -E 's/^serial=//; s/^0+//' \
+            | tr '[:lower:]' '[:upper:]')
+          if [ -z "$CERT_SERIAL" ]; then
+            echo "Failed to extract certificate serial number" >&2
+            exit 1
+          fi
+          echo "CERT_SERIAL=$CERT_SERIAL" >> "$GITHUB_ENV"
+          echo "IOS_CI_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$IOS_DIST_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          rm -f "$P12_PATH"
+
+          echo "Installed signing identities:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Sync App Store provisioning profiles and configure manual signing
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          IOS_APP_BUNDLE_ID: ${{ vars.IOS_APP_BUNDLE_ID }}
+          CERT_SERIAL: ${{ env.CERT_SERIAL }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          source /tmp/asc-api-venv/bin/activate
+          python3 - <<'PY'
+          import base64
+          import os
+          import plistlib
+          import re
+          import sys
+          import time
+          from pathlib import Path
+
+          import jwt
+          import requests
+
+          key_id = os.environ["APP_STORE_CONNECT_API_KEY_ID"]
+          issuer_id = os.environ["APP_STORE_CONNECT_API_ISSUER_ID"]
+          private_key = os.environ["APP_STORE_CONNECT_API_KEY_P8"]
+          app_bundle_id = os.environ["IOS_APP_BUNDLE_ID"]
+          widget_bundle_id = f"{app_bundle_id}.widget"
+          cert_serial = os.environ["CERT_SERIAL"].lstrip("0").upper()
+          dry_run = os.environ["DRY_RUN"] == "true"
+
+          token = jwt.encode(
+              {"iss": issuer_id, "iat": int(time.time()), "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
+              private_key,
+              algorithm="ES256",
+              headers={"kid": key_id, "typ": "JWT"},
+          )
+          headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+          base = "https://api.appstoreconnect.apple.com/v1"
+
+          def list_all(path, params=None):
+              url = f"{base}/{path}"
+              items = []
+              first = True
+              while url:
+                  resp = requests.get(url, headers=headers, params=params if first else None, timeout=30)
+                  resp.raise_for_status()
+                  payload = resp.json()
+                  items.extend(payload.get("data", []))
+                  url = payload.get("links", {}).get("next")
+                  first = False
+              return items
+
+          # 1. Locate the pinned distribution certificate by serial number
+          cert_id = None
+          for cert in list_all("certificates", {"limit": 200}):
+              attrs = cert.get("attributes", {})
+              serial = (attrs.get("serialNumber") or "").lstrip("0").upper()
+              if serial == cert_serial:
+                  cert_id = cert["id"]
+                  print(f"Matched pinned certificate: id={cert_id} type={attrs.get('certificateType')} expires={attrs.get('expirationDate')}")
+                  break
+          if not cert_id:
+              print(f"Pinned certificate with serial {cert_serial} not found in App Store Connect", file=sys.stderr)
+              sys.exit(1)
+
+          # 2. Reuse (or create once) IOS_APP_STORE provisioning profiles for app & widget
+          targets = [
+              (app_bundle_id, "LoveACE CI AppStore App"),
+              (widget_bundle_id, "LoveACE CI AppStore Widget"),
+          ]
+          profiles_dir = Path.home() / "Library/MobileDevice/Provisioning Profiles"
+          profiles_dir.mkdir(parents=True, exist_ok=True)
+          profile_mapping = {}
+
+          for bundle_identifier, profile_name in targets:
+              bundle_items = list_all("bundleIds", {"filter[identifier]": bundle_identifier, "limit": 200})
+              bundle_resource = next(
+                  (b for b in bundle_items if b.get("attributes", {}).get("identifier") == bundle_identifier),
+                  None,
+              )
+              if not bundle_resource:
+                  print(f"Bundle ID not found in App Store Connect: {bundle_identifier}", file=sys.stderr)
+                  sys.exit(1)
+              bundle_resource_id = bundle_resource["id"]
+
+              existing = list_all(
+                  "profiles",
+                  {"filter[name]": profile_name, "filter[profileType]": "IOS_APP_STORE", "limit": 50},
+              )
+              chosen = None
+              for prof in existing:
+                  attrs = prof.get("attributes", {})
+                  if attrs.get("name") != profile_name or attrs.get("profileState") != "ACTIVE":
+                      continue
+                  # Verify certificate & bundleId relationships match the pinned cert
+                  cert_rel = requests.get(f"{base}/profiles/{prof['id']}/certificates", headers=headers, timeout=30)
+                  cert_rel.raise_for_status()
+                  cert_ids = {c["id"] for c in cert_rel.json().get("data", [])}
+                  bid_rel = requests.get(f"{base}/profiles/{prof['id']}/bundleId", headers=headers, timeout=30)
+                  bid_rel.raise_for_status()
+                  bid_id = (bid_rel.json().get("data") or {}).get("id")
+                  if cert_id in cert_ids and bid_id == bundle_resource_id:
+                      chosen = prof
+                      print(f"Reusing active profile '{profile_name}' ({attrs.get('uuid')})")
+                      break
+
+              if chosen is None:
+                  # Delete any stale profile with the same name before creating a fresh one
+                  for prof in existing:
+                      if prof.get("attributes", {}).get("name") == profile_name:
+                          requests.delete(f"{base}/profiles/{prof['id']}", headers=headers, timeout=30)
+                  create_body = {
+                      "data": {
+                          "type": "profiles",
+                          "attributes": {
+                              "name": profile_name,
+                              "profileType": "IOS_APP_STORE",
+                          },
+                          "relationships": {
+                              "bundleId": {"data": {"type": "bundleIds", "id": bundle_resource_id}},
+                              "certificates": {"data": [{"type": "certificates", "id": cert_id}]},
+                          },
+                      }
+                  }
+                  created = requests.post(f"{base}/profiles", headers=headers, json=create_body, timeout=30)
+                  created.raise_for_status()
+                  chosen = created.json()["data"]
+                  print(f"Created profile '{profile_name}' ({chosen['attributes'].get('uuid')})")
+
+              attrs = chosen["attributes"]
+              uuid = attrs["uuid"]
+              content = base64.b64decode(attrs["profileContent"])
+              (profiles_dir / f"{uuid}.mobileprovision").write_bytes(content)
+              profile_mapping[bundle_identifier] = profile_name
+
+          # 3. Patch runner-local project.pbxproj Release configs to Manual signing
+          pbxproj_path = Path("ios/loveaceios.xcodeproj/project.pbxproj")
+          pbxproj = pbxproj_path.read_text("utf-8")
+          block_pattern = re.compile(
+              r"([A-F0-9]{24} /\* Release \*/ = \{\n\s*isa = XCBuildConfiguration;\n\s*buildSettings = \{)(.*?)(\n\s*\};\n\s*name = Release;\n\s*\};)",
+              re.DOTALL,
+          )
+          patched_targets = set()
+
+          def patch_release_block(match):
+              head, body, tail = match.group(1), match.group(2), match.group(3)
+              bid_match = re.search(r"PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);", body)
+              if not bid_match:
+                  return match.group(0)
+              bid = bid_match.group(1).strip().strip('"')
+              if bid not in profile_mapping:
+                  return match.group(0)
+              prof_name = profile_mapping[bid]
+              new_body = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", body)
+              extra = (
+                  f'\n\t\t\t\tCODE_SIGN_IDENTITY = "Apple Distribution";'
+                  f'\n\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";'
+                  f'\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{prof_name}";'
+              )
+              patched_targets.add(bid)
+              return head + new_body + extra + tail
+
+          updated_pbxproj = block_pattern.sub(patch_release_block, pbxproj)
+          if patched_targets != set(profile_mapping.keys()):
+              print(f"Failed to patch all Release targets: patched={patched_targets}", file=sys.stderr)
+              sys.exit(1)
+          pbxproj_path.write_text(updated_pbxproj, "utf-8")
+          print(f"Patched CI project.pbxproj for manual signing: {sorted(patched_targets)}")
+
+          # 4. Generate /tmp/ExportOptions.plist with manual signing
+          with open("ios/ExportOptions.plist", "rb") as f:
+              export_opts = plistlib.load(f)
+          export_opts["destination"] = "export" if dry_run else "upload"
+          export_opts["signingStyle"] = "manual"
+          export_opts["signingCertificate"] = "Apple Distribution"
+          export_opts["provisioningProfiles"] = profile_mapping
+          with open("/tmp/ExportOptions.plist", "wb") as f:
+              plistlib.dump(export_opts, f)
+          print("Generated /tmp/ExportOptions.plist (manual signing)")
+          PY
+
+      - name: Archive app
         working-directory: ios
         run: |
           mkdir -p build/TestFlight
@@ -181,10 +388,6 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "build/TestFlight/loveaceios.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8" \
-            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID" \
             archive
 
       - name: Export or upload archive
@@ -198,7 +401,6 @@ jobs:
             -archivePath "build/TestFlight/loveaceios.xcarchive" \
             -exportOptionsPlist "/tmp/ExportOptions.plist" \
             -exportPath "build/TestFlight/export" \
-            -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8" \
             -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"
@@ -213,89 +415,9 @@ jobs:
             ios/build/TestFlight/loveaceios.xcarchive
           if-no-files-found: ignore
 
-      - name: Revoke certificates and profiles created by this run
+      - name: Clean up temporary CI keychain
         if: ${{ always() }}
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
         run: |
-          # Runner 的私钥用完即弃，Apple 后台遗留的证书是死数据，会累积到
-          # 账号证书上限。吊销本次 run 开始（含 1 分钟余量）之后新建的
-          # distribution 证书与 profile，防止额度耗尽。
-          python3 -m venv /tmp/asc-cleanup-venv
-          source /tmp/asc-cleanup-venv/bin/activate
-          python -m pip install --quiet pyjwt cryptography requests
-          python3 - <<'PY'
-          import os
-          import time
-          from datetime import datetime
-
-          import jwt
-          import requests
-
-          key_id = os.environ["APP_STORE_CONNECT_API_KEY_ID"]
-          issuer_id = os.environ["APP_STORE_CONNECT_API_ISSUER_ID"]
-          private_key = os.environ["APP_STORE_CONNECT_API_KEY_P8"]
-          started = datetime.fromisoformat(
-              os.environ["RUN_STARTED_AT"].replace("Z", "+00:00")
-          )
-
-          token = jwt.encode(
-              {"iss": issuer_id, "iat": int(time.time()), "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
-              private_key,
-              algorithm="ES256",
-              headers={"kid": key_id, "typ": "JWT"},
-          )
-          headers = {"Authorization": f"Bearer {token}"}
-          base = "https://api.appstoreconnect.apple.com/v1"
-
-          def parse_created(value):
-              value = value.replace("+0000", "+00:00").replace("Z", "+00:00")
-              return datetime.fromisoformat(value)
-
-          def list_all(resource):
-              url = f"{base}/{resource}"
-              items = []
-              while url:
-                  resp = requests.get(url, headers=headers, params={"limit": 200}, timeout=30)
-                  if resp.status_code != 200:
-                      print(f"list {resource} failed: HTTP {resp.status_code}, skip")
-                      return items
-                  payload = resp.json()
-                  items.extend(payload.get("data", []))
-                  url = payload.get("links", {}).get("next")
-              return items
-
-          DIST_TYPES = {"IOS_DISTRIBUTION", "APPLE_DISTRIBUTION", "DISTRIBUTION"}
-          try:
-              for item in list_all("certificates"):
-                  attrs = item.get("attributes", {})
-                  if attrs.get("certificateType") not in DIST_TYPES:
-                      continue
-                  created_raw = attrs.get("createdDate", "")
-                  try:
-                      if parse_created(created_raw) < started:
-                          continue
-                  except ValueError:
-                      continue
-                  name = attrs.get("displayName") or item["id"]
-                  deleted = requests.delete(f"{base}/certificates/{item['id']}", headers=headers, timeout=30)
-                  state = "revoked" if deleted.status_code == 200 else f"failed ({deleted.status_code})"
-                  print(f"certificate '{name}' ({created_raw}): {state}")
-
-              for item in list_all("profiles"):
-                  created_raw = item.get("attributes", {}).get("createdDate", "")
-                  try:
-                      if parse_created(created_raw) < started:
-                          continue
-                  except ValueError:
-                      continue
-                  name = item.get("attributes", {}).get("name") or item["id"]
-                  deleted = requests.delete(f"{base}/profiles/{item['id']}", headers=headers, timeout=30)
-                  state = "deleted" if deleted.status_code == 200 else f"failed ({deleted.status_code})"
-                  print(f"profile '{name}' ({created_raw}): {state}")
-          except Exception as cleanup_error:
-              # 上传已完成，清理失败只告警不失败
-              print(f"cleanup warning (non-fatal): {cleanup_error}")
-          PY
+          if [ -n "${IOS_CI_KEYCHAIN:-}" ] && [ -f "$IOS_CI_KEYCHAIN" ]; then
+            security delete-keychain "$IOS_CI_KEYCHAIN" || true
+          fi
